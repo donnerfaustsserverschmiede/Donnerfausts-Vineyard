@@ -80,6 +80,7 @@ const NAV=[
 ["orders","🛒","Bestellungen","dashboard"],
 ["inventory","▦","Lager","inventory_view"],
 ["recipes","♜","Rezepte","inventory_view"],
+["production","⚗","Produktion","inventory_view"],
 ["cash","$","Kasse","cash_view"],
 ["employees","♟","Mitarbeiter","employees_view"],
 ["audit","◷","Protokoll","audit_view"],
@@ -156,7 +157,7 @@ function shell(content){
  document.body.innerHTML=`<aside class="sidebar" id="sidebar"><div class="brand"><div class="brandmark"><img src="./assets/donnerfaust-vineyards-logo.jpg" alt=""></div><div><b>Donnerfaust Barrelworks</b><small>Interne Verwaltung</small></div></div><nav>${nav}</nav><div class="sidefoot"><span class="online"></span>${esc(profile.display_name)} · ${esc(role.label)}<br><button id="logout" class="mini" style="margin-top:9px">Abmelden</button></div></aside><main class="main"><header class="top"><div class="topTitle"><img class="topbrandlogo" src="./assets/donnerfaust-vineyards-logo.jpg" alt="Donnerfaust Barrelworks"><div><button class="hamb" id="hamb">☰</button><span class="crumb">DONNERFAUST BARRELWORKS</span><h2>${esc(pageTitle())}</h2></div></div><div class="topright"><span class="online"></span><b>${esc(profile.display_name)}</b><span class="avatar">${esc(initials(profile.display_name))}</span></div></header><section class="content">${content}</section></main><div id="modalroot"></div>`;
  $$(".nav").forEach(b=>b.onclick=()=>{page=b.dataset.page;render();});$("#hamb").onclick=()=>$("#sidebar").classList.toggle("open");$("#logout").onclick=()=>supabaseClient.auth.signOut();
 }
-function pageTitle(){return ({dashboard:"Übersicht",invoices:"Rechnungen",orders:"Bestellungen",inventory:"Lagerübersicht",recipes:"Rezepte",cash:"Kasse",employees:"Mitarbeiter",audit:"Protokoll",admin:"Administration"})[page]||"Übersicht"}
+function pageTitle(){return ({dashboard:"Übersicht",invoices:"Rechnungen",orders:"Bestellungen",inventory:"Lagerübersicht",recipes:"Rezepte",cash:"Kasse",production:"Produktion",employees:"Mitarbeiter",audit:"Protokoll",admin:"Administration"})[page]||"Übersicht"}
 function initials(n){return String(n||"DF").split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase()}
 function stat(icon,label,value){return '<div class="stat"><span class="icon">'+icon+'</span><div><small>'+label+"</small><b>"+value+"</b></div></div>"}
 function intro(k,h,p,action,label){return '<div class="intro"><div><div class="eyebrow">'+k+"</div><h1>"+h+"</h1><p>"+p+"</p></div>"+(action?'<button type="button" class="btn gold" data-action="'+action+'">'+label+"</button>":"")+"</div>"}
@@ -245,8 +246,7 @@ async function inventory(){
 function itemCards(items){
  return items.map(x=>{
   const low=Number(x.quantity)<=Number(x.min_stock);
-  const production=x.category==="Produkte"&&can("inventory_edit")?`<button class="mini gold" data-production="${x.id}">+ Produktion</button> `:"";
-  const actions=can("inventory_edit")?`<button class="mini gold" data-stock="${x.id}">Bestand ändern</button> ${production}<button class="mini" data-edit-item="${x.id}">Bearbeiten</button> <button class="mini" data-delete-item="${x.id}">Löschen</button>`:"";
+  const actions=can("inventory_edit")?`<button class="mini gold" data-stock="${x.id}">Bestand ändern</button> <button class="mini" data-edit-item="${x.id}">Bearbeiten</button> <button class="mini" data-delete-item="${x.id}">Löschen</button>`:"";
   const price=x.category==="Zutaten"?"Einkaufspreis: "+money(x.purchase_price):"Verkaufspreis: "+money(x.sale_price);
   return `
    <div class="itemcard">
@@ -277,6 +277,52 @@ async function recipes(){
    '<div class="recipeactions">'+(can("inventory_edit")?'<button class="mini gold" data-edit-recipe="'+r.id+'">Bearbeiten</button> <button class="mini" data-delete-recipe="'+r.id+'">Löschen</button>':"")+'</div></div>';
  }).join("")||'<div class="panel"><p class="muted">Noch keine Rezepte angelegt. Lege zuerst Zutaten und Produkte im Lager an.</p></div>'+'</div>';
 }
+async function production(){
+ const [{data:recipes=[],error:recipeError},{data:inv=[],error:invError}]=await Promise.all([
+  supabaseClient.from("vineyard_recipes").select("id,name,output_inventory_id,output_quantity,active").eq("active",true).order("name"),
+  supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category").order("item_name")
+ ]);
+ if(recipeError||invError)return errorBox((recipeError||invError).message);
+ const products=Object.fromEntries(inv.filter(x=>x.category==="Produkte").map(x=>[x.id,x]));
+ const ingredients=Object.fromEntries(inv.filter(x=>x.category==="Zutaten").map(x=>[x.id,x]));
+ const recipeIds=recipes.map(x=>x.id);
+ let items=[];
+ if(recipeIds.length){
+  const r=await supabaseClient.from("vineyard_recipe_items").select("recipe_id,inventory_id,quantity").in("recipe_id",recipeIds).order("created_at");
+  if(r.error)return errorBox(r.error.message);
+  items=r.data||[];
+ }
+ const byRecipe={};
+ items.forEach(x=>(byRecipe[x.recipe_id]??=[]).push(x));
+ if(!recipes.length)return intro("PRODUKTION","Produktion","Wähle ein gespeichertes Rezept und buche die Herstellung. Die Lagerbestände werden automatisch angepasst.",null,null)+
+  '<div class="panel"><b>Noch keine Rezepte vorhanden.</b><p class="muted">Lege zuerst im Lager Zutaten und Produkte an und erstelle anschließend unter Rezepte ein Rezept.</p></div>';
+
+ const first=recipes[0];
+ const recipeOptions=recipes.map(x=>({value:x.id,label:x.name}));
+ const outputFor=r=>products[r?.output_inventory_id];
+ const rowsFor=(recipeId,batches)=>{
+  const list=byRecipe[recipeId]||[];
+  if(!list.length)return '<p class="muted">Für dieses Rezept sind keine Zutaten hinterlegt.</p>';
+  return list.map(x=>{
+   const ing=ingredients[x.inventory_id];
+   const need=Number(x.quantity)*Number(batches||0);
+   return '<div class="productioningredient"><div><b>'+esc(ing?.item_name||"Unbekannte Zutat")+'</b><small>'+esc(ing?.unit||"")+'</small></div><strong>'+need.toLocaleString("de-DE",{maximumFractionDigits:6})+' '+esc(ing?.unit||"")+'</strong></div>';
+  }).join("");
+ };
+ const output=outputFor(first);
+ return intro("PRODUKTION","Produktion","Rezept auswählen, Menge festlegen und die benötigten Zutaten vor der Buchung prüfen.",null,null)+
+ '<div class="productionpanel">'+
+ '<div class="productionform">'+
+ selectField("Rezept","production_recipe",recipeOptions,first.id)+
+ field("Menge","production_batches","number",1,true)+
+ '<div class="productionoutput"><span>HERGESTELLTES PRODUKT</span><b id="productionOutputName">'+esc(output?.item_name||"")+'</b><small id="productionOutputQty">'+Number(first.output_quantity||1).toLocaleString("de-DE")+' '+esc(output?.unit||"")+' pro Produktion</small></div>'+
+ '<button type="button" class="btn primary" id="bookProduction" '+(can("inventory_edit")?"":"disabled")+'>Produktion buchen</button>'+
+ (!can("inventory_edit")?'<p class="muted">Du hast keine Berechtigung, Produktionen zu buchen.</p>':"")+
+ '</div>'+
+ '<div class="productioningredientswrap"><div class="eyebrow">BENÖTIGTE ZUTATEN</div><h3>Automatisch berechnet</h3><div id="productionIngredients">'+rowsFor(first.id,1)+'</div></div>'+
+ '</div>';
+}
+
 async function cash(){
  const {data:rows=[],error}=await supabaseClient.from("vineyard_cashbook").select("*").order("created_at",{ascending:false});
  if(error)return errorBox(error.message);
@@ -302,7 +348,7 @@ async function audit(){
 function errorBox(t){return '<div class="panel"><b>Fehler</b><p class="muted">'+esc(t)+"</p></div>"}
 
 async function render(){
- let content=page==="dashboard"?await dashboard():page==="invoices"?await invoices():page==="orders"?await orders():page==="inventory"?await inventory():page==="recipes"?await recipes():page==="cash"?await cash():page==="employees"?await employees():page==="admin"?await admin():await audit();
+ let content=page==="dashboard"?await dashboard():page==="invoices"?await invoices():page==="orders"?await orders():page==="inventory"?await inventory():page==="recipes"?await recipes():page==="production"?await production():page==="cash"?await cash():page==="employees"?await employees():page==="admin"?await admin():await audit();
  shell(content);bind();
  if(page==="orders")startOrderRealtime();else stopOrderRealtime();
 }
@@ -319,9 +365,38 @@ function bind(){
   finally{b.disabled=false;b.dataset.busy="0"}
  };
  $("[data-page-action]").forEach(b=>b.onclick=()=>{page=b.dataset.pageAction;render()});
+ if(page==="production"){
+  const recipeEl=$("#production_recipe"),batchEl=$("[name=production_batches]"),book=$("#bookProduction"),ingEl=$("#productionIngredients"),outName=$("#productionOutputName"),outQty=$("#productionOutputQty");
+  const recipeData=[];
+  const productMap={};
+  const updateProduction=async()=>{
+   const id=recipeEl?.value,batches=Number(batchEl?.value)||0;
+   if(!id)return;
+   const [rr,ir]=await Promise.all([
+    supabaseClient.from("vineyard_recipes").select("id,name,output_inventory_id,output_quantity").eq("id",id).single(),
+    supabaseClient.from("vineyard_recipe_items").select("inventory_id,quantity,vineyard_inventory:inventory_id(item_name,unit)").eq("recipe_id",id).order("created_at")
+   ]);
+   if(rr.error||ir.error)return;
+   const rec=rr.data; const product=(await supabaseClient.from("vineyard_inventory").select("item_name,unit").eq("id",rec.output_inventory_id).single()).data;
+   if(outName)outName.textContent=product?.item_name||"";
+   if(outQty)outQty.textContent=(Number(rec.output_quantity||1)*batches).toLocaleString("de-DE",{maximumFractionDigits:6})+" "+(product?.unit||"")+" hergestellt";
+   if(ingEl)ingEl.innerHTML=(ir.data||[]).map(x=>'<div class="productioningredient"><div><b>'+esc(x.vineyard_inventory?.item_name||"Unbekannte Zutat")+'</b><small>'+esc(x.vineyard_inventory?.unit||"")+'</small></div><strong>'+(Number(x.quantity)*batches).toLocaleString("de-DE",{maximumFractionDigits:6})+' '+esc(x.vineyard_inventory?.unit||"")+'</strong></div>').join("")||'<p class="muted">Keine Zutaten hinterlegt.</p>';
+  };
+  recipeEl?.addEventListener("change",updateProduction);batchEl?.addEventListener("input",updateProduction);updateProduction();
+  book?.addEventListener("click",async()=>{
+   book.disabled=true;
+   try{
+    const batches=Number(batchEl.value);
+    if(!Number.isFinite(batches)||batches<=0)throw Error("Die Menge muss größer als 0 sein.");
+    const r=await supabaseClient.rpc("vineyard_produce_recipe",{p_recipe_id:recipeEl.value,p_batches:batches});
+    if(r.error)throw r.error;
+    alert("Produktion wurde gebucht.");
+    await render();
+   }catch(err){alert(err.message||String(err));book.disabled=false}
+  });
+ }
  $("#q")?.addEventListener("input",async e=>{const {data=[]}=await supabaseClient.from("vineyard_inventory").select("*").order("category").order("item_name");const q=e.target.value.toLowerCase();$("#ingredients").innerHTML=itemCards(data.filter(x=>x.category==="Zutaten"&&x.item_name.toLowerCase().includes(q)));$("#products").innerHTML=itemCards(data.filter(x=>x.category==="Produkte"&&x.item_name.toLowerCase().includes(q)))});
  $$("[data-stock]").forEach(b=>b.onclick=()=>stockModal(b.dataset.stock));
- $$("[data-production]").forEach(b=>b.onclick=()=>productionModal(b.dataset.production));
  $$("[data-edit-item]").forEach(b=>b.onclick=()=>itemModal(b.dataset.editItem));
  $$("[data-delete-item]").forEach(b=>b.onclick=()=>deleteItem(b.dataset.deleteItem));
  $$("[data-edit-recipe]").forEach(b=>b.onclick=()=>recipeModal(b.dataset.editRecipe));
@@ -598,53 +673,6 @@ async function stockModal(id){
  if(!item)throw Error("Lagerartikel nicht gefunden.");
  modal("Bestandsbewegung · "+item.item_name,selectField("Bewegung","mode",[{value:"in",label:"Zugang (+)"},{value:"out",label:"Abgang (-)"}])+field("Menge","amount","number","",true)+field("Grund","reason","text","",true),
  async v=>{const amount=Math.abs(Number(v.amount)||0);if(!amount)throw Error("Menge muss größer als 0 sein.");const delta=v.mode==="in"?amount:-amount;const {error}=await supabaseClient.rpc("vineyard_adjust_inventory",{p_inventory_id:id,p_delta:delta,p_reason:v.reason.trim()});if(error)throw error})
-}
-async function productionModal(id){
- const {data:item,error}=await supabaseClient.from("vineyard_inventory").select("*").eq("id",id).single();
- if(error||!item)throw Error("Lagerartikel nicht gefunden.");
- if(item.category!=="Produkte")throw Error("Produktion kann nur bei Produkten gebucht werden.");
-
- const {data:recipes=[],error:re}=await supabaseClient.from("vineyard_recipes")
-  .select("id,name,output_quantity")
-  .eq("output_inventory_id",id)
-  .eq("active",true)
-  .order("name");
- if(re)throw re;
- if(!recipes.length){
-  modal("Produktion · "+item.item_name,
-   '<div class="recipehint"><b>Kein Rezept hinterlegt.</b><br>Für dieses Produkt muss zuerst unter <b>Rezepte</b> ein Rezept angelegt werden.</div>'+
-   '<div class="actions"><button type="button" class="btn outline" id="cancel">Schließen</button></div>',
-   async()=>{}
-  );
-  return;
- }
-
- let selected=recipes[0].id;
- const loadRecipe=async recipeId=>{
-  selected=recipeId;
-  const {data:items,error}=await supabaseClient.from("vineyard_recipe_items")
-   .select("quantity,vineyard_inventory:inventory_id(item_name,unit)")
-   .eq("recipe_id",recipeId)
-   .order("created_at");
-  if(error)throw error;
-  const recipe=recipes.find(x=>x.id===recipeId);
-  const list=(items||[]).map(x=>'<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #e5dfd4"><span>'+esc(x.vineyard_inventory?.item_name||"")+'</span><b>'+Number(x.quantity).toLocaleString("de-DE")+' '+esc(x.vineyard_inventory?.unit||"")+'</b></div>').join("");
-  $("#productionIngredients").innerHTML='<small>ZUTATEN PRO PRODUKTION</small>'+list;
-  $("#productionOutput").innerHTML='<small>ERGEBNIS</small><b>'+esc(item.item_name)+'</b><span>'+Number(recipe?.output_quantity||1).toLocaleString("de-DE")+' '+esc(item.unit)+' pro Produktion</span>';
- };
- modal("Produktion · "+item.item_name,
-  selectField("Rezept","recipe_id",recipes.map(x=>({value:x.id,label:x.name})),selected)+
-  field("Menge","batches","number",1,true)+
-  '<div id="productionIngredients" class="recipeingredients"></div><div id="productionOutput" class="recipeoutput"></div>',
-  async v=>{
-   const batches=Number(v.batches)||0;
-   if(!Number.isFinite(batches)||batches<=0)throw Error("Die Produktionsmenge muss größer als 0 sein.");
-   const r=await supabaseClient.rpc("vineyard_produce_recipe",{p_recipe_id:v.recipe_id,p_batches:batches});
-   if(r.error)throw r.error;
-  }
- );
- $("#modalroot [name=recipe_id]").onchange=async e=>{try{await loadRecipe(e.target.value)}catch(err){alert(err.message||String(err))}};
- await loadRecipe(selected);
 }
 async function cashModal(id){
  let existing=null;
