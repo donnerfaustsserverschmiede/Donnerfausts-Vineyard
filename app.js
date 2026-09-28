@@ -87,7 +87,7 @@ const NAV=[
 ];
 
 function can(p){return !!role?.permissions?.[p]}
-function badge(s){return '<span class="badge '+(s==="Bezahlt"||s==="OK"?"good":s==="Niedrig"||s==="Offen"?"warn":"bad")+'">'+esc(s)+"</span>"}
+function badge(s){const good=["Bezahlt","OK","Bestellung abgeschlossen"].includes(s);const warn=["Niedrig","Offen","Eingegangen","In Bearbeitung"].includes(s);return '<span class="badge '+(good?"good":warn?"warn":"bad")+'">'+esc(s)+"</span>"}
 
 async function init(){
  if(!window.supabase||typeof window.supabase.createClient!=="function")throw Error("Die Supabase-Bibliothek konnte nicht geladen werden.");
@@ -109,7 +109,7 @@ async function init(){
  if(profile.must_change_password)return forcePasswordChange();
  render();
  startPresence();
- supabaseClient.auth.onAuthStateChange(async (_e,s)=>{if(!s){if(presenceChannel)await supabaseClient.removeChannel(presenceChannel);presenceChannel=null;login()}});
+ supabaseClient.auth.onAuthStateChange(async (_e,s)=>{if(!s){if(presenceChannel)await supabaseClient.removeChannel(presenceChannel);presenceChannel=null;stopOrderRealtime();login()}});
 }
 async function loadProfile(){
  const {data,error}=await supabaseClient.from("vineyard_profiles").select("user_id,display_name,role_key,active,phone,must_change_password,vineyard_roles:role_key(key,label,permissions)").eq("user_id",(await supabaseClient.auth.getUser()).data.user.id).maybeSingle();
