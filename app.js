@@ -250,8 +250,12 @@ async function admin(){
   if(a.includes("rechnung erstellt")) return name+" hat eine Rechnung erstellt.";
   if(a.includes("rechnung geändert")) return name+" hat eine Rechnung geändert.";
   if(a.includes("rechnung gelöscht")) return name+" hat eine Rechnung gelöscht.";
-  if(a.includes("rezept gelöscht")) return name+" hat das Rezept "+String(d.name||"")+" gelöscht.";
-  if(a.includes("lagerartikel gelöscht")) return name+" hat den Lagerartikel gelöscht.";
+  if(a.includes("rezept angelegt")) return name+" hat das Rezept "+String(d.name||"")+" angelegt.";
+   if(a.includes("rezept geändert")) return name+" hat das Rezept "+String(d.name||"")+" geändert.";
+   if(a.includes("rezept gelöscht")) return name+" hat das Rezept "+String(d.name||"")+" gelöscht.";
+  if(a.includes("lagerartikel angelegt")) return name+" hat einen Lagerartikel "+String(d.item_name||"")+" angelegt.";
+   if(a.includes("lagerartikel geändert")) return name+" hat den Lagerartikel "+String(d.item_name||"")+" geändert.";
+   if(a.includes("lagerartikel gelöscht")) return name+" hat den Lagerartikel gelöscht.";
   if(a.includes("mitarbeiter angelegt")) return name+" hat einen Mitarbeiter angelegt.";
   if(a.includes("mitarbeiter geändert")) return name+" hat einen Mitarbeiter geändert.";
   if(a.includes("mitarbeiter gelöscht")) return name+" hat einen Mitarbeiter gelöscht.";
@@ -434,6 +438,7 @@ function bind(){
     if(!Number.isFinite(batches)||batches<=0)throw Error("Die Menge muss größer als 0 sein.");
     const r=await supabaseClient.rpc("vineyard_produce_recipe",{p_recipe_id:recipeEl.value,p_batches:batches});
     if(r.error)throw r.error;
+    await auditLog("Produktion gebucht","production",recipeEl.value,{recipe_id:recipeEl.value,batches});
     alert("Produktion wurde gebucht.");
     await render();
    }catch(err){alert(err.message||String(err));book.disabled=false}
@@ -591,6 +596,7 @@ async function recipeModal(id){
     p_items:payload
    });
    if(r.error)throw r.error;
+   await auditLog(id?"Rezept geändert":"Rezept angelegt","recipe",id||output_inventory_id,{name:product.item_name,output_inventory_id,ingredients:payload});
    close();
    await render();
   }catch(err){alert(err.message||String(err))}
@@ -601,6 +607,7 @@ async function deleteRecipe(id){
  if(!confirm("Dieses Rezept wirklich löschen?"))return;
  const r=await supabaseClient.rpc("vineyard_delete_recipe",{p_recipe_id:id});
  if(r.error)return alert(r.error.message);
+ await auditLog("Rezept gelöscht","recipe",id,{});
  await render();
 }
 async function invoiceModal(id){
@@ -680,18 +687,20 @@ async function invoiceModal(id){
    if(rate&&!employeeEl.value)throw Error("Für Produktion, Verkauf und Bestellung/Lieferung muss ein Mitarbeiter ausgewählt werden.");
    const r=await supabaseClient.rpc("vineyard_save_invoice",{p_invoice_id:id||null,p_type:typeEl.value,p_partner_name:partner,p_status:statusEl.value,p_employee_id:employeeEl.value||null,p_items:rows});
    if(r.error)throw r.error;
+   await auditLog(id?"Rechnung geändert":"Rechnung erstellt","invoice",id||null,{invoice_type:typeEl.value,partner_name:partner,status:statusEl.value,items:rows});
    close();await render();
   }catch(err){alert(err.message||String(err))}finally{b.disabled=false}
  };
 }
 async function deleteItem(id){
  if(!confirm("Diesen Lagerartikel wirklich löschen? Zugehörige Rezepte werden dabei entfernt; historische Rechnungspositionen bleiben erhalten."))return;
- const {error}=await supabaseClient.rpc("vineyard_delete_inventory",{p_inventory_id:id});if(error)throw error;await render();
+ const {error}=await supabaseClient.rpc("vineyard_delete_inventory",{p_inventory_id:id});if(error)throw error;await auditLog("Lagerartikel gelöscht","inventory",id,{});await render();
 }
 async function deleteTrade(id){
  if(!confirm("Diesen Ein-/Verkauf wirklich löschen? Lagerbestand und Kassenbuchung werden dabei automatisch zurückgebucht."))return;
  const {error}=await supabaseClient.rpc("vineyard_delete_trade",{p_trade_id:id});
  if(error)throw error;
+ await auditLog("Ein-/Verkauf gelöscht","trade",id,{});
  await render();
 }
 async function deleteCash(id){
@@ -705,7 +714,7 @@ async function deleteInvoice(id){
 async function deleteEmployee(id){
  if(role?.key!=="master")throw Error("Nur der Master darf Mitarbeiter löschen.");
  if(!confirm("Diesen Mitarbeiter und seinen Zugang wirklich dauerhaft löschen?"))return;
- const r=await supabaseClient.functions.invoke("vineyard-admin-users",{body:{action:"delete",user_id:id}});if(r.error)throw r.error;if(r.data?.error)throw Error(r.data.error);await render();
+ const r=await supabaseClient.functions.invoke("vineyard-admin-users",{body:{action:"delete",user_id:id}});if(r.error)throw r.error;if(r.data?.error)throw Error(r.data.error);await auditLog("Mitarbeiter gelöscht","employee",id,{});await render();
 }
 async function shareInvoice(id){
  const {data,error}=await supabaseClient.from("vineyard_invoices").select("invoice_number,share_token").eq("id",id).single();
@@ -783,6 +792,7 @@ async function tradeModal(id){
    const args=id?{p_trade_id:id,p_trade_type:typeEl.value,p_inventory_id:itemEl.value,p_quantity:quantity}:{p_trade_type:typeEl.value,p_inventory_id:itemEl.value,p_quantity:quantity};
    const {error}=await supabaseClient.rpc(rpc,args);
    if(error)throw error;
+   await auditLog(id?"Ein-/Verkauf geändert":"Ein-/Verkauf gebucht","trade",id||null,{trade_type:typeEl.value,inventory_id:itemEl.value,quantity});
    close();
    await render();
   }catch(err){alert(err.message||String(err));b.disabled=false}
