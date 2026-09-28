@@ -38,7 +38,7 @@ async function loadProfile(){
 }
 function login(message=""){
  document.body.innerHTML='<div class="login"><div class="loginbox"><div class="loginbrand"><div class="brandmark">🍇</div><h1>Donnerfaust Vineyards</h1><p>Interne Betriebsverwaltung</p></div>'+(message?'<div class="error">'+esc(message)+"</div>":"")+
- '<form id="loginform"><label>E-Mail<input id="email" type="email" autocomplete="username" value="ragnaroekduo2018@gmail.com" required></label><label>Passwort<input id="password" type="password" autocomplete="current-password" required></label><button class="btn primary">Anmelden</button></form></div></div>';
+ '<form id="loginform"><label>E-Mail<input id="email" type="email" autocomplete="username" placeholder="deine E-Mail-Adresse" value="" required></label><label>Passwort<input id="password" type="password" autocomplete="current-password" required></label><button class="btn primary">Anmelden</button></form></div></div>';
  $("#loginform").onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;const {error}=await supabase.auth.signInWithPassword({email:$("#email").value.trim(),password:$("#password").value});if(error){b.disabled=false;login(error.message)}else{await loadProfile();if(!profile){await supabase.auth.signOut();login("Dieser Benutzer hat noch kein Vineyards-Profil.");}else{if(profile.must_change_password){forcePasswordChange()}else{render();startPresence()}}};
 }
 function forcePasswordChange(){
