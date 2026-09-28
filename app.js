@@ -165,10 +165,45 @@ function field(label,name,type="text",value="",required=false){return '<label>'+
 function selectField(label,name,opts,value=""){return '<label>'+label+'<select name="'+name+'">'+opts.map(o=>'<option value="'+esc(o.value??o)+'" '+(String(value)===String(o.value??o)?"selected":"")+'>'+esc(o.label??o)+"</option>").join("")+"</select></label>"}
 
 async function itemModal(id){
- let item=null;if(id){const {data}=await supabase.from("vineyard_inventory").select("*").eq("id",id).single();item=data}
- modal(id?"Lagerartikel bearbeiten":"Neuer Lagerartikel",
- field("Artikel / Ressource","item_name","text",item?.item_name||"",true)+selectField("Kategorie","category",[{value:"Zutaten",label:"Zutaten · Grundzutaten / Ressourcen"},{value:"Produkte",label:"Produkte · fertige Weine / Verkaufsartikel"}],item?.category||"Zutaten")+field("Einheit","unit","text",item?.unit||"Stück",true)+field("Bestand","quantity","number",item?.quantity??0)+field("Mindestbestand","min_stock","number",item?.min_stock??0)+field("Einkaufspreis","purchase_price","number",item?.purchase_price??0)+field("Verkaufspreis","sale_price","number",item?.sale_price??0),
- async v=>{const patch={item_name:v.item_name.trim(),category:v.category,unit:v.unit.trim(),quantity:Number(v.quantity)||0,min_stock:Number(v.min_stock)||0,purchase_price:Number(v.purchase_price)||0,sale_price:Number(v.sale_price)||0,updated_at:new Date().toISOString(),updated_by:(await supabase.auth.getUser()).data.user.id};const r=id?await supabase.from("vineyard_inventory").update(patch).eq("id",id):await supabase.from("vineyard_inventory").insert(patch);if(r.error)throw r.error;await auditLog(id?"Lagerartikel geändert":"Lagerartikel angelegt","inventory",id||v.item_name,patch)})
+ let item=null;
+ if(id){const {data,error}=await supabase.from("vineyard_inventory").select("*").eq("id",id).single();if(error)throw error;item=data}
+ const cat=item?.category||"Zutaten";
+ $("#modalroot").innerHTML='<div class="modalback"><div class="modal"><div class="modalhead"><b>'+(id?"Lagerartikel bearbeiten":"Neuer Lagerartikel")+'</b><button id="x">×</button></div><form id="mf">'+
+ field("Artikel / Ressource","item_name","text",item?.item_name||"",true)+
+ selectField("Kategorie","category",[{value:"Zutaten",label:"Zutaten · Grundzutaten / Ressourcen"},{value:"Produkte",label:"Produkte · fertige Weine / Verkaufsartikel"}],cat)+
+ field("Einheit","unit","text",item?.unit||"Stück",true)+
+ field("Bestand","quantity","number",item?.quantity??0)+
+ field("Mindestbestand","min_stock","number",item?.min_stock??0)+
+ '<label id="purchaseWrap">Einkaufspreis<input name="purchase_price" type="number" step="0.01" min="0" value="'+esc(item?.purchase_price??0)+'"></label>'+
+ '<label id="saleWrap">Verkaufspreis<input name="sale_price" type="number" step="0.01" min="0" value="'+esc(item?.sale_price??0)+'"></label>'+
+ '<div class="actions"><button type="button" class="btn outline" id="cancel">Abbrechen</button><button class="btn primary">Speichern</button></div></form></div></div>';
+ const close=()=>$("#modalroot").innerHTML="";
+ $("#x").onclick=$("#cancel").onclick=close;
+ const category=$("#mf [name=category]"),purchase=$("#purchaseWrap"),sale=$("#saleWrap");
+ const updatePrices=()=>{
+   const ingredient=category.value==="Zutaten";
+   purchase.style.display=ingredient?"":"none";
+   sale.style.display=ingredient?"none":"";
+   $("#purchaseWrap input").required=ingredient;
+   $("#saleWrap input").required=!ingredient;
+ };
+ category.onchange=updatePrices;updatePrices();
+ $("#mf").onsubmit=async e=>{
+   e.preventDefault();const b=e.submitter;b.disabled=true;
+   try{
+    const v=Object.fromEntries(new FormData(e.target)), user=(await supabase.auth.getUser()).data.user;
+    const ingredient=v.category==="Zutaten";
+    const purchase_price=ingredient?Number(v.purchase_price):0;
+    const sale_price=ingredient?0:Number(v.sale_price);
+    if(!ingredient&&!Number.isFinite(sale_price))throw Error("Bitte einen gültigen Verkaufspreis angeben.");
+    if(ingredient&&!Number.isFinite(purchase_price))throw Error("Bitte einen gültigen Einkaufspreis angeben.");
+    const patch={item_name:v.item_name.trim(),category:v.category,unit:v.unit.trim(),quantity:Number(v.quantity)||0,min_stock:Number(v.min_stock)||0,purchase_price,sale_price,updated_at:new Date().toISOString(),updated_by:user.id};
+    const r=id?await supabase.from("vineyard_inventory").update(patch).eq("id",id):await supabase.from("vineyard_inventory").insert(patch);
+    if(r.error)throw r.error;
+    await auditLog(id?"Lagerartikel geändert":"Lagerartikel angelegt","inventory",id||v.item_name,patch);
+    close();await render();
+   }catch(err){alert(err.message||String(err))}finally{b.disabled=false}
+ };
 }
 async function recipeModal(id){
  const [{data:ingredients=[]},{data:products=[]},recipeResult,itemsResult]=await Promise.all([
