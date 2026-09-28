@@ -125,7 +125,7 @@ async function invoices(){
  return intro("HANDELSNACHWEISE","Rechnungen","Verkauf, Einkauf und Bestellungen als nachvollziehbare Handelsnachweise verwalten.",can("invoice_edit")?"newinvoice":null,can("invoice_edit")?"+ Rechnung erstellen":null)+
  '<div class="stats">'+stat("▤","OFFENE RECHNUNGEN",open)+stat("$","HANDELSVORGÄNGE",total)+stat("↗","VERKAUF",rows.filter(x=>x.invoice_type==="Verkauf").length)+stat("↙","EINKAUF",rows.filter(x=>x.invoice_type==="Einkauf").length)+'</div>'+
  '<div class="panel"><div class="tablewrap"><table><thead><tr><th>NUMMER</th><th>ART</th><th>HANDELSPARTNER</th><th>DATUM</th><th>STATUS</th><th></th></tr></thead><tbody>'+
- (rows.map(x=>'<tr><td><b>'+esc(x.invoice_number)+'</b></td><td>'+esc(x.invoice_type)+'</td><td>'+esc(x.partner_name)+'</td><td>'+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</td><td>'+badge(x.status)+'</td><td><button class="mini gold" data-share-invoice="'+x.id+'">Teilen</button></td></tr>').join("")||'<tr><td colspan="6">Noch keine Rechnungen vorhanden.</td></tr>')+
+ (rows.map(x=>'<tr><td><b>'+esc(x.invoice_number)+'</b></td><td>'+esc(x.invoice_type)+'</td><td>'+esc(x.partner_name)+'</td><td>'+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</td><td>'+badge(x.status)+'</td><td><button class="mini gold" data-share-invoice="'+x.id+'">Teilen</button> <button class="mini" data-edit-invoice="'+'x.id'">Bearbeiten</button> <button class="mini" data-delete-invoice="'+'x.id'">Löschen</button></td></tr>').join("")||'<tr><td colspan="6">Noch keine Rechnungen vorhanden.</td></tr>')+
  '</tbody></table></div></div>';
 }
 async function orders(){return '<div class="placeholder"><div class="placeholdericon">🛒</div><div class="eyebrow">BESTELLUNGEN</div><h1>Bestellungsmenü</h1><p>Hier werden offene Bestellungen und Lieferungen verwaltet.</p><div class="placeholderstate">Noch keine Bestellungen hinterlegt.</div></div>';}
@@ -151,7 +151,7 @@ function itemCards(items){
  return items.map(x=>{
   const low=Number(x.quantity)<=Number(x.min_stock);
   const production=x.category==="Produkte"&&can("inventory_edit")?`<button class="mini gold" data-production="${x.id}">+ Produktion</button> `:"";
-  const actions=can("inventory_edit")?`<button class="mini gold" data-stock="${x.id}">Bestand ändern</button> ${production}<button class="mini" data-edit-item="${x.id}">Bearbeiten</button>`:"";
+  const actions=can("inventory_edit")?`<button class="mini gold" data-stock="${x.id}">Bestand ändern</button> ${production}<button class="mini" data-edit-item="${x.id}">Bearbeiten</button> <button class="mini" data-delete-item="${x.id}">Löschen</button>`:"";
   const price=x.category==="Zutaten"?"Einkaufspreis: "+money(x.purchase_price):"Verkaufspreis: "+money(x.sale_price);
   return `
    <div class="itemcard">
@@ -196,7 +196,7 @@ async function employees(){
   supabaseClient.from("vineyard_roles").select("key,label,permissions").order("key")
  ]);
  return intro("TEAM","Mitarbeiter","Konten, Rollen und Rechte werden ausschließlich über den Master verwaltet.",can("employees_edit")?"newemployee":null,can("employees_edit")?"+ Mitarbeiter":null)+
- '<div class="employeegrid">'+emps.map(x=>'<div class="employee"><div class="avatar">'+esc(initials(x.display_name))+'</div><div style="flex:1"><b>'+esc(x.display_name)+"</b><small>"+esc(x.vineyard_roles?.label||x.role_key)+" · "+(x.active?'<span class="good">Aktiv</span>':'<span class="bad">Deaktiviert</span>')+"</small>"+(x.phone?'<small>'+esc(x.phone)+"</small>":"")+'</div>'+(can("employees_edit")?'<button class="mini" data-edit-employee="'+x.user_id+'">Verwalten</button>':"")+"</div>").join("")+"</div>";
+ '<div class="employeegrid">'+emps.map(x=>'<div class="employee"><div class="avatar">'+esc(initials(x.display_name))+'</div><div style="flex:1"><b>'+esc(x.display_name)+"</b><small>"+esc(x.vineyard_roles?.label||x.role_key)+" · "+(x.active?'<span class="good">Aktiv</span>':'<span class="bad">Deaktiviert</span>')+"</small>"+(x.phone?'<small>'+esc(x.phone)+"</small>":"")+'</div>'+(role?.key==="master"?'<button class="mini" data-edit-employee="'+x.user_id+'">Bearbeiten</button> <button class="mini" data-delete-employee="'+'x.user_id'">Löschen</button>':"")+"</div>").join("")+"</div>";
 }
 async function audit(){
  const {data:rows=[],error}=await supabaseClient.from("vineyard_audit_log").select("*,vineyard_profiles:actor_id(display_name)").order("created_at",{ascending:false}).limit(100);
