@@ -26,19 +26,35 @@ async function init(){
  if(!session)return login();
  await loadProfile();
  if(!profile){await supabase.auth.signOut();return login("Dein Konto ist für Donnerfaust Vineyards noch nicht freigeschaltet.");}
+ if(profile.must_change_password)return forcePasswordChange();
  render();
  startPresence();
  supabase.auth.onAuthStateChange(async (_e,s)=>{if(!s){if(presenceChannel)await supabase.removeChannel(presenceChannel);presenceChannel=null;login()}});
 }
 async function loadProfile(){
- const {data,error}=await supabase.from("vineyard_profiles").select("user_id,display_name,role_key,active,phone,vineyard_roles:role_key(key,label,permissions)").eq("user_id",(await supabase.auth.getUser()).data.user.id).maybeSingle();
+ const {data,error}=await supabase.from("vineyard_profiles").select("user_id,display_name,role_key,active,phone,must_change_password,vineyard_roles:role_key(key,label,permissions)").eq("user_id",(await supabase.auth.getUser()).data.user.id).maybeSingle();
  if(error||!data||!data.active){profile=null;return}
  profile=data;role=data.vineyard_roles;
 }
 function login(message=""){
  document.body.innerHTML='<div class="login"><div class="loginbox"><div class="loginbrand"><div class="brandmark">🍇</div><h1>Donnerfaust Vineyards</h1><p>Interne Betriebsverwaltung</p></div>'+(message?'<div class="error">'+esc(message)+"</div>":"")+
  '<form id="loginform"><label>E-Mail<input id="email" type="email" autocomplete="username" value="ragnaroekduo2018@gmail.com" required></label><label>Passwort<input id="password" type="password" autocomplete="current-password" required></label><button class="btn primary">Anmelden</button></form></div></div>';
- $("#loginform").onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;const {error}=await supabase.auth.signInWithPassword({email:$("#email").value.trim(),password:$("#password").value});if(error){b.disabled=false;login(error.message)}else{await loadProfile();if(!profile){await supabase.auth.signOut();login("Dieser Benutzer hat noch kein Vineyards-Profil.");}else{render();startPresence()}}};
+ $("#loginform").onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;const {error}=await supabase.auth.signInWithPassword({email:$("#email").value.trim(),password:$("#password").value});if(error){b.disabled=false;login(error.message)}else{await loadProfile();if(!profile){await supabase.auth.signOut();login("Dieser Benutzer hat noch kein Vineyards-Profil.");}else{if(profile.must_change_password){forcePasswordChange()}else{render();startPresence()}}};
+}
+function forcePasswordChange(){
+ document.body.innerHTML='<div class="login"><div class="loginbox"><div class="loginbrand"><div class="brandmark">🔐</div><h1>Passwort aktualisieren</h1><p>Bei der ersten Anmeldung musst du das vom Master vergebene Startpasswort ändern.</p></div><div class="error" style="background:#fff0cf;color:#765714">Dein Zugang ist aktiv. Bevor du fortfährst, lege dein persönliches Passwort fest.</div><form id="passwordform"><label>Neues Passwort<input id="newpassword" type="password" autocomplete="new-password" minlength="8" required></label><label>Neues Passwort wiederholen<input id="newpassword2" type="password" autocomplete="new-password" minlength="8" required></label><button class="btn primary">Passwort speichern</button></form></div></div>';
+ $("#passwordform").onsubmit=async e=>{
+  e.preventDefault();
+  const b=e.submitter,b1=$("#newpassword").value,b2=$("#newpassword2").value;
+  if(b1.length<8)return alert("Das Passwort muss mindestens 8 Zeichen haben.");
+  if(b1!==b2)return alert("Die Passwörter stimmen nicht überein.");
+  b.disabled=true;
+  const r=await supabase.functions.invoke("vineyard-admin-users",{body:{action:"change_password",password:b1}});
+  if(r.error||r.data?.error){b.disabled=false;return alert(r.data?.error||r.error?.message||"Passwort konnte nicht geändert werden.");}
+  await loadProfile();
+  render();
+  startPresence();
+ };
 }
 function shell(content){
  const nav=NAV.filter(n=>can(n[3])).map(n=>'<button class="nav '+(page===n[0]?"active":"")+'" data-page="'+n[0]+'"><i>'+n[1]+"</i>"+n[2]+"</button>").join("");
