@@ -193,7 +193,7 @@ async function dashboard(){
 async function invoices(){
  const {data:rows=[],error}=await supabaseClient.from("vineyard_invoices").select("id,invoice_number,invoice_type,partner_name,status,created_at,created_by,employee_id,commission_rate,commission_amount").order("created_at",{ascending:false});
  if(error)return errorBox(error.message);
- const {data:employees=[],error:ee}=await supabaseClient.rpc("vineyard_invoice_employees");
+ const {data:employees=[],error:ee}=await supabaseClient.rpc("vineyard_order_employees");
  if(ee)return errorBox(ee.message);
  const emap=Object.fromEntries((employees||[]).map(x=>[x.user_id,x.display_name]));
  rows.forEach(x=>x.employee_name=emap[x.employee_id]||"—");
@@ -209,7 +209,7 @@ async function invoices(){
 async function orders(){
  const {data:rows=[],error}=await supabaseClient.from("vineyard_orders").select("id,order_number,status,customer_name,customer_email,customer_phone,customer_address,customer_note,employee_id,total,commission_rate,commission_amount,created_at,accepted_at,completed_at").order("created_at",{ascending:false});
  if(error)return errorBox(error.message);
- const {data:employees=[],error:ee}=await supabaseClient.rpc("vineyard_invoice_employees");
+ const {data:employees=[],error:ee}=await supabaseClient.rpc("vineyard_order_employees");
  if(ee)return errorBox(ee.message);
  const emap=Object.fromEntries((employees||[]).map(x=>[x.user_id,x.display_name]));
  rows.forEach(x=>x.employee_name=emap[x.employee_id]||"—");
@@ -448,7 +448,7 @@ async function invoiceModal(id){
  const [{data:inventory=[],error},{data:existingInvoice},{data:employees=[],error:ee}]=await Promise.all([
   supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category,purchase_price,sale_price").order("category").order("item_name"),
   id?supabaseClient.from("vineyard_invoices").select("id,invoice_type,partner_name,status,employee_id,commission_rate,commission_amount").eq("id",id).single():Promise.resolve({data:null}),
-  supabaseClient.rpc("vineyard_invoice_employees")
+  supabaseClient.rpc("vineyard_order_employees")
  ]);
  if(error)throw error;
  if(ee)throw ee;
@@ -611,7 +611,7 @@ async function orderModal(id){
  ]);
  if(error)throw error;
  if(ie)throw ie;
- const employee=order.employee_id?((await supabaseClient.rpc("vineyard_invoice_employees")).data||[]).find(x=>x.user_id===order.employee_id)?.display_name:"—";
+ const employee=order.employee_id?((await supabaseClient.rpc("vineyard_order_employees")).data||[]).find(x=>x.user_id===order.employee_id)?.display_name:"—";
  const statusButton=order.status==="Eingegangen"?'<button class="btn gold" id="acceptOrder">Bestellung annehmen</button>':order.status==="In Bearbeitung"?'<button class="btn gold" id="completeOrder">Bestellung abschließen</button>':"";
  const statusLink=location.origin+location.pathname+"?bestellung=status&token="+encodeURIComponent(order.customer_token||"");
  const cancelButton=order.status!=="Bestellung abgeschlossen"&&order.status!=="Storniert"?'<button class="btn danger" id="cancelOrder">Stornieren</button>':"";
