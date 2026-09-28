@@ -205,7 +205,7 @@ function errorBox(t){return '<div class="panel"><b>Fehler</b><p class="muted">'+
 
 async function render(){let content=page==="dashboard"?await dashboard():page==="invoices"?await invoices():page==="orders"?await orders():page==="inventory"?await inventory():page==="recipes"?await recipes():page==="cash"?await cash():page==="employees"?await employees():await audit();shell(content);bind()}
 function bind(){
- $("[data-action]").forEach(b=>b.onclick=async()=>{try{await action(b.dataset.action)}catch(err){console.error("Donnerfaust Vineyards Aktion:",err);alert(err?.message||String(err))}});
+ $("[data-action]").forEach(b=>b.onclick=async e=>{e.preventDefault();e.stopPropagation();b.disabled=true;try{await action(b.dataset.action)}catch(err){console.error("Donnerfaust Vineyards Aktion:",err);alert(err?.message||String(err))}finally{b.disabled=false}});
  $("[data-page-action]").forEach(b=>b.onclick=()=>{page=b.dataset.pageAction;render()});
  $("#q")?.addEventListener("input",async e=>{const {data=[]}=await supabaseClient.from("vineyard_inventory").select("*").order("category").order("item_name");const q=e.target.value.toLowerCase();$("#ingredients").innerHTML=itemCards(data.filter(x=>x.category==="Zutaten"&&x.item_name.toLowerCase().includes(q)));$("#products").innerHTML=itemCards(data.filter(x=>x.category==="Produkte"&&x.item_name.toLowerCase().includes(q)))});
  $$("[data-stock]").forEach(b=>b.onclick=()=>stockModal(b.dataset.stock));
