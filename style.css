@@ -61,3 +61,19 @@ nav{padding:12px;overflow:auto}.nav{width:100%;padding:11px 12px;margin:2px 0;bo
 @media(max-width:800px){.ordergrid{grid-template-columns:1fr}.orderlinkpanel{align-items:flex-start;flex-direction:column}.orderlinkactions{width:100%}.orderlinkactions .btn{flex:1}.publicformgrid{grid-template-columns:1fr}}
 @media(max-width:600px){.ordercardtop{align-items:flex-start}.ordercardtop>b{font-size:17px}.publicOrderRow{grid-template-columns:1fr 90px 32px}.orderstatuslink{flex-direction:column;align-items:stretch}.orderstatuslink .btn{width:100%}}
 .orderlinkactions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.orderlinkinput{min-width:300px;max-width:420px;padding:10px 11px;border:1px solid #d8d0c2;border-radius:8px;background:#fff;color:#5f594f;font-size:11px}@media(max-width:800px){.orderlinkinput{min-width:0;width:100%;max-width:none}.orderlinkactions{width:100%}.orderlinkactions .btn{flex:1}}
+/* Produktion */
+.productionpanel{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;margin-top:18px}
+.productionform,.productioningredientswrap{background:var(--paper);border:1px solid var(--line);border-radius:15px;padding:20px}
+.productionform label{display:block;margin-bottom:13px}
+.productionform input,.productionform select{width:100%;box-sizing:border-box;padding:12px;border:1px solid var(--line);border-radius:9px;background:#fff}
+.productionoutput{display:flex;flex-direction:column;gap:4px;padding:14px;margin:8px 0 16px;border:1px solid #c5a14a55;border-radius:12px;background:#c5a14a0d}
+.productionoutput span,.productioningredientswrap>.eyebrow{font-size:9px;font-weight:900;letter-spacing:.12em;color:var(--gold)}
+.productionoutput b{font:700 22px Georgia,serif}
+.productionoutput small{color:var(--muted)}
+.productioningredient{display:flex;justify-content:space-between;align-items:center;gap:15px;padding:11px 0;border-bottom:1px solid var(--line)}
+.productioningredient:last-child{border-bottom:0}
+.productioningredient div{display:flex;flex-direction:column;gap:3px}
+.productioningredient small{color:var(--muted);font-size:10px}
+.productioningredient strong{white-space:nowrap}
+.productioningredientswrap h3{margin:5px 0 14px;font:700 22px Georgia,serif}
+@media(max-width:750px){.productionpanel{grid-template-columns:1fr}.productionform,.productioningredientswrap{padding:16px}}
