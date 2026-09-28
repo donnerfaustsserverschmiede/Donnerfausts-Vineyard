@@ -33,6 +33,11 @@ window.setTimeout(function(){
     vineyardDiagnostic("Donnerfaust Vineyards – Startdiagnose","app.js wurde vom Browser nicht ausgeführt. Damit liegt der Fehler vor der eigentlichen Supabase-Anmeldung.");
   }
 },4000);
+window.setTimeout(function(){
+  if(window.__vineyardAppStarted && !window.__vineyardAppFinished){
+    vineyardDiagnostic("Donnerfaust Vineyards – Start hängt","app.js läuft, aber die Initialisierung wurde nicht abgeschlossen.");
+  }
+},12000);
 </script>
 <script src="./app.js?v=10" onload="window.__vineyardAppLoaded=true" onerror="vineyardDiagnostic('Donnerfaust Vineyards – app.js nicht geladen','Die Datei app.js konnte von GitHub Pages nicht geladen werden.')"></script>
 </body>
