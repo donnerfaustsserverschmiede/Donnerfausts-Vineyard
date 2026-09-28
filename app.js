@@ -6,9 +6,12 @@ const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&
 const money=n=>new Intl.NumberFormat("de-DE",{style:"currency",currency:"EUR"}).format(Number(n)||0);
 const dateTime=()=>new Date().toLocaleString("de-DE");
 let profile=null, role=null, page="dashboard";
+let presenceChannel=null, onlineCount=0;
 
 const NAV=[
 ["dashboard","⌂","Übersicht","dashboard"],
+["invoices","▤","Rechnungen","dashboard"],
+["orders","🛒","Bestellungen","dashboard"],
 ["inventory","▦","Lager","inventory_view"],
 ["cash","€","Kasse","cash_view"],
 ["employees","♟","Mitarbeiter","employees_view"],
@@ -24,7 +27,8 @@ async function init(){
  await loadProfile();
  if(!profile){await supabase.auth.signOut();return login("Dein Konto ist für Donnerfaust Vineyards noch nicht freigeschaltet.");}
  render();
- supabase.auth.onAuthStateChange((_e,s)=>{if(!s)login()});
+ startPresence();
+ supabase.auth.onAuthStateChange(async (_e,s)=>{if(!s){if(presenceChannel)await supabase.removeChannel(presenceChannel);presenceChannel=null;login()}});
 }
 async function loadProfile(){
  const {data,error}=await supabase.from("vineyard_profiles").select("user_id,display_name,role_key,active,phone,vineyard_roles:role_key(key,label,permissions)").eq("user_id",(await supabase.auth.getUser()).data.user.id).maybeSingle();
@@ -41,23 +45,32 @@ function shell(content){
  document.body.innerHTML='<aside class="sidebar" id="sidebar"><div class="brand"><div class="brandmark">🍇</div><div><b>Donnerfaust Vineyards</b><small>Interne Verwaltung</small></div></div><nav>"+nav+'</nav><div class="sidefoot"><span class="online"></span>'+esc(profile.display_name)+' · '+esc(role.label)+'<br><button id="logout" class="mini" style="margin-top:9px">Abmelden</button></div></aside><main class="main"><header class="top"><div><button class="hamb" id="hamb">☰</button><span class="crumb">DONNERFAUST VINEYARDS</span><h2>'+esc(pageTitle())+'</h2></div><div class="topright"><span class="online"></span><b>'+esc(profile.display_name)+'</b><span class="avatar">'+esc(initials(profile.display_name))+"</span></div></header><section class="content">"+content+'</section></main><div id="modalroot"></div>';
  $$(".nav").forEach(b=>b.onclick=()=>{page=b.dataset.page;render()});$("#hamb").onclick=()=>$("#sidebar").classList.toggle("open");$("#logout").onclick=()=>supabase.auth.signOut();
 }
-function pageTitle(){return ({dashboard:"Übersicht",inventory:"Lagerübersicht",cash:"Kasse",employees:"Mitarbeiter",audit:"Protokoll"})[page]||"Übersicht"}
+function pageTitle(){return ({dashboard:"Übersicht",invoices:"Rechnungen",orders:"Bestellungen",inventory:"Lagerübersicht",cash:"Kasse",employees:"Mitarbeiter",audit:"Protokoll"})[page]||"Übersicht"}
 function initials(n){return String(n||"DF").split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase()}
 function stat(icon,label,value){return '<div class="stat"><span class="icon">'+icon+'</span><div><small>'+label+"</small><b>"+value+"</b></div></div>"}
 function intro(k,h,p,action,label){return '<div class="intro"><div><div class="eyebrow">'+k+"</div><h1>"+h+"</h1><p>"+p+"</p></div>"+(action?'<button class="btn gold" data-action="'+action+'">'+label+"</button>":"")+"</div>"}
 
 async function dashboard(){
- const [{data:inv=[]},{data:cash=[]},{data:emps=[]}] = await Promise.all([
-  supabase.from("vineyard_inventory").select("*").order("item_name"),
-  can("cash_view")?supabase.from("vineyard_cashbook").select("*").order("created_at",{ascending:false}):Promise.resolve({data:[]}),
-  can("employees_view")?supabase.from("vineyard_profiles").select("user_id,display_name,role_key,active,vineyard_roles:role_key(label)").order("display_name"):Promise.resolve({data:[]})
- ]);
- const balance=(cash||[]).reduce((s,x)=>s+(x.kind==="in"?1:-1)*Number(x.amount||0),0);
- const low=(inv||[]).filter(x=>Number(x.quantity)<=Number(x.min_stock));
- return intro("WEINGUT","Willkommen bei Donnerfaust Vineyards","Zentrale Übersicht für Lager, Kasse und Team.","openinventory","Lager öffnen")+
- '<div class="stats">'+stat("🍇","LAGERARTIKEL",inv.length)+stat("⚠","NIEDRIGER BESTAND",low.length)+stat("€","KASSENSTAND",can("cash_view")?money(balance):"—")+stat("♟","MITARBEITER",can("employees_view")?emps.length:"—")+"</div>"+
- '<div class="grid2"><div class="panel"><div class="panelhead"><b>Bestandswarnungen</b></div>'+(low.map(x=>'<div class="row"><span>⚠️</span><div class="rowgrow"><b>'+esc(x.item_name)+"</b><small>"+x.quantity+" "+esc(x.unit)+" · Mindestbestand "+x.min_stock+"</small></div>"+badge("Niedrig")+"</div>").join("")||'<p class="muted">Alle Bestände sind im grünen Bereich.</p>')+
- '</div><div class="panel"><div class="panelhead"><b>Letzte Kassenbewegungen</b></div>'+(can("cash_view")?cash.slice(0,6).map(x=>'<div class="row"><span>'+ (x.kind==="in"?"💰":"💸")+'</span><div class="rowgrow"><b>'+money(x.amount)+"</b><small>"+esc(x.description)+" · "+esc(x.category)+"</small></div>"+badge(x.kind==="in"?"OK":"Ausgabe")+"</div>").join(""):'<p class="muted">Keine Berechtigung für die Kasse.</p>')+"</div></div>";
+ const openInvoices=0, openOrders=0;
+ return '<div class="welcome"><div><div class="eyebrow">DONNERFAUST VINEYARDS</div><h1>Willkommen, '+esc(profile.display_name)+'</h1><p>Deine aktuelle Übersicht für den Weinbetrieb.</p></div><div class="welcomegrape">🍇</div></div>'+
+ '<div class="overviewgrid">'+
+ '<button class="overviewcard" data-page-action="invoices"><div class="overviewicon invoice">▤</div><div class="overviewtext"><small>OFFENE RECHNUNGEN</small><b>'+openInvoices+'</b><span>Rechnungsmenü öffnen</span></div><span class="arrow">→</span></button>'+
+ '<button class="overviewcard" data-page-action="orders"><div class="overviewicon order">🛒</div><div class="overviewtext"><small>OFFENE BESTELLUNGEN</small><b>'+openOrders+'</b><span>Bestellungsmenü öffnen</span></div><span class="arrow">→</span></button>'+
+ '<div class="overviewcard static"><div class="overviewicon staff">♟</div><div class="overviewtext"><small>MITARBEITER ONLINE</small><b id="onlineCount">'+(onlineCount||1)+'</b><span>Aktuell im System angemeldet</span></div><span class="live"><i></i> LIVE</span></div>
+ </div>'+
+ '<div class="quickgrid"><button class="quickcard" data-page-action="inventory"><span>📦</span><div><b>Lager</b><small>Bestände verwalten</small></div><span class="arrow">→</span></button>'+
+ '<button class="quickcard" data-page-action="cash"><span>€</span><div><b>Kasse</b><small>Kassenbuch öffnen</small></div><span class="arrow">→</span></button>'+
+ '<button class="quickcard" data-page-action="employees"><span>♟</span><div><b>Mitarbeiter</b><small>Team verwalten</small></div><span class="arrow">→</span></button></div>';
+}
+async function invoices(){return '<div class="placeholder"><div class="placeholdericon">▤</div><div class="eyebrow">RECHNUNGEN</div><h1>Rechnungsmenü</h1><p>Hier werden offene Rechnungen und Zahlungen verwaltet.</p><div class="placeholderstate">Noch keine Rechnungen hinterlegt.</div></div>';}
+async function orders(){return '<div class="placeholder"><div class="placeholdericon">🛒</div><div class="eyebrow">BESTELLUNGEN</div><h1>Bestellungsmenü</h1><p>Hier werden offene Bestellungen und Lieferungen verwaltet.</p><div class="placeholderstate">Noch keine Bestellungen hinterlegt.</div></div>';}
+function startPresence(){
+ if(presenceChannel)return;
+ const channel=supabase.channel("vineyard-online",{config:{presence:{key:profile.user_id}}});
+ const update=()=>{const state=channel.presenceState();onlineCount=Object.keys(state).length;const el=$("#onlineCount");if(el)el.textContent=onlineCount;};
+ channel.on("presence",{event:"sync"},update).on("presence",{event:"join"},update).on("presence",{event:"leave"},update);
+ channel.subscribe(async status=>{if(status==="SUBSCRIBED"){await channel.track({user_id:profile.user_id,name:profile.display_name,online_at:new Date().toISOString()});update();}});
+ presenceChannel=channel;
 }
 async function inventory(){
  const {data:items=[],error}=await supabase.from("vineyard_inventory").select("*").order("category").order("item_name");
@@ -90,9 +103,10 @@ async function audit(){
 }
 function errorBox(t){return '<div class="panel"><b>Fehler</b><p class="muted">'+esc(t)+"</p></div>"}
 
-async function render(){let content=page==="dashboard"?await dashboard():page==="inventory"?await inventory():page==="cash"?await cash():page==="employees"?await employees():await audit();shell(content);bind()}
+async function render(){let content=page==="dashboard"?await dashboard():page==="invoices"?await invoices():page==="orders"?await orders():page==="inventory"?await inventory():page==="cash"?await cash():page==="employees"?await employees():await audit();shell(content);bind()}
 function bind(){
- $$("[data-action]").forEach(b=>b.onclick=()=>action(b.dataset.action));
+ $("[data-action]").forEach(b=>b.onclick=()=>action(b.dataset.action));
+ $("[data-page-action]").forEach(b=>b.onclick=()=>{page=b.dataset.pageAction;render()});
  $("#q")?.addEventListener("input",async e=>{const {data=[]}=await supabase.from("vineyard_inventory").select("*").order("item_name");$("#items").innerHTML=itemCards(data.filter(x=>x.item_name.toLowerCase().includes(e.target.value.toLowerCase())))});
  $$("[data-stock]").forEach(b=>b.onclick=()=>stockModal(b.dataset.stock));
  $$("[data-edit-item]").forEach(b=>b.onclick=()=>itemModal(b.dataset.editItem));
