@@ -38,9 +38,8 @@ async function loadProfile(){
  profile=data;role=data.vineyard_roles;
 }
 function login(message=""){
- document.body.innerHTML='<div class="login"><div class="loginbox"><div class="loginbrand"><div class="brandmark">🍇</div><h1>Donnerfaust Vineyards</h1><p>Interne Betriebsverwaltung</p></div>'+(message?'<div class="error">'+esc(message)+"</div>":"")+
- '<form id="loginform"><label>E-Mail<input id="email" type="email" autocomplete="username" placeholder="deine E-Mail-Adresse" value="" required></label><label>Passwort<input id="password" type="password" autocomplete="current-password" required></label><button class="btn primary">Anmelden</button></form></div></div>';
- $("#loginform").onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;const {error}=await supabase.auth.signInWithPassword({email:$("#email").value.trim(),password:$("#password").value});if(error){b.disabled=false;login(error.message)}else{await loadProfile();if(!profile){await supabase.auth.signOut();login("Dieser Benutzer hat noch kein Vineyards-Profil.");}else{if(profile.must_change_password){forcePasswordChange()}else{render();startPresence()}}};
+ document.body.innerHTML=`<div class="login"><div class="loginbox"><div class="loginbrand"><div class="brandmark">🍇</div><h1>Donnerfaust Vineyards</h1><p>Interne Betriebsverwaltung</p></div>${message?`<div class="error">${esc(message)}</div>`:""}<form id="loginform"><label>E-Mail<input id="email" type="email" autocomplete="username" placeholder="deine E-Mail-Adresse" required></label><label>Passwort<input id="password" type="password" autocomplete="current-password" required></label><button class="btn primary">Anmelden</button></form></div></div>`;
+ $("#loginform").onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;const {error}=await supabase.auth.signInWithPassword({email:$("#email").value.trim(),password:$("#password").value});if(error){b.disabled=false;return login(error.message);}await loadProfile();if(!profile){await supabase.auth.signOut();return login("Dieser Benutzer hat noch kein Vineyards-Profil.");}if(profile.must_change_password)return forcePasswordChange();await render();startPresence();};
 }
 function forcePasswordChange(){
  document.body.innerHTML='<div class="login"><div class="loginbox"><div class="loginbrand"><div class="brandmark">🔐</div><h1>Passwort aktualisieren</h1><p>Bei der ersten Anmeldung musst du das vom Master vergebene Startpasswort ändern.</p></div><div class="error" style="background:#fff0cf;color:#765714">Dein Zugang ist aktiv. Bevor du fortfährst, lege dein persönliches Passwort fest.</div><form id="passwordform"><label>Neues Passwort<input id="newpassword" type="password" autocomplete="new-password" minlength="8" required></label><label>Neues Passwort wiederholen<input id="newpassword2" type="password" autocomplete="new-password" minlength="8" required></label><button class="btn primary">Passwort speichern</button></form></div></div>';
@@ -58,9 +57,9 @@ function forcePasswordChange(){
  };
 }
 function shell(content){
- const nav=NAV.filter(n=>can(n[3])).map(n=>'<button class="nav '+(page===n[0]?"active":"")+'" data-page="'+n[0]+'"><i>'+n[1]+"</i>"+n[2]+"</button>").join("");
- document.body.innerHTML='<aside class="sidebar" id="sidebar"><div class="brand"><div class="brandmark">🍇</div><div><b>Donnerfaust Vineyards</b><small>Interne Verwaltung</small></div></div><nav>"+nav+'</nav><div class="sidefoot"><span class="online"></span>'+esc(profile.display_name)+' · '+esc(role.label)+'<br><button id="logout" class="mini" style="margin-top:9px">Abmelden</button></div></aside><main class="main"><header class="top"><div><button class="hamb" id="hamb">☰</button><span class="crumb">DONNERFAUST VINEYARDS</span><h2>'+esc(pageTitle())+'</h2></div><div class="topright"><span class="online"></span><b>'+esc(profile.display_name)+'</b><span class="avatar">'+esc(initials(profile.display_name))+"</span></div></header><section class="content">"+content+'</section></main><div id="modalroot"></div>';
- $$(".nav").forEach(b=>b.onclick=()=>{page=b.dataset.page;render()});$("#hamb").onclick=()=>$("#sidebar").classList.toggle("open");$("#logout").onclick=()=>supabase.auth.signOut();
+ const nav=NAV.filter(n=>can(n[3])).map(n=>`<button class="nav ${page===n[0]?"active":""}" data-page="${n[0]}"><i>${n[1]}</i>${n[2]}</button>`).join("");
+ document.body.innerHTML=`<aside class="sidebar" id="sidebar"><div class="brand"><div class="brandmark">🍇</div><div><b>Donnerfaust Vineyards</b><small>Interne Verwaltung</small></div></div><nav>${nav}</nav><div class="sidefoot"><span class="online"></span>${esc(profile.display_name)} · ${esc(role.label)}<br><button id="logout" class="mini" style="margin-top:9px">Abmelden</button></div></aside><main class="main"><header class="top"><div><button class="hamb" id="hamb">☰</button><span class="crumb">DONNERFAUST VINEYARDS</span><h2>${esc(pageTitle())}</h2></div><div class="topright"><span class="online"></span><b>${esc(profile.display_name)}</b><span class="avatar">${esc(initials(profile.display_name))}</span></div></header><section class="content">${content}</section></main><div id="modalroot"></div>`;
+ $$(".nav").forEach(b=>b.onclick=()=>{page=b.dataset.page;render();});$("#hamb").onclick=()=>$("#sidebar").classList.toggle("open");$("#logout").onclick=()=>supabase.auth.signOut();
 }
 function pageTitle(){return ({dashboard:"Übersicht",invoices:"Rechnungen",orders:"Bestellungen",inventory:"Lagerübersicht",recipes:"Rezepte",cash:"Kasse",employees:"Mitarbeiter",audit:"Protokoll"})[page]||"Übersicht"}
 function initials(n){return String(n||"DF").split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase()}
@@ -68,16 +67,14 @@ function stat(icon,label,value){return '<div class="stat"><span class="icon">'+i
 function intro(k,h,p,action,label){return '<div class="intro"><div><div class="eyebrow">'+k+"</div><h1>"+h+"</h1><p>"+p+"</p></div>"+(action?'<button class="btn gold" data-action="'+action+'">'+label+"</button>":"")+"</div>"}
 
 async function dashboard(){
- const openInvoices=0, openOrders=0;
- return '<div class="welcome"><div><div class="eyebrow">DONNERFAUST VINEYARDS</div><h1>Willkommen, '+esc(profile.display_name)+'</h1><p>Deine aktuelle Übersicht für den Weinbetrieb.</p></div><div class="welcomegrape">🍇</div></div>'+
- '<div class="overviewgrid">'+
- '<button class="overviewcard" data-page-action="invoices"><div class="overviewicon invoice">▤</div><div class="overviewtext"><small>OFFENE RECHNUNGEN</small><b>'+openInvoices+'</b><span>Rechnungsmenü öffnen</span></div><span class="arrow">→</span></button>'+
- '<button class="overviewcard" data-page-action="orders"><div class="overviewicon order">🛒</div><div class="overviewtext"><small>OFFENE BESTELLUNGEN</small><b>'+openOrders+'</b><span>Bestellungsmenü öffnen</span></div><span class="arrow">→</span></button>'+
- '<div class="overviewcard static"><div class="overviewicon staff">♟</div><div class="overviewtext"><small>MITARBEITER ONLINE</small><b id="onlineCount">'+(onlineCount||1)+'</b><span>Aktuell im System angemeldet</span></div><span class="live"><i></i> LIVE</span></div>'+
- </div>'+
- '<div class="quickgrid"><button class="quickcard" data-page-action="inventory"><span>📦</span><div><b>Lager</b><small>Bestände verwalten</small></div><span class="arrow">→</span></button>'+
- '<button class="quickcard" data-page-action="cash"><span>€</span><div><b>Kasse</b><small>Kassenbuch öffnen</small></div><span class="arrow">→</span></button>'+
- '<button class="quickcard" data-page-action="employees"><span>♟</span><div><b>Mitarbeiter</b><small>Team verwalten</small></div><span class="arrow">→</span></button></div>';
+ const openInvoices=0,openOrders=0;
+ return `<div class="welcome"><div><div class="eyebrow">DONNERFAUST VINEYARDS</div><h1>Willkommen, ${esc(profile.display_name)}</h1><p>Deine aktuelle Übersicht für den Weinbetrieb.</p></div><div class="welcomegrape">🍇</div></div>
+ <div class="overviewgrid"><button class="overviewcard" data-page-action="invoices"><div class="overviewicon invoice">▤</div><div class="overviewtext"><small>OFFENE RECHNUNGEN</small><b>${openInvoices}</b><span>Rechnungsmenü öffnen</span></div><span class="arrow">→</span></button>
+ <button class="overviewcard" data-page-action="orders"><div class="overviewicon order">🛒</div><div class="overviewtext"><small>OFFENE BESTELLUNGEN</small><b>${openOrders}</b><span>Bestellungsmenü öffnen</span></div><span class="arrow">→</span></button>
+ <div class="overviewcard static"><div class="overviewicon staff">♟</div><div class="overviewtext"><small>MITARBEITER ONLINE</small><b id="onlineCount">${onlineCount||1}</b><span>Aktuell im System angemeldet</span></div><span class="live"><i></i> LIVE</span></div></div>
+ <div class="quickgrid"><button class="quickcard" data-page-action="inventory"><span>📦</span><div><b>Lager</b><small>Bestände verwalten</small></div><span class="arrow">→</span></button>
+ <button class="quickcard" data-page-action="cash"><span>€</span><div><b>Kasse</b><small>Kassenbuch öffnen</small></div><span class="arrow">→</span></button>
+ <button class="quickcard" data-page-action="employees"><span>♟</span><div><b>Mitarbeiter</b><small>Team verwalten</small></div><span class="arrow">→</span></button></div>`;
 }
 async function invoices(){return '<div class="placeholder"><div class="placeholdericon">▤</div><div class="eyebrow">RECHNUNGEN</div><h1>Rechnungsmenü</h1><p>Hier werden offene Rechnungen und Zahlungen verwaltet.</p><div class="placeholderstate">Noch keine Rechnungen hinterlegt.</div></div>';}
 async function orders(){return '<div class="placeholder"><div class="placeholdericon">🛒</div><div class="eyebrow">BESTELLUNGEN</div><h1>Bestellungsmenü</h1><p>Hier werden offene Bestellungen und Lieferungen verwaltet.</p><div class="placeholderstate">Noch keine Bestellungen hinterlegt.</div></div>';}
@@ -99,7 +96,15 @@ async function inventory(){
  '<div class="inventorysection"><div class="sectiontitle"><div><div class="eyebrow">KATEGORIE 1</div><h2>Zutaten</h2><p>Grundzutaten und Ressourcen, die für die Weinproduktion benötigt werden.</p></div></div><div class="itemgrid" id="ingredients">'+itemCards(ingredients)+'</div></div>'+
  '<div class="inventorysection"><div class="sectiontitle"><div><div class="eyebrow">KATEGORIE 2</div><h2>Produkte</h2><p>Fertig produzierte Weine und andere verkaufsfertige Produkte.</p></div></div><div class="itemgrid" id="products">'+itemCards(products)+'</div></div>';
 }
-function itemCards(items){return items.map(x=>'<div class="itemcard"><div class="eyebrow">'+esc(x.category)+" · "+esc(x.unit)+'</div><h3>'+esc(x.item_name)+'</h3><div class="qty '+(Number(x.quantity)<=Number(x.min_stock)?"low":"")+'">'+Number(x.quantity).toLocaleString("de-DE")+" "+esc(x.unit)+"</div><small class="muted">Mindestbestand: "+Number(x.min_stock).toLocaleString("de-DE")+" · Einkauf: "+money(x.purchase_price)+" · Verkauf: "+money(x.sale_price)+"</small><div style="margin-top:12px">'+(can("inventory_edit")?'<button class="mini gold" data-stock="'+x.id+'">Bestand ändern</button> '+(x.category==="Produkte"?'<button class="mini gold" data-production="'+x.id+'">+ Produktion</button> ':"")+'<button class="mini" data-edit-item="'+x.id+'">Bearbeiten</button>':"")+"</div></div>").join("")||'<p class="muted">Noch keine Einträge in dieser Kategorie.</p>'}
+function itemCards(items){
+ return items.map(x=>{
+  const low=Number(x.quantity)<=Number(x.min_stock);
+  const production=x.category==="Produkte"&&can("inventory_edit")?`<button class="mini gold" data-production="${x.id}">+ Produktion</button> `:"";
+  const actions=can("inventory_edit")?`<button class="mini gold" data-stock="${x.id}">Bestand ändern</button> ${production}<button class="mini" data-edit-item="${x.id}">Bearbeiten</button>`:"";
+  const price=x.category==="Zutaten"?"Einkaufspreis: "+money(x.purchase_price):"Verkaufspreis: "+money(x.sale_price);
+  return `<div class="itemcard"><div class="eyebrow">${esc(x.category)} · ${esc(x.unit)}</div><h3>${esc(x.item_name)}</h3><div class="qty ${low?"low":""}">${Number(x.quantity).toLocaleString("de-DE")} ${esc(x.unit)}</div><small class="muted">Mindestbestand: ${Number(x.min_stock).toLocaleString("de-DE")} · ${price}</small><div style="margin-top:12px">${actions}</div></div>`;
+ }).join("")||'<p class="muted">Noch keine Einträge in dieser Kategorie.</p>';
+}
 async function recipes(){
  const {data:rows=[],error}=await supabase.from("vineyard_recipes").select("*").order("name");
  if(error)return errorBox(error.message);
