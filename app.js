@@ -20,7 +20,8 @@ const NAV=[
 ["recipes","♜","Rezepte","inventory_view"],
 ["cash","$","Kasse","cash_view"],
 ["employees","♟","Mitarbeiter","employees_view"],
-["audit","◷","Protokoll","audit_view"]
+["audit","◷","Protokoll","audit_view"],
+["admin","⚙","Administration","admin_access"]
 ];
 
 function can(p){return !!role?.permissions?.[p]}
@@ -93,7 +94,7 @@ function shell(content){
  document.body.innerHTML=`<aside class="sidebar" id="sidebar"><div class="brand"><div class="brandmark"><img src="./assets/donnerfaust-vineyards-logo.jpg" alt=""></div><div><b>Donnerfaust Vineyards</b><small>Interne Verwaltung</small></div></div><nav>${nav}</nav><div class="sidefoot"><span class="online"></span>${esc(profile.display_name)} · ${esc(role.label)}<br><button id="logout" class="mini" style="margin-top:9px">Abmelden</button></div></aside><main class="main"><header class="top"><div class="topTitle"><img class="topbrandlogo" src="./assets/donnerfaust-vineyards-logo.jpg" alt="Donnerfaust Vineyards"><div><button class="hamb" id="hamb">☰</button><span class="crumb">DONNERFAUST VINEYARDS</span><h2>${esc(pageTitle())}</h2></div></div><div class="topright"><span class="online"></span><b>${esc(profile.display_name)}</b><span class="avatar">${esc(initials(profile.display_name))}</span></div></header><section class="content">${content}</section></main><div id="modalroot"></div>`;
  $$(".nav").forEach(b=>b.onclick=()=>{page=b.dataset.page;render();});$("#hamb").onclick=()=>$("#sidebar").classList.toggle("open");$("#logout").onclick=()=>supabaseClient.auth.signOut();
 }
-function pageTitle(){return ({dashboard:"Übersicht",invoices:"Rechnungen",orders:"Bestellungen",inventory:"Lagerübersicht",recipes:"Rezepte",cash:"Kasse",employees:"Mitarbeiter",audit:"Protokoll"})[page]||"Übersicht"}
+function pageTitle(){return ({dashboard:"Übersicht",invoices:"Rechnungen",orders:"Bestellungen",inventory:"Lagerübersicht",recipes:"Rezepte",cash:"Kasse",employees:"Mitarbeiter",audit:"Protokoll",admin:"Administration"})[page]||"Übersicht"}
 function initials(n){return String(n||"DF").split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase()}
 function stat(icon,label,value){return '<div class="stat"><span class="icon">'+icon+'</span><div><small>'+label+"</small><b>"+value+"</b></div></div>"}
 function intro(k,h,p,action,label){return '<div class="intro"><div><div class="eyebrow">'+k+"</div><h1>"+h+"</h1><p>"+p+"</p></div>"+(action?'<button type="button" class="btn gold" data-action="'+action+'">'+label+"</button>":"")+"</div>"}
@@ -118,24 +119,25 @@ async function dashboard(){
 }
 
 async function invoices(){
- const {data:rows=[],error}=await supabaseClient.from("vineyard_invoices").select("id,invoice_number,invoice_type,partner_name,status,created_at,created_by,employee_id,commission_rate,commission_amount,vineyard_profiles:employee_id(display_name)").order("created_at",{ascending:false});
+ const {data:rows=[],error}=await supabaseClient.from("vineyard_invoices").select("id,invoice_number,invoice_type,partner_name,status,created_at,created_by,employee_id,commission_rate,commission_amount").order("created_at",{ascending:false});
  if(error)return errorBox(error.message);
+ const {data:employees=[],error:ee}=await supabaseClient.rpc("vineyard_invoice_employees");
+ if(ee)return errorBox(ee.message);
+ const emap=Object.fromEntries((employees||[]).map(x=>[x.user_id,x.display_name]));
+ rows.forEach(x=>x.employee_name=emap[x.employee_id]||"—");
  const open=rows.filter(x=>x.status==="Offen").length;
- const total=rows.reduce((s,x)=>s+1,0);
- return intro("HANDELSNACHWEISE","Rechnungen","Verkauf, Einkauf und Bestellungen als nachvollziehbare Handelsnachweise verwalten.",can("invoice_edit")?"newinvoice":null,can("invoice_edit")?"+ Rechnung erstellen":null)+
- '<div class="stats">'+stat("▤","OFFENE RECHNUNGEN",open)+stat("$","HANDELSVORGÄNGE",total)+stat("↗","VERKAUF",rows.filter(x=>x.invoice_type==="Verkauf").length)+stat("↙","EINKAUF",rows.filter(x=>x.invoice_type==="Einkauf").length)+stat("⚗","PRODUKTION",rows.filter(x=>x.invoice_type==="Produktion").length)+'</div>'+
- '<div class="panel"><div class="tablewrap"><table><thead><tr><th>NUMMER</th><th>ART</th><th>HANDELSPARTNER</th><th>MITARBEITER / PROVISION</th><th>DATUM</th><th>STATUS</th><th></th></tr></thead><tbody>'+
- (rows.map(x=>'<tr><td><b>'+esc(x.invoice_number)+'</b></td><td>'+esc(x.invoice_type)+'</td><td>'+esc(x.partner_name)+'</td><td>'+esc(x.vineyard_profiles?.display_name||"—")+(x.commission_amount>0?'<br><small>'+esc(String(x.commission_rate))+'% · '+money(x.commission_amount)+'</small>':"")+'</td><td>'+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</td><td>'+badge(x.status)+'</td><td><button class="mini gold" data-share-invoice="'+x.id+'">Teilen</button> <button class="mini" data-edit-invoice="'+x.id+'">Bearbeiten</button> <button class="mini" data-delete-invoice="'+x.id+'">Löschen</button></td></tr>').join("")||'<tr><td colspan="7">Noch keine Rechnungen vorhanden.</td></tr>')+
+ const total=rows.length;
+ const commission=rows.reduce((s,x)=>s+Number(x.commission_amount||0),0);
+ return intro("HANDELSNACHWEISE","Rechnungen","Verkauf, Einkauf, Produktion und Bestellungen als nachvollziehbare Handelsnachweise verwalten.",can("invoice_edit")?"newinvoice":null,can("invoice_edit")?"+ Rechnung erstellen":null)+
+ '<div class="stats">'+stat("▤","OFFENE RECHNUNGEN",open)+stat("$","HANDELSVORGÄNGE",total)+stat("↗","VERKAUF",rows.filter(x=>x.invoice_type==="Verkauf").length)+stat("%","PROVISIONEN",money(commission))+'</div>'+
+ '<div class="panel"><div class="tablewrap"><table><thead><tr><th>NUMMER</th><th>ART</th><th>HANDELSPARTNER</th><th>MITARBEITER</th><th>PROVISION</th><th>DATUM</th><th>STATUS</th><th></th></tr></thead><tbody>'+
+ (rows.map(x=>'<tr><td><b>'+esc(x.invoice_number)+'</b></td><td>'+esc(x.invoice_type)+'</td><td>'+esc(x.partner_name)+'</td><td>'+esc(x.employee_name)+'</td><td>'+money(x.commission_amount||0)+' ('+Number(x.commission_rate||0).toLocaleString("de-DE")+'%)</td><td>'+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</td><td>'+badge(x.status)+'</td><td><button class="mini gold" data-share-invoice="'+x.id+'">Teilen</button> <button class="mini" data-edit-invoice="'+x.id+'">Bearbeiten</button> <button class="mini" data-delete-invoice="'+x.id+'">Löschen</button></td></tr>').join("")||'<tr><td colspan="8">Noch keine Rechnungen vorhanden.</td></tr>')+
  '</tbody></table></div></div>';
 }
 async function orders(){return '<div class="placeholder"><div class="placeholdericon">🛒</div><div class="eyebrow">BESTELLUNGEN</div><h1>Bestellungsmenü</h1><p>Hier werden offene Bestellungen und Lieferungen verwaltet.</p><div class="placeholderstate">Noch keine Bestellungen hinterlegt.</div></div>';}
-function startPresence(){
- if(presenceChannel)return;
- const channel=supabaseClient.channel("vineyard-online",{config:{presence:{key:profile.user_id}}});
- const update=()=>{const state=channel.presenceState();onlineCount=Object.keys(state).length;const el=$("#onlineCount");if(el)el.textContent=onlineCount;};
- channel.on("presence",{event:"sync"},update).on("presence",{event:"join"},update).on("presence",{event:"leave"},update);
- channel.subscribe(async status=>{if(status==="SUBSCRIBED"){await channel.track({user_id:profile.user_id,name:profile.display_name,online_at:new Date().toISOString()});update();}});
- presenceChannel=channel;
+async function admin(){
+ if(!role?.permissions?.admin_access)return errorBox("Kein Admin-Zugang.");
+ return '<div class="placeholder"><div class="placeholdericon">⚙</div><div class="eyebrow">ADMINISTRATION</div><h1>Administrationsbereich</h1><p>Dieser Bereich ist ausschließlich für den Eigentümer und den Familienvogt freigeschaltet.</p><div class="placeholderstate">Admin-Zugang aktiv.</div></div>';
 }
 async function inventory(){
  const {data:items=[],error}=await supabaseClient.from("vineyard_inventory").select("*").order("category").order("item_name");
@@ -334,29 +336,58 @@ async function deleteRecipe(id){
  await render();
 }
 async function invoiceModal(id){
- $("#modalroot").innerHTML='<div class="modalback"><div class="modal"><div class="modalhead"><b>Rechnung wird vorbereitet</b></div><p class="muted">Lagerartikel werden geladen…</p></div></div>';
- const [{data:inventory=[],error},{data:existingInvoice},{data:employees=[],error:ee}]=await Promise.all([supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category,purchase_price,sale_price").order("category").order("item_name"),id?supabaseClient.from("vineyard_invoices").select("id,invoice_type,partner_name,status,employee_id,commission_rate,commission_amount").eq("id",id).single():Promise.resolve({data:null}),supabaseClient.rpc("vineyard_invoice_employees")]);
+ $("#modalroot").innerHTML='<div class="modalback"><div class="modal"><div class="modalhead"><b>Rechnung wird vorbereitet</b></div><p class="muted">Lagerartikel und Mitarbeiter werden geladen…</p></div></div>';
+ const [{data:inventory=[],error},{data:existingInvoice},{data:employees=[],error:ee}]=await Promise.all([
+  supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category,purchase_price,sale_price").order("category").order("item_name"),
+  id?supabaseClient.from("vineyard_invoices").select("id,invoice_type,partner_name,status,employee_id,commission_rate,commission_amount").eq("id",id).single():Promise.resolve({data:null}),
+  supabaseClient.rpc("vineyard_invoice_employees")
+ ]);
  if(error)throw error;
+ if(ee)throw ee;
  if(id&&!existingInvoice)throw Error("Rechnung nicht gefunden.");
  if(!inventory.length)throw Error("Lege zuerst Artikel im Lager an. Nur dort hinterlegte Artikel können auf Rechnungen ausgewählt werden.");
- const typeOptions=[{value:"Produktion",label:"⚗️ Produktion"},{value:"Verkauf",label:"🛒 Verkauf"},{value:"Einkauf",label:"📦 Einkauf"},{value:"Bestellung",label:"📋 Bestellung"}];
- let existingItems=[];if(id){const {data:its,error:ie}=await supabaseClient.from("vineyard_invoice_items").select("inventory_id,quantity,unit_price").eq("invoice_id",id).order("created_at");if(ie)throw ie;existingItems=its||[]}const rows=existingItems.length?existingItems.map(x=>({inventory_id:x.inventory_id,quantity:x.quantity,unit_price:x.unit_price})):[{inventory_id:inventory[0].id,quantity:1,unit_price:0}];
+ const typeOptions=[
+  {value:"Produktion",label:"🏭 Produktion · Provision 10%"},
+  {value:"Verkauf",label:"🛒 Verkauf · Provision 20%"},
+  {value:"Einkauf",label:"📦 Einkauf · keine Provision"},
+  {value:"Bestellung",label:"📋 Bestellung/Lieferung · Provision 30%"}
+ ];
+ let existingItems=[];
+ if(id){
+  const {data:its,error:ie}=await supabaseClient.from("vineyard_invoice_items").select("inventory_id,quantity,unit_price").eq("invoice_id",id).order("created_at");
+  if(ie)throw ie;
+  existingItems=its||[];
+ }
+ const rows=existingItems.length?existingItems.map(x=>({inventory_id:x.inventory_id,quantity:x.quantity,unit_price:x.unit_price})):[{inventory_id:inventory[0].id,quantity:1,unit_price:0}];
  const defaultPrice=(item,type)=>type==="Einkauf"?Number(item?.purchase_price||0):Number(item?.sale_price||0);
- $( "#modalroot").innerHTML='<div class="modalback"><div class="modal invoiceModal"><div class="modalhead"><b>'+(id?"Rechnung bearbeiten":"Neue Rechnung")+'</b><button id="x">×</button></div><form id="invoiceform">'+
- selectField("Handelsvorgang","invoice_type",typeOptions,existingInvoice?.invoice_type||"Verkauf")+selectField("Mitarbeiter / Provision","employee_id",[{value:"",label:"Kein Mitarbeiter"}].concat(employees.map(x=>({value:x.user_id,label:x.display_name}))),existingInvoice?.employee_id||"")+selectField("Status","status",[{value:"Offen",label:"Offen"},{value:"Bezahlt",label:"Bezahlt"},{value:"Storniert",label:"Storniert"}],existingInvoice?.status||"Offen")+
+ const defaultEmployee=existingInvoice?.employee_id||profile.user_id;
+ $("#modalroot").innerHTML='<div class="modalback"><div class="modal invoiceModal"><div class="modalhead"><b>'+(id?"Rechnung bearbeiten":"Neue Rechnung")+'</b><button id="x">×</button></div><form id="invoiceform">'+
+ selectField("Handelsvorgang","invoice_type",typeOptions,existingInvoice?.invoice_type||"Verkauf")+
+ selectField("Mitarbeiter / Provision","employee_id",employees.map(x=>({value:x.user_id,label:x.display_name})),defaultEmployee)+
+ selectField("Status","status",[{value:"Offen",label:"Offen"},{value:"Bezahlt",label:"Bezahlt"},{value:"Storniert",label:"Storniert"}],existingInvoice?.status||"Offen")+
  field("Handelspartner","partner_name","text",existingInvoice?.partner_name||"",true)+
  '<div class="recipeformhead"><b>Gehandelte Positionen</b><button type="button" class="mini gold" id="addinvoiceitem">+ Position</button></div><div id="invoiceitemsform"></div>'+
- '<div class="invoiceTotal" id="invoiceTotal"></div>'+
+ '<div class="invoiceTotal" id="invoiceTotal"></div><div class="invoiceCommission" id="invoiceCommission"></div>'+
  '<div class="actions"><button type="button" class="btn outline" id="cancel">Abbrechen</button><button class="btn primary">Rechnung speichern</button></div></form></div></div>';
  const close=()=>$("#modalroot").innerHTML="";
  $("#x").onclick=$("#cancel").onclick=close;
  const typeEl=$("#invoiceform [name=invoice_type]");
+ const employeeEl=$("#invoiceform [name=employee_id]");
+ const statusEl=$("#invoiceform [name=status]");
+ const commissionRate=type=>type==="Produktion"?10:type==="Verkauf"?20:type==="Bestellung"?30:0;
  const draw=()=>{
   $("#invoiceitemsform").innerHTML=rows.map((r,n)=>'<div class="invoiceformrow"><select data-ii="'+n+'" class="invoiceitem">'+inventory.map(x=>'<option value="'+esc(x.id)+'" '+(x.id===r.inventory_id?"selected":"")+'>'+esc(x.item_name)+' · '+esc(x.unit)+'</option>').join("")+'</select><input data-iq="'+n+'" class="invoicequantity" type="number" min="0.0001" step="any" value="'+esc(r.quantity)+'" required><input data-ip="'+n+'" class="invoiceprice" type="number" min="0" step="0.01" value="'+esc(r.unit_price)+'" required><button type="button" class="mini" data-remove-ii="'+n+'">×</button></div>').join("");
   const refresh=()=>{
-   let sum=0;
-   rows.forEach((r,n)=>{const q=Number($("[data-iq='"+n+"']")?.value)||0,p=Number($("[data-ip='"+n+"']")?.value)||0;sum+=q*p;});
-   $("#invoiceTotal").innerHTML="<span>Gesamtsumme</span><b>"+money(sum)+"</b>";
+   let sum=0,base=0;
+   rows.forEach((r,n)=>{
+    const q=Number($("[data-iq='"+n+"']")?.value)||0,p=Number($("[data-ip='"+n+"']")?.value)||0;
+    sum+=q*p;
+    const item=inventory.find(x=>x.id===r.inventory_id);
+    base+=q*Number(item?.sale_price||0);
+   });
+   const rate=commissionRate(typeEl.value),commission=base*rate/100;
+   $("#invoiceTotal").innerHTML="<span>Rechnungssumme</span><b>"+money(sum)+"</b>";
+   $("#invoiceCommission").innerHTML=rate?"<span>Mitarbeiterprovision · "+rate+"%</span><b>"+money(commission)+"</b><small>Berechnet aus dem im Lager hinterlegten Verkaufspreis.</small>":"<span>Keine Mitarbeiterprovision bei Einkauf</span>";
   };
   $$(".invoiceitem").forEach(s=>s.onchange=()=>{const n=Number(s.dataset.ii),item=inventory.find(x=>x.id===s.value);rows[n].inventory_id=s.value;rows[n].unit_price=defaultPrice(item,typeEl.value);$("[data-ip='"+n+"']").value=rows[n].unit_price.toFixed(2);refresh()});
   $$(".invoicequantity").forEach(i=>i.oninput=refresh);
@@ -364,7 +395,6 @@ async function invoiceModal(id){
   $$(".invoicequantity").forEach(i=>i.onchange=()=>rows[Number(i.dataset.iq)].quantity=Number(i.value));
   $$(".invoiceprice").forEach(i=>i.onchange=()=>rows[Number(i.dataset.ip)].unit_price=Number(i.value));
   $$(".invoiceitem").forEach(s=>{const n=Number(s.dataset.ii);if(!rows[n].unit_price){const item=inventory.find(x=>x.id===s.value);rows[n].unit_price=defaultPrice(item,typeEl.value);$("[data-ip='"+n+"']").value=rows[n].unit_price.toFixed(2)}});
-  $$(".invoiceitem").forEach(s=>s.oninput=refresh);
   $$(".invoiceformrow [data-remove-ii]").forEach(b=>b.onclick=()=>{rows.splice(Number(b.dataset.removeIi),1);if(!rows.length)rows.push({inventory_id:inventory[0].id,quantity:1,unit_price:defaultPrice(inventory[0],typeEl.value)});draw()});
   refresh();
  };
@@ -376,7 +406,10 @@ async function invoiceModal(id){
   try{
    rows.forEach((r,n)=>{r.quantity=Number($("[data-iq='"+n+"']").value);r.unit_price=Number($("[data-ip='"+n+"']").value)});
    if(!rows.length||rows.some(r=>!r.inventory_id||!Number.isFinite(r.quantity)||r.quantity<=0||!Number.isFinite(r.unit_price)||r.unit_price<0))throw Error("Bitte Positionen, Mengen und Preise prüfen.");
-   const partner=e.target.partner_name.value.trim();if(!partner)throw Error("Bitte einen Handelspartner angeben.");
+   const partner=e.target.partner_name.value.trim();
+   if(!partner)throw Error("Bitte einen Handelspartner angeben.");
+   const rate=commissionRate(typeEl.value);
+   if(rate&&!employeeEl.value)throw Error("Für Produktion, Verkauf und Bestellung/Lieferung muss ein Mitarbeiter ausgewählt werden.");
    const r=await supabaseClient.rpc("vineyard_save_invoice",{p_invoice_id:id||null,p_type:typeEl.value,p_partner_name:partner,p_status:statusEl.value,p_employee_id:employeeEl.value||null,p_items:rows});
    if(r.error)throw r.error;
    close();await render();
@@ -412,7 +445,7 @@ async function publicInvoice(token){
  if(error||!invoice)return document.body.innerHTML='<div class="publicInvoice"><div class="publicInvoiceBox"><div class="brandmark"><img src="./assets/donnerfaust-vineyards-logo.jpg" alt="Donnerfaust Vineyards"></div><h1>Rechnung nicht verfügbar</h1><p>Der Link ist ungültig oder die Rechnung wurde storniert.</p></div></div>';
  const items=Array.isArray(data.items)?data.items:[];
  const total=items.reduce((s,x)=>s+Number(x.line_total||0),0);
- document.body.innerHTML='<main class="publicInvoice"><div class="publicInvoiceBox"><div class="publicHead"><div><div class="eyebrow">DONNERFAUST VINEYARDS</div><h1>Rechnung</h1><p>Schreibgeschützter Handelsnachweis</p></div><div class="publicNumber">'+esc(invoice.invoice_number)+'</div></div><div class="publicMeta"><div><small>VORGANG</small><b>'+esc(invoice.invoice_type)+'</b></div><div><small>HANDELSPARTNER</small><b>'+esc(invoice.partner_name)+'</b></div><div><small>DATUM</small><b>'+esc(new Date(invoice.created_at).toLocaleString("de-DE"))+'</b></div><div><small>STATUS</small><b>'+esc(invoice.status)+'</b></div></div><div class="publicTable"><table><thead><tr><th>Artikel</th><th>Menge</th><th>Einzelpreis</th><th>Gesamt</th></tr></thead><tbody>'+items.map(x=>'<tr><td>'+esc(x.item_name)+'</td><td>'+Number(x.quantity).toLocaleString("de-DE")+' '+esc(x.unit)+'</td><td>'+money(x.unit_price)+'</td><td>'+money(x.line_total)+'</td></tr>').join("")+'</tbody></table></div><div class="publicTotal"><span>Gesamtsumme</span><b>'+money(total)+'</b></div><p class="publicReadonly">Diese Ansicht ist schreibgeschützt. Es besteht kein Zugriff auf die interne Vineyard-Verwaltung.</p></div></main>';
+ document.body.innerHTML='<main class="publicInvoice"><div class="publicInvoiceBox"><div class="publicHead"><div><div class="eyebrow">DONNERFAUST VINEYARDS</div><h1>Rechnung</h1><p>Schreibgeschützter Handelsnachweis</p></div><div class="publicNumber">'+esc(invoice.invoice_number)+'</div></div><div class="publicMeta"><div><small>VORGANG</small><b>'+esc(invoice.invoice_type)+'</b></div><div><small>HANDELSPARTNER</small><b>'+esc(invoice.partner_name)+'</b></div><div><small>DATUM</small><b>'+esc(new Date(invoice.created_at).toLocaleString("de-DE"))+'</b></div><div><small>STATUS</small><b>'+esc(invoice.status)+'</b></div><div><small>MITARBEITER</small><b>'+esc(invoice.employee_name||"—")+'</b></div></div><div class="publicTable"><table><thead><tr><th>Artikel</th><th>Menge</th><th>Einzelpreis</th><th>Gesamt</th></tr></thead><tbody>'+items.map(x=>'<tr><td>'+esc(x.item_name)+'</td><td>'+Number(x.quantity).toLocaleString("de-DE")+' '+esc(x.unit)+'</td><td>'+money(x.unit_price)+'</td><td>'+money(x.line_total)+'</td></tr>').join("")+'</tbody></table></div><div class="publicTotal"><span>Gesamtsumme</span><b>'+money(total)+'</b></div><p class="publicReadonly">Diese Ansicht ist schreibgeschützt. Es besteht kein Zugriff auf die interne Vineyard-Verwaltung.</p></div></main>';
 }
 async function stockModal(id){
  const {data:item}=await supabaseClient.from("vineyard_inventory").select("*").eq("id",id).single();
