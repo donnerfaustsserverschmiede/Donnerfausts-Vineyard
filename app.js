@@ -205,7 +205,7 @@ function errorBox(t){return '<div class="panel"><b>Fehler</b><p class="muted">'+
 
 async function render(){let content=page==="dashboard"?await dashboard():page==="invoices"?await invoices():page==="orders"?await orders():page==="inventory"?await inventory():page==="recipes"?await recipes():page==="cash"?await cash():page==="employees"?await employees():await audit();shell(content);bind()}
 function bind(){
- $("[data-action]").forEach(b=>b.onclick=()=>action(b.dataset.action));
+ $("[data-action]").forEach(b=>b.onclick=async()=>{try{await action(b.dataset.action)}catch(err){console.error("Donnerfaust Vineyards Aktion:",err);alert(err?.message||String(err))}});
  $("[data-page-action]").forEach(b=>b.onclick=()=>{page=b.dataset.pageAction;render()});
  $("#q")?.addEventListener("input",async e=>{const {data=[]}=await supabaseClient.from("vineyard_inventory").select("*").order("category").order("item_name");const q=e.target.value.toLowerCase();$("#ingredients").innerHTML=itemCards(data.filter(x=>x.category==="Zutaten"&&x.item_name.toLowerCase().includes(q)));$("#products").innerHTML=itemCards(data.filter(x=>x.category==="Produkte"&&x.item_name.toLowerCase().includes(q)))});
  $$("[data-stock]").forEach(b=>b.onclick=()=>stockModal(b.dataset.stock));
@@ -216,7 +216,14 @@ function bind(){
  $("[data-edit-employee]").forEach(b=>b.onclick=()=>employeeModal(b.dataset.editEmployee));
  $("[data-share-invoice]").forEach(b=>b.onclick=()=>shareInvoice(b.dataset.shareInvoice));
 }
-function action(a){if(a==="openinventory"){page="inventory";render()}if(a==="newitem")itemModal();if(a==="newrecipe")recipeModal();if(a==="newcash")cashModal();if(a==="newemployee")employeeModal();if(a==="newinvoice")invoiceModal()}
+async function action(a){
+ if(a==="openinventory"){page="inventory";await render();return}
+ if(a==="newitem"){await itemModal();return}
+ if(a==="newrecipe"){await recipeModal();return}
+ if(a==="newcash"){await cashModal();return}
+ if(a==="newemployee"){await employeeModal();return}
+ if(a==="newinvoice"){await invoiceModal();return}
+}
 
 function modal(title,body,onSubmit){
  $("#modalroot").innerHTML='<div class="modalback"><div class="modal"><div class="modalhead"><b>'+title+'</b><button id="x">×</button></div><form id="mf">'+body+'<div class="actions"><button type="button" class="btn outline" id="cancel">Abbrechen</button><button class="btn primary">Speichern</button></div></form></div></div>';
