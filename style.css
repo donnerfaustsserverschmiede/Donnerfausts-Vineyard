@@ -30,3 +30,9 @@ nav{padding:12px;overflow:auto}.nav{width:100%;padding:11px 12px;margin:2px 0;bo
 .placeholder{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:36px;min-height:360px}.placeholdericon{font-size:34px;margin-bottom:14px}.placeholder h1{font:700 30px Georgia,serif;margin:6px 0}.placeholder p{color:var(--muted)}.placeholderstate{margin-top:25px;border:1px dashed var(--line);border-radius:10px;padding:18px;color:var(--muted)}
 @media(max-width:950px){.overviewgrid,.quickgrid{grid-template-columns:1fr 1fr}.welcomegrape{font-size:55px}}
 @media(max-width:600px){.overviewgrid,.quickgrid{grid-template-columns:1fr}.welcome{padding:22px}.welcome h1{font-size:24px}.welcomegrape{font-size:45px}}
+
+/* Lagerverzeichnis */
+.inventoryhint{font-size:11px;color:var(--muted);margin-top:-2px}.inventoryhint b{color:var(--navy)}
+.inventorysection{margin-bottom:24px}.sectiontitle{display:flex;justify-content:space-between;align-items:end;margin:4px 0 12px}.sectiontitle h2{font:700 22px Georgia,serif;margin:4px 0}.sectiontitle p{margin:0;color:var(--muted);font-size:11px}
+.inventorysection .itemgrid{margin-top:8px}.itemcard .eyebrow{font-size:9px}
+@media(max-width:600px){.sectiontitle{align-items:flex-start;flex-direction:column}.sectiontitle h2{font-size:20px}}
