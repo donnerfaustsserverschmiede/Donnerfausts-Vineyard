@@ -179,6 +179,7 @@ async function recipeModal(id){
  ]);
  const recipe=recipeResult.data, existing=itemsResult.data||[];
  if(id&&!recipe)throw Error("Rezept nicht gefunden.");
+ if(!ingredients.length)throw Error("Lege zuerst mindestens eine Zutat im Lager an. Nur Lagerartikel der Kategorie Zutaten können in Rezepten verwendet werden.");
  if(!products.length)throw Error("Lege zuerst mindestens ein Produkt im Lager an. Nur Lagerartikel der Kategorie Produkte können Rezept-Ergebnisse sein.");
  const rows=existing.length?existing.map(x=>({inventory_id:x.inventory_id,quantity:x.quantity})):([{inventory_id:ingredients[0]?.id||"",quantity:1}]);
  $("#modalroot").innerHTML='<div class="modalback"><div class="modal recipeModal"><div class="modalhead"><b>'+(id?"Rezept bearbeiten":"Neues Rezept")+'</b><button id="x">×</button></div><form id="recipeform">'+
