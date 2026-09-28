@@ -1,6 +1,6 @@
-# Donnerfausts Vineyard
+# Donnerfaust Barrelworks
 
-Verwaltungs- und Handelssystem für Donnerfausts Vineyard.
+Verwaltungs- und Handelssystem für Donnerfaust Barrelworks.
 
 ## Bereiche
 - Dashboard
