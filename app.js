@@ -54,7 +54,7 @@ async function dashboard(){
  ]);
  const balance=(cash||[]).reduce((s,x)=>s+(x.kind==="in"?1:-1)*Number(x.amount||0),0);
  const low=(inv||[]).filter(x=>Number(x.quantity)<=Number(x.min_stock));
- return intro("WEINGUT","Willkommen bei Donnerfaust Vineyards","Zentrale Übersicht für Lager, Kasse und Team.","inventory","Lager öffnen")+
+ return intro("WEINGUT","Willkommen bei Donnerfaust Vineyards","Zentrale Übersicht für Lager, Kasse und Team.","openinventory","Lager öffnen")+
  '<div class="stats">'+stat("🍇","LAGERARTIKEL",inv.length)+stat("⚠","NIEDRIGER BESTAND",low.length)+stat("€","KASSENSTAND",can("cash_view")?money(balance):"—")+stat("♟","MITARBEITER",can("employees_view")?emps.length:"—")+"</div>"+
  '<div class="grid2"><div class="panel"><div class="panelhead"><b>Bestandswarnungen</b></div>'+(low.map(x=>'<div class="row"><span>⚠️</span><div class="rowgrow"><b>'+esc(x.item_name)+"</b><small>"+x.quantity+" "+esc(x.unit)+" · Mindestbestand "+x.min_stock+"</small></div>"+badge("Niedrig")+"</div>").join("")||'<p class="muted">Alle Bestände sind im grünen Bereich.</p>')+
  '</div><div class="panel"><div class="panelhead"><b>Letzte Kassenbewegungen</b></div>'+(can("cash_view")?cash.slice(0,6).map(x=>'<div class="row"><span>'+ (x.kind==="in"?"💰":"💸")+'</span><div class="rowgrow"><b>'+money(x.amount)+"</b><small>"+esc(x.description)+" · "+esc(x.category)+"</small></div>"+badge(x.kind==="in"?"OK":"Ausgabe")+"</div>").join(""):'<p class="muted">Keine Berechtigung für die Kasse.</p>')+"</div></div>";
@@ -98,7 +98,7 @@ function bind(){
  $$("[data-edit-item]").forEach(b=>b.onclick=()=>itemModal(b.dataset.editItem));
  $$("[data-edit-employee]").forEach(b=>b.onclick=()=>employeeModal(b.dataset.editEmployee));
 }
-function action(a){if(a==="newitem")itemModal();if(a==="newcash")cashModal();if(a==="newemployee")employeeModal()}
+function action(a){if(a==="openinventory"){page="inventory";render()}if(a==="newitem")itemModal();if(a==="newcash")cashModal();if(a==="newemployee")employeeModal()}
 
 function modal(title,body,onSubmit){
  $("#modalroot").innerHTML='<div class="modalback"><div class="modal"><div class="modalhead"><b>'+title+'</b><button id="x">×</button></div><form id="mf">'+body+'<div class="actions"><button type="button" class="btn outline" id="cancel">Abbrechen</button><button class="btn primary">Speichern</button></div></form></div></div>';
@@ -126,10 +126,10 @@ async function cashModal(){
 async function employeeModal(id){
  const [{data:e},{data:roles}]=await Promise.all([supabase.from("vineyard_profiles").select("*").eq("user_id",id||"00000000-0000-0000-0000-000000000000").maybeSingle(),supabase.from("vineyard_roles").select("key,label").order("key")]);
  if(id){
-  modal("Mitarbeiter verwalten",field("Name","display_name","text",e?.display_name||"",true)+selectField("Rolle","role_key",roles,e?.role_key||"mitarbeiter")+field("Telefon","phone","text",e?.phone||"")+selectField("Status","active",[{value:"true",label:"Aktiv"},{value:"false",label:"Deaktiviert"}],String(e?.active!==false)),
+  modal("Mitarbeiter verwalten",field("Name","display_name","text",e?.display_name||"",true)+selectField("Rolle","role_key",roles.map(r=>({value:r.key,label:r.label})),e?.role_key||"mitarbeiter")+field("Telefon","phone","text",e?.phone||"")+selectField("Status","active",[{value:"true",label:"Aktiv"},{value:"false",label:"Deaktiviert"}],String(e?.active!==false)),
   async v=>{const r=await supabase.functions.invoke("vineyard-admin-users",{body:{action:"update",user_id:id,display_name:v.display_name,role_key:v.role_key,phone:v.phone,active:v.active==="true"}});if(r.error)throw r.error;await auditLog("Mitarbeiter geändert","employee",id,{role_key:v.role_key,active:v.active==="true"})})
  }else{
-  modal("Neuen Mitarbeiter anlegen",field("Name","display_name","text","",true)+field("E-Mail","email","email","",true)+field("Startpasswort","password","password","",true)+selectField("Rolle","role_key",roles,"mitarbeiter")+field("Telefon","phone"),
+  modal("Neuen Mitarbeiter anlegen",field("Name","display_name","text","",true)+field("E-Mail","email","email","",true)+field("Startpasswort","password","password","",true)+selectField("Rolle","role_key",roles.map(r=>({value:r.key,label:r.label})),"mitarbeiter")+field("Telefon","phone"),
   async v=>{if(v.password.length<8)throw Error("Das Startpasswort muss mindestens 8 Zeichen haben.");const r=await supabase.functions.invoke("vineyard-admin-users",{body:{action:"create",display_name:v.display_name,email:v.email,password:v.password,role_key:v.role_key,phone:v.phone}});if(r.error)throw r.error;if(r.data?.error)throw Error(r.data.error);await auditLog("Mitarbeiter angelegt","employee",r.data.user_id,{email:v.email,role_key:v.role_key})})
  }
 }
