@@ -1,6 +1,9 @@
-window.__vineyardAppStarted=true;
 const SUPABASE_URL="https://qsyijgvikxmwmhaiulne.supabase.co";
 const SUPABASE_KEY="sb_publishable_5qeUg0c0T0IyLh8g0cUj6Q_ZJYgZYJ_";
+if(!window.supabase||typeof window.supabase.createClient!=="function"){
+ document.body.innerHTML='<div class="loading"><b>Donnerfaust Vineyards konnte nicht geladen werden.</b><br><small>Die Supabase-Bibliothek ist nicht verfügbar. Bitte Seite neu laden.</small></div>';
+ throw new Error("Supabase-Bibliothek konnte nicht geladen werden.");
+}
 const supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
@@ -93,7 +96,7 @@ function shell(content){
 function pageTitle(){return ({dashboard:"Übersicht",invoices:"Rechnungen",orders:"Bestellungen",inventory:"Lagerübersicht",recipes:"Rezepte",cash:"Kasse",employees:"Mitarbeiter",audit:"Protokoll"})[page]||"Übersicht"}
 function initials(n){return String(n||"DF").split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase()}
 function stat(icon,label,value){return '<div class="stat"><span class="icon">'+icon+'</span><div><small>'+label+"</small><b>"+value+"</b></div></div>"}
-function intro(k,h,p,action,label){<div><div class="eyebrow">'+k+"</div><h1>"+h+"</h1><p>"+p+"</p></div>"+(action?'<button type="button" class="btn gold" data-action="'+action+'">'+label+"</button>":"")+"</div>"}
+function intro(k,h,p,action,label){return '<div class="intro"><div><div class="eyebrow">'+k+"</div><h1>"+h+"</h1><p>"+p+"</p></div>"+(action?'<button type="button" class="btn gold" data-action="'+action+'">'+label+"</button>":"")+"</div>"}
 
 async function dashboard(){
  const openInvoices=0,openOrders=0;
@@ -406,11 +409,8 @@ async function employeeModal(id){
  }
 }
 async function auditLog(action,entity,entityId,details){const user=(await supabaseClient.auth.getUser()).data.user;await supabaseClient.from("vineyard_audit_log").insert({actor_id:user.id,action,entity,entity_id:entityId?String(entityId):null,details:details||{}})}
-window.__vineyardBooted=false;
 function showBootError(err){
  console.error("Donnerfaust Vineyards Startfehler:",err);
  document.body.innerHTML='<div class="login"><div class="loginbox"><div class="loginbrand"><div class="brandmark">🍇</div><h1>Donnerfaust Vineyards</h1><p>Die Anwendung konnte nicht gestartet werden.</p></div><div class="error">Technischer Fehler beim Start.<br><small>'+esc(err?.message||String(err))+'</small></div><button class="btn primary" onclick="location.reload()">Erneut versuchen</button></div></div>';
 }
-window.addEventListener("error",e=>{if(!window.__vineyardBooted&&e.error)showBootError(e.error)});
-window.addEventListener("unhandledrejection",e=>{if(!window.__vineyardBooted)showBootError(e.reason||Error("Unbekannter Startfehler"))});
-init().then(()=>{window.__vineyardBooted=true;window.__vineyardAppFinished=true}).catch(err=>{window.__vineyardAppFinished=true;showBootError(err)});
+init().catch(showBootError);
