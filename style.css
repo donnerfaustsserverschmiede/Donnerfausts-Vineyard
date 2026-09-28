@@ -36,3 +36,12 @@ nav{padding:12px;overflow:auto}.nav{width:100%;padding:11px 12px;margin:2px 0;bo
 .inventorysection{margin-bottom:24px}.sectiontitle{display:flex;justify-content:space-between;align-items:end;margin:4px 0 12px}.sectiontitle h2{font:700 22px Georgia,serif;margin:4px 0}.sectiontitle p{margin:0;color:var(--muted);font-size:11px}
 .inventorysection .itemgrid{margin-top:8px}.itemcard .eyebrow{font-size:9px}
 @media(max-width:600px){.sectiontitle{align-items:flex-start;flex-direction:column}.sectiontitle h2{font-size:20px}}
+
+/* Rezepte */
+.recipehint{background:#f8efd9;border:1px solid #ead9ad;border-radius:11px;padding:13px 15px;font-size:11px;color:#765714;margin-bottom:18px}
+.recipegrid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+.recipecard{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:18px}
+.recipecard h3{font:700 21px Georgia,serif;margin:5px 0}.recipecard p{margin:0 0 14px}
+.recipeoutput{border:1px solid #ead9ad;background:#fff8e8;border-radius:10px;padding:12px;margin-bottom:14px}.recipeoutput span,.recipeingredients>small{display:block;font-size:9px;letter-spacing:.12em;color:var(--gold);font-weight:900}.recipeoutput b,.recipeoutput small{display:block;margin-top:3px}.recipeingredients>div{display:flex;justify-content:space-between;border-top:1px solid var(--line);padding:8px 0;font-size:11px}.recipeactions{margin-top:10px}
+.recipeformhead{display:flex;justify-content:space-between;align-items:center;margin-top:15px;margin-bottom:8px}.recipeformrow{display:grid;grid-template-columns:1fr 130px 36px;gap:7px;margin-bottom:7px}.recipeformrow select,.recipeformrow input{width:100%;padding:9px;border:1px solid #d9d1c3;border-radius:8px;background:#fffdf9}
+@media(max-width:800px){.recipegrid{grid-template-columns:1fr}}@media(max-width:600px){.recipeformrow{grid-template-columns:1fr 105px 36px}}
