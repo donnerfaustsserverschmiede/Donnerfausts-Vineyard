@@ -88,12 +88,12 @@ function forcePasswordChange(){
 function shell(content){
  const nav=NAV.filter(n=>can(n[3])).map(n=>`<button class="nav ${page===n[0]?"active":""}" data-page="${n[0]}"><i>${n[1]}</i>${n[2]}</button>`).join("");
  document.body.innerHTML=`<aside class="sidebar" id="sidebar"><div class="brand"><div class="brandmark">🍇</div><div><b>Donnerfaust Vineyards</b><small>Interne Verwaltung</small></div></div><nav>${nav}</nav><div class="sidefoot"><span class="online"></span>${esc(profile.display_name)} · ${esc(role.label)}<br><button id="logout" class="mini" style="margin-top:9px">Abmelden</button></div></aside><main class="main"><header class="top"><div><button class="hamb" id="hamb">☰</button><span class="crumb">DONNERFAUST VINEYARDS</span><h2>${esc(pageTitle())}</h2></div><div class="topright"><span class="online"></span><b>${esc(profile.display_name)}</b><span class="avatar">${esc(initials(profile.display_name))}</span></div></header><section class="content">${content}</section></main><div id="modalroot"></div>`;
- $$(".nav").forEach(b=>b.onclick=()=>{page=b.dataset.page;render();});$("#hamb").onclick=()=>$("#sidebar").classList.toggle("open");$("#logout").onclick=()=>supabaseClient.auth.signOut();
+ $$$(".nav").forEach(b=>b.onclick=()=>{page=b.dataset.page;render();});$("#hamb").onclick=()=>$("#sidebar").classList.toggle("open");$("#logout").onclick=()=>supabaseClient.auth.signOut();
 }
 function pageTitle(){return ({dashboard:"Übersicht",invoices:"Rechnungen",orders:"Bestellungen",inventory:"Lagerübersicht",recipes:"Rezepte",cash:"Kasse",employees:"Mitarbeiter",audit:"Protokoll"})[page]||"Übersicht"}
 function initials(n){return String(n||"DF").split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase()}
 function stat(icon,label,value){return '<div class="stat"><span class="icon">'+icon+'</span><div><small>'+label+"</small><b>"+value+"</b></div></div>"}
-function intro(k,h,p,action,label){return '<div class="intro"><div><div class="eyebrow">'+k+"</div><h1>"+h+"</h1><p>"+p+"</p></div>"+(action?'<button type="button" class="btn gold" data-action="'+action+'">'+label+"</button>":"")+"</div>"}
+function intro(k,h,p,action,label){<div><div class="eyebrow">'+k+"</div><h1>"+h+"</h1><p>"+p+"</p></div>"+(action?'<button type="button" class="btn gold" data-action="'+action+'">'+label+"</button>":"")+"</div>"}
 
 async function dashboard(){
  const openInvoices=0,openOrders=0;
@@ -205,16 +205,16 @@ function errorBox(t){return '<div class="panel"><b>Fehler</b><p class="muted">'+
 
 async function render(){let content=page==="dashboard"?await dashboard():page==="invoices"?await invoices():page==="orders"?await orders():page==="inventory"?await inventory():page==="recipes"?await recipes():page==="cash"?await cash():page==="employees"?await employees():await audit();shell(content);bind()}
 function bind(){
- $("[data-action]").forEach(b=>b.onclick=async e=>{e.preventDefault();e.stopPropagation();b.disabled=true;try{await action(b.dataset.action)}catch(err){console.error("Donnerfaust Vineyards Aktion:",err);alert(err?.message||String(err))}finally{b.disabled=false}});
- $("[data-page-action]").forEach(b=>b.onclick=()=>{page=b.dataset.pageAction;render()});
+ $$("[data-action]").forEach(b=>b.onclick=async e=>{e.preventDefault();e.stopPropagation();b.disabled=true;try{await action(b.dataset.action)}catch(err){console.error("Donnerfaust Vineyards Aktion:",err);alert(err?.message||String(err))}finally{b.disabled=false}});
+ $$("[data-page-action]").forEach(b=>b.onclick=()=>{page=b.dataset.pageAction;render()});
  $("#q")?.addEventListener("input",async e=>{const {data=[]}=await supabaseClient.from("vineyard_inventory").select("*").order("category").order("item_name");const q=e.target.value.toLowerCase();$("#ingredients").innerHTML=itemCards(data.filter(x=>x.category==="Zutaten"&&x.item_name.toLowerCase().includes(q)));$("#products").innerHTML=itemCards(data.filter(x=>x.category==="Produkte"&&x.item_name.toLowerCase().includes(q)))});
- $$("[data-stock]").forEach(b=>b.onclick=()=>stockModal(b.dataset.stock));
- $$("[data-production]").forEach(b=>b.onclick=()=>productionModal(b.dataset.production));
- $("[data-edit-item]").forEach(b=>b.onclick=()=>itemModal(b.dataset.editItem));
- $("[data-edit-recipe]").forEach(b=>b.onclick=()=>recipeModal(b.dataset.editRecipe));
- $("[data-delete-recipe]").forEach(b=>b.onclick=()=>deleteRecipe(b.dataset.deleteRecipe));
- $("[data-edit-employee]").forEach(b=>b.onclick=()=>employeeModal(b.dataset.editEmployee));
- $("[data-share-invoice]").forEach(b=>b.onclick=()=>shareInvoice(b.dataset.shareInvoice));
+ $$$("[data-stock]").forEach(b=>b.onclick=()=>stockModal(b.dataset.stock));
+ $$$("[data-production]").forEach(b=>b.onclick=()=>productionModal(b.dataset.production));
+ $$("[data-edit-item]").forEach(b=>b.onclick=()=>itemModal(b.dataset.editItem));
+ $$("[data-edit-recipe]").forEach(b=>b.onclick=()=>recipeModal(b.dataset.editRecipe));
+ $$("[data-delete-recipe]").forEach(b=>b.onclick=()=>deleteRecipe(b.dataset.deleteRecipe));
+ $$("[data-edit-employee]").forEach(b=>b.onclick=()=>employeeModal(b.dataset.editEmployee));
+ $$("[data-share-invoice]").forEach(b=>b.onclick=()=>shareInvoice(b.dataset.shareInvoice));
 }
 async function action(a){
  if(a==="openinventory"){page="inventory";await render();return}
@@ -294,7 +294,7 @@ async function recipeModal(id){
  '<div class="recipeformhead"><b>Zutaten</b><button type="button" class="mini gold" id="addingredient">+ Zutat</button></div><div id="recipeitemsform"></div>'+
  '<div class="actions"><button type="button" class="btn outline" id="cancel">Abbrechen</button><button class="btn primary">Rezept speichern</button></div></form></div></div>';
  const close=()=>$("#modalroot").innerHTML="";$("#x").onclick=$("#cancel").onclick=close;
- const draw=()=>{$("#recipeitemsform").innerHTML=rows.map((r,n)=>'<div class="recipeformrow"><select data-ri="'+n+'" class="recipeingredient">'+ingredients.map(x=>'<option value="'+esc(x.id)+'" '+(x.id===r.inventory_id?"selected":"")+'>'+esc(x.item_name)+' · '+esc(x.unit)+'</option>').join("")+'</select><input data-rq="'+n+'" class="recipequantity" type="number" min="0.0001" step="any" value="'+esc(r.quantity)+'" required><button type="button" class="mini" data-remove-ri="'+n+'">×</button></div>').join("")||'<p class="muted">Noch keine Zutaten. Füge mindestens eine hinzu.</p>';$("[data-remove-ri]").forEach(b=>b.onclick=()=>{rows.splice(Number(b.dataset.removeRi),1);draw()});};
+ const draw=()=>{$("#recipeitemsform").innerHTML=rows.map((r,n)=>'<div class="recipeformrow"><select data-ri="'+n+'" class="recipeingredient">'+ingredients.map(x=>'<option value="'+esc(x.id)+'" '+(x.id===r.inventory_id?"selected":"")+'>'+esc(x.item_name)+' · '+esc(x.unit)+'</option>').join("")+'</select><input data-rq="'+n+'" class="recipequantity" type="number" min="0.0001" step="any" value="'+esc(r.quantity)+'" required><button type="button" class="mini" data-remove-ri="'+n+'">×</button></div>').join("")||'<p class="muted">Noch keine Zutaten. Füge mindestens eine hinzu.</p>';$$("[data-remove-ri]").forEach(b=>b.onclick=()=>{rows.splice(Number(b.dataset.removeRi),1);draw()});};
  $("#addingredient").onclick=()=>{rows.push({inventory_id:ingredients[0]?.id||"",quantity:1});draw()};draw();
  $("#recipeform").onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{
    const name=e.target.name.value.trim(),description=e.target.description.value.trim(),output_inventory_id=e.target.output_inventory_id.value,output_quantity=Number(e.target.output_quantity.value);
@@ -337,14 +337,14 @@ async function invoiceModal(){
    rows.forEach((r,n)=>{const q=Number($("[data-iq='"+n+"']")?.value)||0,p=Number($("[data-ip='"+n+"']")?.value)||0;sum+=q*p;});
    $("#invoiceTotal").innerHTML="<span>Gesamtsumme</span><b>"+money(sum)+"</b>";
   };
-  $(".invoiceitem").forEach(s=>s.onchange=()=>{const n=Number(s.dataset.ii),item=inventory.find(x=>x.id===s.value);rows[n].inventory_id=s.value;rows[n].unit_price=defaultPrice(item,typeEl.value);$("[data-ip='"+n+"']").value=rows[n].unit_price.toFixed(2);refresh()});
-  $(".invoicequantity").forEach(i=>i.oninput=refresh);
-  $(".invoiceprice").forEach(i=>i.oninput=refresh);
-  $(".invoicequantity").forEach(i=>i.onchange=()=>rows[Number(i.dataset.iq)].quantity=Number(i.value));
-  $(".invoiceprice").forEach(i=>i.onchange=()=>rows[Number(i.dataset.ip)].unit_price=Number(i.value));
-  $(".invoiceitem").forEach(s=>{const n=Number(s.dataset.ii);if(!rows[n].unit_price){const item=inventory.find(x=>x.id===s.value);rows[n].unit_price=defaultPrice(item,typeEl.value);$("[data-ip='"+n+"']").value=rows[n].unit_price.toFixed(2)}});
-  $(".invoiceitem").forEach(s=>s.oninput=refresh);
-  $(".invoiceformrow [data-remove-ii]").forEach(b=>b.onclick=()=>{rows.splice(Number(b.dataset.removeIi),1);if(!rows.length)rows.push({inventory_id:inventory[0].id,quantity:1,unit_price:defaultPrice(inventory[0],typeEl.value)});draw()});
+  $$(".invoiceitem").forEach(s=>s.onchange=()=>{const n=Number(s.dataset.ii),item=inventory.find(x=>x.id===s.value);rows[n].inventory_id=s.value;rows[n].unit_price=defaultPrice(item,typeEl.value);$("[data-ip='"+n+"']").value=rows[n].unit_price.toFixed(2);refresh()});
+  $$(".invoicequantity").forEach(i=>i.oninput=refresh);
+  $$(".invoiceprice").forEach(i=>i.oninput=refresh);
+  $$(".invoicequantity").forEach(i=>i.onchange=()=>rows[Number(i.dataset.iq)].quantity=Number(i.value));
+  $$(".invoiceprice").forEach(i=>i.onchange=()=>rows[Number(i.dataset.ip)].unit_price=Number(i.value));
+  $$(".invoiceitem").forEach(s=>{const n=Number(s.dataset.ii);if(!rows[n].unit_price){const item=inventory.find(x=>x.id===s.value);rows[n].unit_price=defaultPrice(item,typeEl.value);$("[data-ip='"+n+"']").value=rows[n].unit_price.toFixed(2)}});
+  $$(".invoiceitem").forEach(s=>s.oninput=refresh);
+  $$(".invoiceformrow [data-remove-ii]").forEach(b=>b.onclick=()=>{rows.splice(Number(b.dataset.removeIi),1);if(!rows.length)rows.push({inventory_id:inventory[0].id,quantity:1,unit_price:defaultPrice(inventory[0],typeEl.value)});draw()});
   refresh();
  };
  $("#addinvoiceitem").onclick=()=>{const item=inventory[0];rows.push({inventory_id:item.id,quantity:1,unit_price:defaultPrice(item,typeEl.value)});draw()};
