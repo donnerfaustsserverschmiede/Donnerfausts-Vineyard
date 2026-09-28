@@ -1,7 +1,7 @@
 const SUPABASE_URL="https://qsyijgvikxmwmhaiulne.supabase.co";
 const SUPABASE_KEY="sb_publishable_5qeUg0c0T0IyLh8g0cUj6Q_ZJYgZYJ_";
 if(!window.supabase||typeof window.supabase.createClient!=="function"){
- document.body.innerHTML='<div class="loading"><b>Donnerfaust Vineyards konnte nicht geladen werden.</b><br><small>Die Supabase-Bibliothek ist nicht verfügbar. Bitte Seite neu laden.</small></div>';
+ document.body.innerHTML='<div class="loading"><b>Donnerfaust Barrelworks konnte nicht geladen werden.</b><br><small>Die Supabase-Bibliothek ist nicht verfügbar. Bitte Seite neu laden.</small></div>';
  throw new Error("Supabase-Bibliothek konnte nicht geladen werden.");
 }
 const supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
@@ -100,7 +100,7 @@ async function init(){
  const {data:{session}}=sessionResult;
  if(!session)return login();
  await loadProfile();
- if(!profile){await supabaseClient.auth.signOut();return login("Dein Konto ist für Donnerfaust Vineyards noch nicht freigeschaltet.");}
+ if(!profile){await supabaseClient.auth.signOut();return login("Dein Konto ist für Donnerfaust Barrelworks noch nicht freigeschaltet.");}
  if(profile.must_change_password)return forcePasswordChange();
  render();
  startPresence();
@@ -114,7 +114,7 @@ async function loadProfile(){
 function login(message=""){
  document.body.innerHTML=`
   <div class="login"><div class="loginbox">
-   <div class="loginbrand"><div class="brandmark"><img src="./assets/donnerfaust-vineyards-logo.jpg" alt="Donnerfaust Vineyards"></div><h1>Donnerfaust Vineyards</h1><p>Interne Betriebsverwaltung</p></div>
+   <div class="loginbrand"><div class="brandmark"><img src="./assets/donnerfaust-vineyards-logo.jpg" alt="Donnerfaust Barrelworks"></div><h1>Donnerfaust Barrelworks</h1><p>Interne Betriebsverwaltung</p></div>
    ${message?`<div class="error">${esc(message)}</div>`:""}
    <form id="loginform">
     <label>E-Mail<input id="email" type="email" autocomplete="username" placeholder="deine E-Mail-Adresse" required></label>
@@ -129,7 +129,7 @@ function login(message=""){
   const {error}=await supabaseClient.auth.signInWithPassword({email:$("#email").value.trim(),password:$("#password").value});
   if(error){b.disabled=false;return login(error.message);}
   await loadProfile();
-  if(!profile){await supabaseClient.auth.signOut();return login("Dieser Benutzer hat noch kein Vineyards-Profil.");}
+  if(!profile){await supabaseClient.auth.signOut();return login("Dieser Benutzer hat noch kein Barrelworks-Profil.");}
   if(profile.must_change_password)return forcePasswordChange();
   await render();
   startPresence();
@@ -153,7 +153,7 @@ function forcePasswordChange(){
 }
 function shell(content){
  const nav=NAV.filter(n=>can(n[3])).map(n=>`<button class="nav ${page===n[0]?"active":""}" data-page="${n[0]}"><i>${n[1]}</i>${n[2]}</button>`).join("");
- document.body.innerHTML=`<aside class="sidebar" id="sidebar"><div class="brand"><div class="brandmark"><img src="./assets/donnerfaust-vineyards-logo.jpg" alt=""></div><div><b>Donnerfaust Vineyards</b><small>Interne Verwaltung</small></div></div><nav>${nav}</nav><div class="sidefoot"><span class="online"></span>${esc(profile.display_name)} · ${esc(role.label)}<br><button id="logout" class="mini" style="margin-top:9px">Abmelden</button></div></aside><main class="main"><header class="top"><div class="topTitle"><img class="topbrandlogo" src="./assets/donnerfaust-vineyards-logo.jpg" alt="Donnerfaust Vineyards"><div><button class="hamb" id="hamb">☰</button><span class="crumb">DONNERFAUST VINEYARDS</span><h2>${esc(pageTitle())}</h2></div></div><div class="topright"><span class="online"></span><b>${esc(profile.display_name)}</b><span class="avatar">${esc(initials(profile.display_name))}</span></div></header><section class="content">${content}</section></main><div id="modalroot"></div>`;
+ document.body.innerHTML=`<aside class="sidebar" id="sidebar"><div class="brand"><div class="brandmark"><img src="./assets/donnerfaust-vineyards-logo.jpg" alt=""></div><div><b>Donnerfaust Barrelworks</b><small>Interne Verwaltung</small></div></div><nav>${nav}</nav><div class="sidefoot"><span class="online"></span>${esc(profile.display_name)} · ${esc(role.label)}<br><button id="logout" class="mini" style="margin-top:9px">Abmelden</button></div></aside><main class="main"><header class="top"><div class="topTitle"><img class="topbrandlogo" src="./assets/donnerfaust-vineyards-logo.jpg" alt="Donnerfaust Barrelworks"><div><button class="hamb" id="hamb">☰</button><span class="crumb">DONNERFAUST BARRELWORKS</span><h2>${esc(pageTitle())}</h2></div></div><div class="topright"><span class="online"></span><b>${esc(profile.display_name)}</b><span class="avatar">${esc(initials(profile.display_name))}</span></div></header><section class="content">${content}</section></main><div id="modalroot"></div>`;
  $$(".nav").forEach(b=>b.onclick=()=>{page=b.dataset.page;render();});$("#hamb").onclick=()=>$("#sidebar").classList.toggle("open");$("#logout").onclick=()=>supabaseClient.auth.signOut();
 }
 function pageTitle(){return ({dashboard:"Übersicht",invoices:"Rechnungen",orders:"Bestellungen",inventory:"Lagerübersicht",recipes:"Rezepte",cash:"Kasse",employees:"Mitarbeiter",audit:"Protokoll",admin:"Administration"})[page]||"Übersicht"}
@@ -170,8 +170,8 @@ async function dashboard(){
  const openOrders=orderCount.error?0:(orderCount.count||0);
  return `
   <div class="welcome">
-   <div><div class="eyebrow">DONNERFAUST VINEYARDS</div><h1>Willkommen, ${esc(profile.display_name)}</h1><p>Deine aktuelle Übersicht für den Weinbetrieb.</p></div>
-   <div class="welcomegrape"><img src="./assets/donnerfaust-vineyards-logo.jpg" alt="Donnerfaust Vineyards"></div>
+   <div><div class="eyebrow">DONNERFAUST BARRELWORKS</div><h1>Willkommen, ${esc(profile.display_name)}</h1><p>Deine aktuelle Übersicht für den Weinbetrieb.</p></div>
+   <div class="welcomegrape"><img src="./assets/donnerfaust-vineyards-logo.jpg" alt="Donnerfaust Barrelworks"></div>
   </div>
   <div class="overviewgrid">
    <button class="overviewcard" data-page-action="invoices"><div class="overviewicon invoice">▤</div><div class="overviewtext"><small>OFFENE RECHNUNGEN</small><b>${openInvoices}</b><span>Rechnungsmenü öffnen</span></div><span class="arrow">→</span></button>
@@ -315,7 +315,7 @@ function bind(){
   if(b.dataset.busy==="1")return;
   b.dataset.busy="1";
   b.disabled=true;
-  try{await action(b.dataset.action)}catch(err){console.error("Donnerfaust Vineyards Aktion:",err);alert(err?.message||String(err))}
+  try{await action(b.dataset.action)}catch(err){console.error("Donnerfaust Barrelworks Aktion:",err);alert(err?.message||String(err))}
   finally{b.disabled=false;b.dataset.busy="0"}
  };
  $("[data-page-action]").forEach(b=>b.onclick=()=>{page=b.dataset.pageAction;render()});
@@ -363,7 +363,7 @@ async function itemModal(id){
  const cat=item?.category||"Zutaten";
  $("#modalroot").innerHTML='<div class="modalback"><div class="modal"><div class="modalhead"><b>'+(id?"Lagerartikel bearbeiten":"Neuer Lagerartikel")+'</b><button id="x">×</button></div><form id="mf">'+
  field("Artikel / Ressource","item_name","text",item?.item_name||"",true)+
- selectField("Kategorie","category",[{value:"Zutaten",label:"Zutaten · Grundzutaten / Ressourcen"},{value:"Produkte",label:"Produkte · fertige Weine / Verkaufsartikel"}],cat)+
+ selectField("Kategorie","category",[{value:"Zutaten",label:"Zutaten"},{value:"Produkte",label:"Produkte"}],cat)+
  field("Einheit","unit","text",item?.unit||"Stück",true)+
  field("Bestand","quantity","number",item?.quantity??0)+
  field("Mindestbestand","min_stock","number",item?.min_stock??0)+
@@ -545,10 +545,10 @@ async function shareInvoice(id){
 async function publicInvoice(token){
  const {data,error}=await supabaseClient.rpc("vineyard_public_invoice",{p_share_token:token});
  const invoice=data?.invoice;
- if(error||!invoice)return document.body.innerHTML='<div class="publicInvoice"><div class="publicInvoiceBox"><div class="brandmark"><img src="./assets/donnerfaust-vineyards-logo.jpg" alt="Donnerfaust Vineyards"></div><h1>Rechnung nicht verfügbar</h1><p>Der Link ist ungültig oder die Rechnung wurde storniert.</p></div></div>';
+ if(error||!invoice)return document.body.innerHTML='<div class="publicInvoice"><div class="publicInvoiceBox"><div class="brandmark"><img src="./assets/donnerfaust-vineyards-logo.jpg" alt="Donnerfaust Barrelworks"></div><h1>Rechnung nicht verfügbar</h1><p>Der Link ist ungültig oder die Rechnung wurde storniert.</p></div></div>';
  const items=Array.isArray(data.items)?data.items:[];
  const total=items.reduce((s,x)=>s+Number(x.line_total||0),0);
- document.body.innerHTML='<main class="publicInvoice"><div class="publicInvoiceBox"><div class="publicHead"><div><div class="eyebrow">DONNERFAUST VINEYARDS</div><h1>Rechnung</h1><p>Schreibgeschützter Handelsnachweis</p></div><div class="publicNumber">'+esc(invoice.invoice_number)+'</div></div><div class="publicMeta"><div><small>VORGANG</small><b>'+esc(invoice.invoice_type)+'</b></div><div><small>HANDELSPARTNER</small><b>'+esc(invoice.partner_name)+'</b></div><div><small>DATUM</small><b>'+esc(new Date(invoice.created_at).toLocaleString("de-DE"))+'</b></div><div><small>STATUS</small><b>'+esc(invoice.status)+'</b></div><div><small>MITARBEITER</small><b>'+esc(invoice.employee_name||"—")+'</b></div></div><div class="publicTable"><table><thead><tr><th>Artikel</th><th>Menge</th><th>Einzelpreis</th><th>Gesamt</th></tr></thead><tbody>'+items.map(x=>'<tr><td>'+esc(x.item_name)+'</td><td>'+Number(x.quantity).toLocaleString("de-DE")+' '+esc(x.unit)+'</td><td>'+money(x.unit_price)+'</td><td>'+money(x.line_total)+'</td></tr>').join("")+'</tbody></table></div><div class="publicTotal"><span>Gesamtsumme</span><b>'+money(total)+'</b></div><p class="publicReadonly">Diese Ansicht ist schreibgeschützt. Es besteht kein Zugriff auf die interne Vineyard-Verwaltung.</p></div></main>';
+ document.body.innerHTML='<main class="publicInvoice"><div class="publicInvoiceBox"><div class="publicHead"><div><div class="eyebrow">DONNERFAUST BARRELWORKS</div><h1>Rechnung</h1><p>Schreibgeschützter Handelsnachweis</p></div><div class="publicNumber">'+esc(invoice.invoice_number)+'</div></div><div class="publicMeta"><div><small>VORGANG</small><b>'+esc(invoice.invoice_type)+'</b></div><div><small>HANDELSPARTNER</small><b>'+esc(invoice.partner_name)+'</b></div><div><small>DATUM</small><b>'+esc(new Date(invoice.created_at).toLocaleString("de-DE"))+'</b></div><div><small>STATUS</small><b>'+esc(invoice.status)+'</b></div><div><small>MITARBEITER</small><b>'+esc(invoice.employee_name||"—")+'</b></div></div><div class="publicTable"><table><thead><tr><th>Artikel</th><th>Menge</th><th>Einzelpreis</th><th>Gesamt</th></tr></thead><tbody>'+items.map(x=>'<tr><td>'+esc(x.item_name)+'</td><td>'+Number(x.quantity).toLocaleString("de-DE")+' '+esc(x.unit)+'</td><td>'+money(x.unit_price)+'</td><td>'+money(x.line_total)+'</td></tr>').join("")+'</tbody></table></div><div class="publicTotal"><span>Gesamtsumme</span><b>'+money(total)+'</b></div><p class="publicReadonly">Diese Ansicht ist schreibgeschützt. Es besteht kein Zugriff auf die interne Vineyard-Verwaltung.</p></div></main>';
 }
 async function stockModal(id){
  const {data:item}=await supabaseClient.from("vineyard_inventory").select("*").eq("id",id).single();
@@ -583,7 +583,7 @@ async function employeeModal(id){
 }
 async function auditLog(action,entity,entityId,details){const user=(await supabaseClient.auth.getUser()).data.user;await supabaseClient.from("vineyard_audit_log").insert({actor_id:user.id,action,entity,entity_id:entityId?String(entityId):null,details:details||{}})}
 function showBootError(err){
- console.error("Donnerfaust Vineyards Startfehler:",err);
- document.body.innerHTML='<div class="login"><div class="loginbox"><div class="loginbrand"><div class="brandmark"><img src="./assets/donnerfaust-vineyards-logo.jpg" alt="Donnerfaust Vineyards"></div><h1>Donnerfaust Vineyards</h1><p>Die Anwendung konnte nicht gestartet werden.</p></div><div class="error">Technischer Fehler beim Start.<br><small>'+esc(err?.message||String(err))+'</small></div><button class="btn primary" onclick="location.reload()">Erneut versuchen</button></div></div>';
+ console.error("Donnerfaust Barrelworks Startfehler:",err);
+ document.body.innerHTML='<div class="login"><div class="loginbox"><div class="loginbrand"><div class="brandmark"><img src="./assets/donnerfaust-vineyards-logo.jpg" alt="Donnerfaust Barrelworks"></div><h1>Donnerfaust Barrelworks</h1><p>Die Anwendung konnte nicht gestartet werden.</p></div><div class="error">Technischer Fehler beim Start.<br><small>'+esc(err?.message||String(err))+'</small></div><button class="btn primary" onclick="location.reload()">Erneut versuchen</button></div></div>';
 }
 init().catch(showBootError);
