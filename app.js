@@ -208,7 +208,7 @@ async function audit(){
 }
 function errorBox(t){return '<div class="panel"><b>Fehler</b><p class="muted">'+esc(t)+"</p></div>"}
 
-async function render(){let content=page==="dashboard"?await dashboard():page==="invoices"?await invoices():page==="orders"?await orders():page==="inventory"?await inventory():page==="recipes"?await recipes():page==="cash"?await cash():page==="employees"?await employees():await audit();shell(content);bind()}
+async function render(){let content=page==="dashboard"?await dashboard():page==="invoices"?await invoices():page==="orders"?await orders():page==="inventory"?await inventory():page==="recipes"?await recipes():page==="cash"?await cash():page==="employees"?await employees():page==="admin"?await admin():await audit();shell(content);bind()}
 function bind(){
  document.onclick=async e=>{
   const b=e.target.closest?.("[data-action]");
