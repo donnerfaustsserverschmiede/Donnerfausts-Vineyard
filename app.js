@@ -56,7 +56,7 @@ async function dashboard(){
  '<div class="overviewgrid">'+
  '<button class="overviewcard" data-page-action="invoices"><div class="overviewicon invoice">▤</div><div class="overviewtext"><small>OFFENE RECHNUNGEN</small><b>'+openInvoices+'</b><span>Rechnungsmenü öffnen</span></div><span class="arrow">→</span></button>'+
  '<button class="overviewcard" data-page-action="orders"><div class="overviewicon order">🛒</div><div class="overviewtext"><small>OFFENE BESTELLUNGEN</small><b>'+openOrders+'</b><span>Bestellungsmenü öffnen</span></div><span class="arrow">→</span></button>'+
- '<div class="overviewcard static"><div class="overviewicon staff">♟</div><div class="overviewtext"><small>MITARBEITER ONLINE</small><b id="onlineCount">'+(onlineCount||1)+'</b><span>Aktuell im System angemeldet</span></div><span class="live"><i></i> LIVE</span></div>'
+ '<div class="overviewcard static"><div class="overviewicon staff">♟</div><div class="overviewtext"><small>MITARBEITER ONLINE</small><b id="onlineCount">'+(onlineCount||1)+'</b><span>Aktuell im System angemeldet</span></div><span class="live"><i></i> LIVE</span></div>'+
  </div>'+
  '<div class="quickgrid"><button class="quickcard" data-page-action="inventory"><span>📦</span><div><b>Lager</b><small>Bestände verwalten</small></div><span class="arrow">→</span></button>'+
  '<button class="quickcard" data-page-action="cash"><span>€</span><div><b>Kasse</b><small>Kassenbuch öffnen</small></div><span class="arrow">→</span></button>'+
