@@ -77,3 +77,13 @@ nav{padding:12px;overflow:auto}.nav{width:100%;padding:11px 12px;margin:2px 0;bo
 .productioningredient strong{white-space:nowrap}
 .productioningredientswrap h3{margin:5px 0 14px;font:700 22px Georgia,serif}
 @media(max-width:750px){.productionpanel{grid-template-columns:1fr}.productionform,.productioningredientswrap{padding:16px}}
+
+/* Ein- und Verkauf */
+.tradehint{background:#fff8e8;border-color:#ead9ad;color:#765714;font-size:12px}
+.tradeprice{display:flex;justify-content:space-between;align-items:center;gap:18px;margin:14px 0 5px;padding:16px;border:1px solid #c5a14a55;border-radius:12px;background:#c5a14a0d}
+.tradeprice span{display:block;color:var(--gold);font-size:9px;font-weight:900;letter-spacing:.13em}
+.tradeprice b{display:block;font:700 25px Georgia,serif;margin-top:3px}
+.tradeprice small{display:block;color:var(--muted);margin-top:3px;font-size:10px}
+.tradeformula{font-size:11px;color:var(--muted);text-align:right}
+.tableunit{display:block;color:var(--muted);font-size:9px;margin-top:2px}
+@media(max-width:600px){.tradeprice{align-items:flex-start;flex-direction:column}.tradeformula{text-align:left}}
