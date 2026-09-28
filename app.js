@@ -223,17 +223,17 @@ function bind(){
  $("#q")?.addEventListener("input",async e=>{const {data=[]}=await supabaseClient.from("vineyard_inventory").select("*").order("category").order("item_name");const q=e.target.value.toLowerCase();$("#ingredients").innerHTML=itemCards(data.filter(x=>x.category==="Zutaten"&&x.item_name.toLowerCase().includes(q)));$("#products").innerHTML=itemCards(data.filter(x=>x.category==="Produkte"&&x.item_name.toLowerCase().includes(q)))});
  $$("[data-stock]").forEach(b=>b.onclick=()=>stockModal(b.dataset.stock));
  $$("[data-production]").forEach(b=>b.onclick=()=>productionModal(b.dataset.production));
- $("[data-edit-item]").forEach(b=>b.onclick=()=>itemModal(b.dataset.editItem));
- $("[data-delete-item]").forEach(b=>b.onclick=()=>deleteItem(b.dataset.deleteItem));
+ $$("[data-edit-item]").forEach(b=>b.onclick=()=>itemModal(b.dataset.editItem));
+ $$("[data-delete-item]").forEach(b=>b.onclick=()=>deleteItem(b.dataset.deleteItem));
  $$("[data-edit-recipe]").forEach(b=>b.onclick=()=>recipeModal(b.dataset.editRecipe));
- $("[data-delete-recipe]").forEach(b=>b.onclick=()=>deleteRecipe(b.dataset.deleteRecipe));
- $("[data-edit-cash]").forEach(b=>b.onclick=()=>cashModal(b.dataset.editCash));
- $("[data-delete-cash]").forEach(b=>b.onclick=()=>deleteCash(b.dataset.deleteCash));
- $("[data-edit-employee]").forEach(b=>b.onclick=()=>employeeModal(b.dataset.editEmployee));
- $("[data-delete-employee]").forEach(b=>b.onclick=()=>deleteEmployee(b.dataset.deleteEmployee));
- $("[data-share-invoice]").forEach(b=>b.onclick=()=>shareInvoice(b.dataset.shareInvoice));
- $("[data-edit-invoice]").forEach(b=>b.onclick=()=>invoiceModal(b.dataset.editInvoice));
- $("[data-delete-invoice]").forEach(b=>b.onclick=()=>deleteInvoice(b.dataset.deleteInvoice));
+ $$("[data-delete-recipe]").forEach(b=>b.onclick=()=>deleteRecipe(b.dataset.deleteRecipe));
+ $$("[data-edit-cash]").forEach(b=>b.onclick=()=>cashModal(b.dataset.editCash));
+ $$("[data-delete-cash]").forEach(b=>b.onclick=()=>deleteCash(b.dataset.deleteCash));
+ $$("[data-edit-employee]").forEach(b=>b.onclick=()=>employeeModal(b.dataset.editEmployee));
+ $$("[data-delete-employee]").forEach(b=>b.onclick=()=>deleteEmployee(b.dataset.deleteEmployee));
+ $$("[data-share-invoice]").forEach(b=>b.onclick=()=>shareInvoice(b.dataset.shareInvoice));
+ $$("[data-edit-invoice]").forEach(b=>b.onclick=()=>invoiceModal(b.dataset.editInvoice));
+ $$("[data-delete-invoice]").forEach(b=>b.onclick=()=>deleteInvoice(b.dataset.deleteInvoice));
 }
 async function action(a){
  if(a==="openinventory"){page="inventory";await render();return}
