@@ -91,10 +91,14 @@ function startPresence(){
 async function inventory(){
  const {data:items=[],error}=await supabase.from("vineyard_inventory").select("*").order("category").order("item_name");
  if(error)return errorBox(error.message);
- return intro("LAGER","Lagerübersicht","Bestände, Mindestbestände und Bewegungen zentral verwalten.",can("inventory_edit")?"newitem":null,can("inventory_edit")?"+ Artikel":null)+
- '<div class="panel"><input class="fullinput" id="q" placeholder="Lagerartikel suchen …"></div><div class="itemgrid" id="items">'+itemCards(items)+"</div>";
+ const ingredients=items.filter(x=>x.category==="Zutaten");
+ const products=items.filter(x=>x.category==="Produkte");
+ return intro("LAGER","Lagerverzeichnis","Zutaten und fertige Produkte verwalten. Bestandsbewegungen werden nachvollziehbar protokolliert.",can("inventory_edit")?"newitem":null,can("inventory_edit")?"+ Lagerartikel":null)+
+ '<div class="panel"><input class="fullinput" id="q" placeholder="Zutat oder Produkt suchen …"><div class="inventoryhint"><b>'+ingredients.length+'</b> Zutaten · <b>'+products.length+'</b> Produkte</div></div>'+
+ '<div class="inventorysection"><div class="sectiontitle"><div><div class="eyebrow">KATEGORIE 1</div><h2>Zutaten</h2><p>Grundzutaten und Ressourcen, die für die Weinproduktion benötigt werden.</p></div></div><div class="itemgrid" id="ingredients">'+itemCards(ingredients)+'</div></div>'+
+ '<div class="inventorysection"><div class="sectiontitle"><div><div class="eyebrow">KATEGORIE 2</div><h2>Produkte</h2><p>Fertig produzierte Weine und andere verkaufsfertige Produkte.</p></div></div><div class="itemgrid" id="products">'+itemCards(products)+'</div></div>';
 }
-function itemCards(items){return items.map(x=>'<div class="itemcard"><div class="eyebrow">'+esc(x.category)+" · "+esc(x.unit)+'</div><h3>'+esc(x.item_name)+'</h3><div class="qty '+(Number(x.quantity)<=Number(x.min_stock)?"low":"")+'">'+Number(x.quantity).toLocaleString("de-DE")+" "+esc(x.unit)+"</div><small class="muted">Mindestbestand: "+Number(x.min_stock).toLocaleString("de-DE")+" · Verkauf: "+money(x.sale_price)+"</small><div style="margin-top:12px">'+(can("inventory_edit")?'<button class="mini gold" data-stock="'+x.id+'">Bestand ändern</button> <button class="mini" data-edit-item="'+x.id+'">Bearbeiten</button>':"")+"</div></div>").join("")||'<p class="muted">Noch keine Lagerartikel.</p>'}
+function itemCards(items){return items.map(x=>'<div class="itemcard"><div class="eyebrow">'+esc(x.category)+" · "+esc(x.unit)+'</div><h3>'+esc(x.item_name)+'</h3><div class="qty '+(Number(x.quantity)<=Number(x.min_stock)?"low":"")+'">'+Number(x.quantity).toLocaleString("de-DE")+" "+esc(x.unit)+"</div><small class="muted">Mindestbestand: "+Number(x.min_stock).toLocaleString("de-DE")+" · Einkauf: "+money(x.purchase_price)+" · Verkauf: "+money(x.sale_price)+"</small><div style="margin-top:12px">'+(can("inventory_edit")?'<button class="mini gold" data-stock="'+x.id+'">Bestand ändern</button> '+(x.category==="Produkte"?'<button class="mini gold" data-production="'+x.id+'">+ Produktion</button> ':"")+'<button class="mini" data-edit-item="'+x.id+'">Bearbeiten</button>':"")+"</div></div>").join("")||'<p class="muted">Noch keine Einträge in dieser Kategorie.</p>'}
 async function cash(){
  const {data:rows=[],error}=await supabase.from("vineyard_cashbook").select("*").order("created_at",{ascending:false});
  if(error)return errorBox(error.message);
@@ -123,8 +127,9 @@ async function render(){let content=page==="dashboard"?await dashboard():page===
 function bind(){
  $("[data-action]").forEach(b=>b.onclick=()=>action(b.dataset.action));
  $("[data-page-action]").forEach(b=>b.onclick=()=>{page=b.dataset.pageAction;render()});
- $("#q")?.addEventListener("input",async e=>{const {data=[]}=await supabase.from("vineyard_inventory").select("*").order("item_name");$("#items").innerHTML=itemCards(data.filter(x=>x.item_name.toLowerCase().includes(e.target.value.toLowerCase())))});
+ $("#q")?.addEventListener("input",async e=>{const {data=[]}=await supabase.from("vineyard_inventory").select("*").order("category").order("item_name");const q=e.target.value.toLowerCase();$("#ingredients").innerHTML=itemCards(data.filter(x=>x.category==="Zutaten"&&x.item_name.toLowerCase().includes(q)));$("#products").innerHTML=itemCards(data.filter(x=>x.category==="Produkte"&&x.item_name.toLowerCase().includes(q)))});
  $$("[data-stock]").forEach(b=>b.onclick=()=>stockModal(b.dataset.stock));
+ $$("[data-production]").forEach(b=>b.onclick=()=>productionModal(b.dataset.production));
  $$("[data-edit-item]").forEach(b=>b.onclick=()=>itemModal(b.dataset.editItem));
  $$("[data-edit-employee]").forEach(b=>b.onclick=()=>employeeModal(b.dataset.editEmployee));
 }
@@ -141,13 +146,23 @@ function selectField(label,name,opts,value=""){return '<label>'+label+'<select n
 async function itemModal(id){
  let item=null;if(id){const {data}=await supabase.from("vineyard_inventory").select("*").eq("id",id).single();item=data}
  modal(id?"Lagerartikel bearbeiten":"Neuer Lagerartikel",
- field("Artikelname","item_name","text",item?.item_name||"",true)+selectField("Kategorie","category",["Rohstoff","Wein","Material","Verpackung","Sonstiges"],item?.category||"Sonstiges")+field("Einheit","unit","text",item?.unit||"Stück",true)+field("Bestand","quantity","number",item?.quantity??0)+field("Mindestbestand","min_stock","number",item?.min_stock??0)+field("Einkaufspreis","purchase_price","number",item?.purchase_price??0)+field("Verkaufspreis","sale_price","number",item?.sale_price??0),
+ field("Artikel / Ressource","item_name","text",item?.item_name||"",true)+selectField("Kategorie","category",[{value:"Zutaten",label:"Zutaten · Grundzutaten / Ressourcen"},{value:"Produkte",label:"Produkte · fertige Weine / Verkaufsartikel"}],item?.category||"Zutaten")+field("Einheit","unit","text",item?.unit||"Stück",true)+field("Bestand","quantity","number",item?.quantity??0)+field("Mindestbestand","min_stock","number",item?.min_stock??0)+field("Einkaufspreis","purchase_price","number",item?.purchase_price??0)+field("Verkaufspreis","sale_price","number",item?.sale_price??0),
  async v=>{const patch={item_name:v.item_name.trim(),category:v.category,unit:v.unit.trim(),quantity:Number(v.quantity)||0,min_stock:Number(v.min_stock)||0,purchase_price:Number(v.purchase_price)||0,sale_price:Number(v.sale_price)||0,updated_at:new Date().toISOString(),updated_by:(await supabase.auth.getUser()).data.user.id};const r=id?await supabase.from("vineyard_inventory").update(patch).eq("id",id):await supabase.from("vineyard_inventory").insert(patch);if(r.error)throw r.error;await auditLog(id?"Lagerartikel geändert":"Lagerartikel angelegt","inventory",id||v.item_name,patch)})
 }
 async function stockModal(id){
  const {data:item}=await supabase.from("vineyard_inventory").select("*").eq("id",id).single();
+ if(!item)throw Error("Lagerartikel nicht gefunden.");
  modal("Bestandsbewegung · "+item.item_name,selectField("Bewegung","mode",[{value:"in",label:"Zugang (+)"},{value:"out",label:"Abgang (-)"}])+field("Menge","amount","number","",true)+field("Grund","reason","text","",true),
- async v=>{const amount=Math.abs(Number(v.amount)||0);if(!amount)throw Error("Menge muss größer als 0 sein.");const delta=v.mode==="in"?amount:-amount;if(Number(item.quantity)+delta<0)throw Error("Bestand kann nicht negativ werden.");const r1=await supabase.from("vineyard_inventory").update({quantity:Number(item.quantity)+delta,updated_at:new Date().toISOString(),updated_by:(await supabase.auth.getUser()).data.user.id}).eq("id",id);if(r1.error)throw r1.error;const r2=await supabase.from("vineyard_inventory_movements").insert({inventory_id:id,delta,reason:v.reason.trim(),created_by:(await supabase.auth.getUser()).data.user.id});if(r2.error)throw r2.error;await auditLog("Lagerbestand geändert","inventory",id,{delta,reason:v.reason.trim()})})
+ async v=>{const amount=Math.abs(Number(v.amount)||0);if(!amount)throw Error("Menge muss größer als 0 sein.");const delta=v.mode==="in"?amount:-amount;const {error}=await supabase.rpc("vineyard_adjust_inventory",{p_inventory_id:id,p_delta:delta,p_reason:v.reason.trim()});if(error)throw error})
+}
+async function productionModal(id){
+ const {data:item}=await supabase.from("vineyard_inventory").select("*").eq("id",id).single();
+ if(!item)throw Error("Lagerartikel nicht gefunden.");
+ if(item.category!=="Produkte")throw Error("Produktion kann nur bei Produkten gebucht werden.");
+ modal("Produktion · "+item.item_name,
+   field("Produzierte Menge","amount","number","",true)+
+   field("Produktionshinweis","reason","text","Produktion",true),
+   async v=>{const amount=Math.abs(Number(v.amount)||0);if(!amount)throw Error("Die Produktionsmenge muss größer als 0 sein.");const {error}=await supabase.rpc("vineyard_adjust_inventory",{p_inventory_id:id,p_delta:amount,p_reason:v.reason.trim()||"Produktion"});if(error)throw error})
 }
 async function cashModal(){
  modal("Kassenbuchung",selectField("Art","kind",[{value:"in",label:"Einnahme (+)"},{value:"out",label:"Ausgabe (-)"}])+selectField("Kategorie","category",["Weinverkauf","Trauben","Material","Lohn","Betriebskosten","Sonstiges"])+field("Betrag (€)","amount","number","",true)+field("Beschreibung","description","text","",true),
