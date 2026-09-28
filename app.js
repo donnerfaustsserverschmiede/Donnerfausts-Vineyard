@@ -1,118 +1,137 @@
-/* Rechtsanwalt Donnerfaust – GitHub Pages Edition
-   Offline/local-first Kanzleisystem. Daten werden im Browser gespeichert.
-*/
-const DBKEY="donnerfaust_kanzlei_v1";
+const SUPABASE_URL="https://qsyijgvikxmwmhaiulne.supabase.co";
+const SUPABASE_KEY="sb_publishable_5qeUg0c0T0IyLh8g0cUj6Q_ZJYgZYJ_";
+const supabase=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 const money=n=>new Intl.NumberFormat("de-DE",{style:"currency",currency:"EUR"}).format(Number(n)||0);
-const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
-const today=()=>new Date().toISOString().slice(0,10);
-const empty=()=>({clients:[],cases:[],invoices:[],appointments:[],tasks:[],documents:[],notes:[],messages:[],announcements:[],employees:[{id:"owner",name:"Thorson Donnerfaust",role:"Kanzleiinhaber",status:"Online"}],activity:[]});
-let db=load(), page="dashboard", caseId=null;
+const dateTime=()=>new Date().toLocaleString("de-DE");
+let profile=null, role=null, page="dashboard";
 
-function load(){try{return Object.assign(empty(),JSON.parse(localStorage.getItem(DBKEY)||"{}"))}catch{return empty()}}
-function save(){localStorage.setItem(DBKEY,JSON.stringify(db))}
-function log(text){db.activity.unshift({id:uid(),text,date:new Date().toLocaleString("de-DE")});db.activity=db.activity.slice(0,200);save()}
-function next(prefix,arr){let y=new Date().getFullYear();return `${prefix}-${y}-${String(arr.length+1).padStart(3,"0")}`}
-function badge(s){return `<span class="badge ${s==="Bezahlt"||s==="Erledigt"?"good":s==="Überfällig"||s==="Storniert"?"bad":"warn"}">${esc(s)}</span>`}
-const nav=[["dashboard","▦","Dashboard"],["cases","⚖","Akten & Fälle"],["clients","👤","Mandanten"],["calendar","▣","Termine / Kalender"],["messages","💬","Nachrichten"],["notifications","🔔","Benachrichtigungen"],["announcements","📢","Ankündigungen"],["documents","📁","Dokumente"],["invoices","€","Gebühren / Rechnungen"],["tasks","☑","Aufgaben"],["notes","📝","Notizen"],["search","⌕","Zentrale Suche"],["employees","👥","Mitarbeiter"],["admin","⚙","Verwaltung"]];
-const title=()=>nav.find(n=>n[0]===page)?.[2]||"Dashboard";
+const NAV=[
+["dashboard","⌂","Übersicht","dashboard"],
+["inventory","▦","Lager","inventory_view"],
+["cash","€","Kasse","cash_view"],
+["employees","♟","Mitarbeiter","employees_view"],
+["audit","◷","Protokoll","audit_view"]
+];
 
+function can(p){return !!role?.permissions?.[p]}
+function badge(s){return '<span class="badge '+(s==="Bezahlt"||s==="OK"?"good":s==="Niedrig"||s==="Offen"?"warn":"bad")+'">'+esc(s)+"</span>"}
+
+async function init(){
+ const {data:{session}}=await supabase.auth.getSession();
+ if(!session)return login();
+ await loadProfile();
+ if(!profile){await supabase.auth.signOut();return login("Dein Konto ist für Donnerfaust Vineyards noch nicht freigeschaltet.");}
+ render();
+ supabase.auth.onAuthStateChange((_e,s)=>{if(!s)login()});
+}
+async function loadProfile(){
+ const {data,error}=await supabase.from("vineyard_profiles").select("user_id,display_name,role_key,active,phone,vineyard_roles:role_key(key,label,permissions)").eq("user_id",(await supabase.auth.getUser()).data.user.id).maybeSingle();
+ if(error||!data||!data.active){profile=null;return}
+ profile=data;role=data.vineyard_roles;
+}
+function login(message=""){
+ document.body.innerHTML='<div class="login"><div class="loginbox"><div class="loginbrand"><div class="brandmark">🍇</div><h1>Donnerfaust Vineyards</h1><p>Interne Betriebsverwaltung</p></div>'+(message?'<div class="error">'+esc(message)+"</div>":"")+
+ '<form id="loginform"><label>E-Mail<input id="email" type="email" autocomplete="username" value="ragnaroekduo2018@gmail.com" required></label><label>Passwort<input id="password" type="password" autocomplete="current-password" required></label><button class="btn primary">Anmelden</button></form></div></div>';
+ $("#loginform").onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;const {error}=await supabase.auth.signInWithPassword({email:$("#email").value.trim(),password:$("#password").value});if(error){b.disabled=false;login(error.message)}else{await loadProfile();if(!profile){await supabase.auth.signOut();login("Dieser Benutzer hat noch kein Vineyards-Profil.");}else render()}};
+}
 function shell(content){
-document.body.innerHTML=`<aside class="sidebar" id="sidebar"><div class="sidebrand"><div class="logo">⚖</div><div><b>Rechtsanwalt Donnerfaust</b><small>Kanzleiverwaltung · RP</small></div></div><nav>${nav.map(n=>`<button class="nav ${page===n[0]?"active":""}" data-nav="${n[0]}"><i>${n[1]}</i>${n[2]}</button>`).join("")}</nav><div class="sidefoot"><span class="online"></span><div><b>Donnerfaust</b><small>Offline-Datenbank · Online</small></div></div></aside>
-<main class="main"><header class="top"><div><button class="hamb" id="hamb">☰</button><span class="crumb">KANZLEI / RP-SYSTEM</span><h2>${esc(title())}</h2></div><div class="topright"><span class="online"></span><b>Thorson Donnerfaust</b><span class="avatar">TD</span></div></header><section class="content">${content}</section></main><div id="modalroot"></div>`;
-$$("[data-nav]").forEach(b=>b.onclick=()=>{page=b.dataset.nav;caseId=null;render()});
-$("#hamb").onclick=()=>$("#sidebar").classList.toggle("open");
+ const nav=NAV.filter(n=>can(n[3])).map(n=>'<button class="nav '+(page===n[0]?"active":"")+'" data-page="'+n[0]+'"><i>'+n[1]+"</i>"+n[2]+"</button>").join("");
+ document.body.innerHTML='<aside class="sidebar" id="sidebar"><div class="brand"><div class="brandmark">🍇</div><div><b>Donnerfaust Vineyards</b><small>Interne Verwaltung</small></div></div><nav>"+nav+'</nav><div class="sidefoot"><span class="online"></span>'+esc(profile.display_name)+' · '+esc(role.label)+'<br><button id="logout" class="mini" style="margin-top:9px">Abmelden</button></div></aside><main class="main"><header class="top"><div><button class="hamb" id="hamb">☰</button><span class="crumb">DONNERFAUST VINEYARDS</span><h2>'+esc(pageTitle())+'</h2></div><div class="topright"><span class="online"></span><b>'+esc(profile.display_name)+'</b><span class="avatar">'+esc(initials(profile.display_name))+"</span></div></header><section class="content">"+content+'</section></main><div id="modalroot"></div>';
+ $$(".nav").forEach(b=>b.onclick=()=>{page=b.dataset.page;render()});$("#hamb").onclick=()=>$("#sidebar").classList.toggle("open");$("#logout").onclick=()=>supabase.auth.signOut();
 }
-function stat(i,l,v){return `<div class="stat"><span>${i}</span><div><small>${l}</small><b>${v}</b></div></div>`}
-function intro(k,h,p,a,l){return `<div class="intro"><div><div class="eyebrow">${k}</div><h1>${h}</h1><p>${p}</p></div>${a?`<button class="btn dark" data-action="${a}">${l}</button>`:""}</div>`}
-function modal(title,fields,onSave){
-$("#modalroot").innerHTML=`<div class="modalback"><div class="modal"><div class="modalhead"><b>${title}</b><button id="close">×</button></div><form id="form">${fields.map(f=>`<label>${f.label}${f.type==="select"?`<select name="${f.name}" ${f.required?"required":""}>${f.options.map(o=>`<option value="${esc(o.value??o)}" ${String(f.value??"")===String(o.value??o)?"selected":""}>${esc(o.label??o)}</option>`).join("")}</select>`:`<${f.type==="textarea"?"textarea":"input"} name="${f.name}" ${f.type&&f.type!=="textarea"?`type="${f.type}"`:""} value="${f.type==="textarea"?"":esc(f.value||"")}" ${f.required?"required":""}>${f.type==="textarea"?esc(f.value||""):""}</${f.type==="textarea"?"textarea":"input"}>`}</label>`).join("")}<div class="actions"><button type="button" class="btn outline" id="cancel">Abbrechen</button><button class="btn dark">Speichern</button></div></form></div></div>`;
-$("#close").onclick=$("#cancel").onclick=()=>$("#modalroot").innerHTML="";
-$("#form").onsubmit=async e=>{e.preventDefault();await onSave(Object.fromEntries(new FormData(e.target)));$("#modalroot").innerHTML="";save();render()}
-}
-function action(a){
-if(a==="newclient")modal("Neuen Mandanten anlegen",[
-{label:"Name",name:"name",required:true},{label:"Geburtsdatum",name:"birth",type:"date"},{label:"Telefon",name:"phone"},{label:"E-Mail",name:"email",type:"email"},{label:"Anschrift",name:"address"},{label:"Beruf",name:"occupation"},{label:"Interne Notiz",name:"notes",type:"textarea"}],v=>{v.id=uid();db.clients.push(v);log(`Mandant angelegt: ${v.name}`)});
-if(a==="newcase")openCaseForm();
-if(a==="newinvoice")newInvoice();
-if(a==="newappointment")modal("Neuen Termin",[{label:"Titel",name:"title",required:true},{label:"Datum",name:"date",type:"date",value:today(),required:true},{label:"Uhrzeit",name:"time",type:"time"},{label:"Ort",name:"place"},{label:"Akte",name:"case_id",type:"select",options:[{value:"",label:"Allgemeiner Termin"}].concat(db.cases.map(c=>({value:c.id,label:`${c.file_number} · ${c.title}`}))),value:caseId||""},{label:"Notiz",name:"notes",type:"textarea"}],v=>{v.id=uid();db.appointments.push(v);log(`Termin angelegt: ${v.title}`)});
-if(a==="newtask")modal("Neue Aufgabe",[{label:"Aufgabe",name:"text",required:true},{label:"Fällig",name:"due",type:"date"},{label:"Priorität",name:"priority",type:"select",options:["Normal","Hoch","Niedrig"]},{label:"Akte",name:"case_id",type:"select",options:[{value:"",label:"Allgemein"}].concat(db.cases.map(c=>({value:c.id,label:`${c.file_number} · ${c.title}`}))),value:caseId||""}],v=>{v.id=uid();v.done=false;db.tasks.push(v);log(`Aufgabe angelegt: ${v.text}`)});
-if(a==="newdocument")modal("Dokumenteintrag",[{label:"Name",name:"name",required:true},{label:"Typ",name:"type",type:"select",options:["Vollmacht","Schriftsatz","Beweis","Urteil","Beschluss","Sonstiges"]},{label:"Akte",name:"case_id",type:"select",options:[{value:"",label:"Allgemein"}].concat(db.cases.map(c=>({value:c.id,label:`${c.file_number} · ${c.title}`}))),value:caseId||""},{label:"Notiz",name:"note",type:"textarea"}],v=>{v.id=uid();db.documents.push(v);log(`Dokumenteintrag angelegt: ${v.name}`)});
-if(a==="newnote")modal("Neue Notiz",[{label:"Titel",name:"title",required:true},{label:"Notiz",name:"text",type:"textarea",required:true},{label:"Akte",name:"case_id",type:"select",options:[{value:"",label:"Allgemein"}].concat(db.cases.map(c=>({value:c.id,label:`${c.file_number} · ${c.title}`}))),value:caseId||""}],v=>{v.id=uid();db.notes.push(v);log(`Notiz angelegt: ${v.title}`)});
-if(a==="newmessage")modal("Interne Nachricht",[{label:"Nachricht",name:"text",type:"textarea",required:true}],v=>{v.id=uid();v.sender="Thorson Donnerfaust";db.messages.push(v);log("Interne Nachricht erstellt")});
-if(a==="newannouncement")modal("Ankündigung",[{label:"Titel",name:"title",required:true},{label:"Text",name:"text",type:"textarea",required:true}],v=>{v.id=uid();v.author="Thorson Donnerfaust";v.date=new Date().toLocaleDateString("de-DE");db.announcements.push(v);log(`Ankündigung veröffentlicht: ${v.title}`)});
-if(a==="newemployee")modal("Mitarbeiter",[{label:"Name",name:"name",required:true},{label:"Rolle",name:"role",required:true},{label:"Status",name:"status",type:"select",options:["Online","Offline"]}],v=>{v.id=uid();db.employees.push(v);log(`Mitarbeiter angelegt: ${v.name}`)});
-}
-function openCaseForm(existing=null){
-modal(existing?"Akte bearbeiten":"Neue Mandantenakte",[
-{label:"Mandant",name:"client_id",type:"select",options:db.clients.map(c=>({value:c.id,label:`${c.name} · ${c.email||"keine E-Mail"}`})),value:existing?.client_id||"",required:true},
-{label:"Aktenzeichen",name:"file_number",value:existing?.file_number||next("AZ",db.cases)},
-{label:"Bezeichnung des Falls",name:"title",value:existing?.title||"",required:true},
-{label:"Rechtsgebiet",name:"type",type:"select",options:["Strafrecht","Zivilrecht","Verkehrsrecht","Arbeitsrecht","Verwaltungsrecht","Sonstiges"],value:existing?.type||"Strafrecht"},
-{label:"Status",name:"status",type:"select",options:["In Bearbeitung","Gerichtsverfahren","Frist läuft","Wartend","Abgeschlossen"],value:existing?.status||"In Bearbeitung"},
-{label:"Frist",name:"deadline",type:"date",value:existing?.deadline||""},{label:"Zuständiges Gericht",name:"court",value:existing?.court||""},{label:"Gegnerseite",name:"opponent",value:existing?.opponent||""},
-{label:"Vorfall / Gegenstand",name:"incident",type:"textarea",value:existing?.incident||""},{label:"Hintergrund / Sachverhalt",name:"background",type:"textarea",value:existing?.background||""},{label:"Interne Notiz",name:"notes",type:"textarea",value:existing?.notes||""}
-],v=>{
-if(existing)Object.assign(existing,v);else{v.id=uid();v.file_number=v.file_number||next("AZ",db.cases);db.cases.push(v);log(`Akte angelegt: ${v.file_number}`)}
-});
-}
-function newInvoice(){
-if(!db.clients.length){alert("Bitte zuerst einen Mandanten anlegen.");return}
-modal("Neue Rechnung",[
-{label:"Mandant",name:"client_id",type:"select",options:db.clients.map(c=>({value:c.id,label:c.name})),required:true},
-{label:"Akte",name:"case_id",type:"select",options:[{value:"",label:"Keine Akte"}].concat(db.cases.map(c=>({value:c.id,label:`${c.file_number} · ${c.title}`})))},
-{label:"Betrag (€)",name:"amount",type:"number",required:true},{label:"Leistung / Beschreibung",name:"description",value:"Rechtsanwaltliche Tätigkeit"},{label:"Datum",name:"date",type:"date",value:today()},{label:"Fälligkeit",name:"due",value:"30 Tage"}
-],v=>{v.id=uid();v.invoice_number=next("RE",db.invoices);v.amount=Number(v.amount)||0;v.status="Offen";db.invoices.push(v);log(`Rechnung ${v.invoice_number} erstellt (${money(v.amount)})`)});
-}
+function pageTitle(){return ({dashboard:"Übersicht",inventory:"Lagerübersicht",cash:"Kasse",employees:"Mitarbeiter",audit:"Protokoll"})[page]||"Übersicht"}
+function initials(n){return String(n||"DF").split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase()}
+function stat(icon,label,value){return '<div class="stat"><span class="icon">'+icon+'</span><div><small>'+label+"</small><b>"+value+"</b></div></div>"}
+function intro(k,h,p,action,label){return '<div class="intro"><div><div class="eyebrow">'+k+"</div><h1>"+h+"</h1><p>"+p+"</p></div>"+(action?'<button class="btn gold" data-action="'+action+'">'+label+"</button>":"")+"</div>"}
+
 async function dashboard(){
-return intro("KANZLEIÜBERSICHT","Guten Tag, Rechtsanwalt Donnerfaust.","Deine persönliche Kanzleiverwaltung – lokal und ohne Server.","newcase","+ Neue Akte")+
-`<div class="stats">${stat("⚖","OFFENE AKTEN",db.cases.filter(x=>x.status!=="Abgeschlossen").length)}${stat("👤","MANDANTEN",db.clients.length)}${stat("📅","TERMINE",db.appointments.length)}${stat("€","OFFENE RECHNUNGEN",db.invoices.filter(x=>x.status==="Offen"||x.status==="Überfällig").length)}</div>
-<div class="grid2"><div class="panel"><div class="panelhead"><b>Nächste Termine</b><button class="btn outline" data-action="newappointment">+ Termin</button></div>${db.appointments.slice().sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time)).slice(0,6).map(x=>`<div class="timeline"><b>${esc(x.time||"—")}</b><div><strong>${esc(x.title)}</strong><small>${esc(x.date)} · ${esc(x.place||"—")}</small></div></div>`).join("")||'<p class="muted">Keine Termine.</p>'}</div>
-<div class="panel"><div class="panelhead"><b>Aufgaben</b><button class="btn outline" data-action="newtask">+ Aufgabe</button></div>${db.tasks.filter(x=>!x.done).slice(0,6).map(x=>`<label class="task"><input type="checkbox" data-task="${x.id}"><span><b>${esc(x.text)}</b><small>${esc(x.priority)}${x.due?" · "+esc(x.due):""}</small></span></label>`).join("")||'<p class="muted">Keine offenen Aufgaben.</p>'}</div></div>
-<div class="grid2"><div class="panel"><div class="panelhead"><b>Aktuelle Akten</b></div>${db.cases.slice(-6).reverse().map(x=>`<div class="listrow"><b>${esc(x.file_number)} · ${esc(x.title)}</b><small>${esc(db.clients.find(c=>c.id===x.client_id)?.name||"Unbekannt")} · ${badge(x.status)}</small><button class="mini" data-case="${x.id}">Öffnen</button></div>`).join("")||'<p class="muted">Keine Akten.</p>'}</div>
-<div class="panel"><div class="panelhead"><b>Letzte Aktivitäten</b></div>${db.activity.slice(0,7).map(x=>`<div class="activityline"><b>${esc(x.text)}</b><small>${esc(x.date)}</small></div>`).join("")||'<p class="muted">Noch keine Aktivitäten.</p>'}</div></div>`;
+ const [{data:inv=[]},{data:cash=[]},{data:emps=[]}] = await Promise.all([
+  supabase.from("vineyard_inventory").select("*").order("item_name"),
+  can("cash_view")?supabase.from("vineyard_cashbook").select("*").order("created_at",{ascending:false}):Promise.resolve({data:[]}),
+  can("employees_view")?supabase.from("vineyard_profiles").select("user_id,display_name,role_key,active,vineyard_roles:role_key(label)").order("display_name"):Promise.resolve({data:[]})
+ ]);
+ const balance=(cash||[]).reduce((s,x)=>s+(x.kind==="in"?1:-1)*Number(x.amount||0),0);
+ const low=(inv||[]).filter(x=>Number(x.quantity)<=Number(x.min_stock));
+ return intro("WEINGUT","Willkommen bei Donnerfaust Vineyards","Zentrale Übersicht für Lager, Kasse und Team.","inventory","Lager öffnen")+
+ '<div class="stats">'+stat("🍇","LAGERARTIKEL",inv.length)+stat("⚠","NIEDRIGER BESTAND",low.length)+stat("€","KASSENSTAND",can("cash_view")?money(balance):"—")+stat("♟","MITARBEITER",can("employees_view")?emps.length:"—")+"</div>"+
+ '<div class="grid2"><div class="panel"><div class="panelhead"><b>Bestandswarnungen</b></div>'+(low.map(x=>'<div class="row"><span>⚠️</span><div class="rowgrow"><b>'+esc(x.item_name)+"</b><small>"+x.quantity+" "+esc(x.unit)+" · Mindestbestand "+x.min_stock+"</small></div>"+badge("Niedrig")+"</div>").join("")||'<p class="muted">Alle Bestände sind im grünen Bereich.</p>')+
+ '</div><div class="panel"><div class="panelhead"><b>Letzte Kassenbewegungen</b></div>'+(can("cash_view")?cash.slice(0,6).map(x=>'<div class="row"><span>'+ (x.kind==="in"?"💰":"💸")+'</span><div class="rowgrow"><b>'+money(x.amount)+"</b><small>"+esc(x.description)+" · "+esc(x.category)+"</small></div>"+badge(x.kind==="in"?"OK":"Ausgabe")+"</div>").join(""):'<p class="muted">Keine Berechtigung für die Kasse.</p>')+"</div></div>";
 }
-async function cases(){return intro("AKTENVERWALTUNG","Akten & Fälle","Vollständige digitale Aktenverwaltung.","newcase","+ Neue Akte")+`<div class="panel"><input class="fullinput" id="caseq" placeholder="Aktenzeichen, Mandant, Fall oder Gericht suchen …"><div class="tablewrap"><table><thead><tr><th>AKTENZEICHEN</th><th>FALL</th><th>MANDANT</th><th>RECHTSGEBIET</th><th>GERICHT</th><th>FRIST</th><th>STATUS</th><th></th></tr></thead><tbody id="casetable">${caseRows(db.cases)}</tbody></table></div></div>`}
-const caseRows=a=>a.map(c=>`<tr><td><b>${esc(c.file_number)}</b></td><td>${esc(c.title)}<small>${esc(c.incident||"")}</small></td><td>${esc(db.clients.find(x=>x.id===c.client_id)?.name||"—")}</td><td>${esc(c.type)}</td><td>${esc(c.court||"—")}</td><td>${esc(c.deadline||"—")}</td><td>${badge(c.status)}</td><td><button class="mini" data-case="${c.id}">Öffnen</button></td></tr>`).join("")||'<tr><td colspan="8">Keine Akten vorhanden.</td></tr>';
-function caseDetail(id){const c=db.cases.find(x=>x.id===id),cl=db.clients.find(x=>x.id===c.client_id);return `<button class="mini" id="back">← Zurück</button><div class="intro"><div><div class="eyebrow">AKTE ${esc(c.file_number)}</div><h1>${esc(c.title)}</h1><p>${esc(cl?.name||"")} · ${esc(c.type)}</p></div><button class="btn dark" id="editcase">Akte bearbeiten</button></div>
-<div class="grid2"><div><div class="panel"><div class="panelhead"><b>Stammdaten</b></div>${field("Mandant",cl?.name)}${field("Aktenzeichen",c.file_number)}${field("Status",badge(c.status))}${field("Frist",c.deadline)}${field("Gegnerseite",c.opponent)}${field("Zuständiges Gericht",c.court)}</div><div class="panel"><b>Vorfall / Gegenstand</b><p>${esc(c.incident||"—")}</p><b>Hintergrund / Sachverhalt</b><p>${esc(c.background||"—")}</p><b>Interne Notiz</b><p>${esc(c.notes||"—")}</p></div></div>
-<div><div class="panel"><div class="panelhead"><b>Rechnungen</b><button class="btn outline" data-action="newinvoice">+ Rechnung</button></div>${db.invoices.filter(i=>i.case_id===c.id).map(i=>`<div class="listrow"><b>${esc(i.invoice_number)} · ${money(i.amount)}</b><small><button class="statusbutton" data-status="${i.id}">${badge(i.status)}</button></small></div>`).join("")||'<p class="muted">Keine Rechnungen.</p>'}</div>
-<div class="panel"><div class="panelhead"><b>Dokumente</b><button class="btn outline" data-action="newdocument">+ Dokument</button></div>${db.documents.filter(x=>x.case_id===c.id).map(x=>`<div class="listrow"><b>📄 ${esc(x.name)}</b><small>${esc(x.type)}</small></div>`).join("")||'<p class="muted">Keine Dokumente.</p>'}</div>
-<div class="panel"><div class="panelhead"><b>Notizen</b><button class="btn outline" data-action="newnote">+ Notiz</button></div>${db.notes.filter(x=>x.case_id===c.id).map(x=>`<div class="listrow"><b>${esc(x.title)}</b><small>${esc(x.text)}</small></div>`).join("")||'<p class="muted">Keine Notizen.</p>'}</div></div></div>`}
-const field=(k,v)=>`<div class="field"><small>${k}</small><b>${v||"—"}</b></div>`;
-function clients(){return intro("MANDANTEN","Mandanten","Stammdaten werden zentral in dieser Browser-Datenbank gespeichert.","newclient","+ Neuer Mandant")+`<div class="panel"><input class="fullinput" id="clientq" placeholder="Mandant suchen – bereits gespeicherte Mandanten werden vorgeschlagen …"></div><div class="cards" id="clientcards">${clientCards(db.clients)}</div>`}
-const clientCards=a=>a.map(x=>`<div class="client"><div class="avatar">${esc(x.name.split(" ").map(y=>y[0]).join("").slice(0,2))}</div><div><b>${esc(x.name)}</b><small>${esc(x.email||"")}</small><small>${esc(x.phone||"")}</small></div><button class="mini" data-client="${x.id}">Bearbeiten</button></div>`).join("")||'<p class="muted">Noch keine Mandanten.</p>';
-function invoices(){return intro("FINANZEN","Gebühren & Rechnungen","Neue Rechnungen werden automatisch als Offen gespeichert. Status ist anklickbar.","newinvoice","+ Rechnung")+`<div class="panel"><div class="tablewrap"><table><thead><tr><th>RECHNUNG</th><th>MANDANT</th><th>AKTE</th><th>BETRAG</th><th>STATUS</th></tr></thead><tbody>${db.invoices.map(i=>`<tr><td><b>${esc(i.invoice_number)}</b><small>${esc(i.date)}</small></td><td>${esc(db.clients.find(c=>c.id===i.client_id)?.name||"—")}</td><td>${esc(db.cases.find(c=>c.id===i.case_id)?.file_number||"—")}</td><td><b>${money(i.amount)}</b></td><td><button class="statusbutton" data-status="${i.id}">${badge(i.status)}</button></td></tr>`).join("")||'<tr><td colspan="5">Keine Rechnungen.</td></tr>'}</tbody></table></div></div>`}
-function calendar(){return intro("TERMINE","Kalender","Gerichtstermine, Gespräche und Wiedervorlagen.","newappointment","+ Termin")+`<div class="calendarlist">${db.appointments.slice().sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time)).map(x=>`<div class="calendaritem"><div class="caldate"><small>${esc(x.date)}</small><b>${esc(x.time||"")}</b></div><div><b>${esc(x.title)}</b><small>${esc(x.place||"")} · ${esc(db.cases.find(c=>c.id===x.case_id)?.file_number||"Allgemein")}</small></div><button class="mini" data-delete-appt="${x.id}">Löschen</button></div>`).join("")||'<p class="muted">Keine Termine.</p>'}</div>`}
-function tasks(){return intro("ORGANISATION","Aufgaben","Fristen und Arbeitsvorrat.","newtask","+ Aufgabe")+`<div class="panel">${db.tasks.map(x=>`<label class="task ${x.done?"done":""}"><input type="checkbox" data-task="${x.id}" ${x.done?"checked":""}><span><b>${esc(x.text)}</b><small>${x.done?"Erledigt":"Offen"} · ${esc(x.priority)} ${x.due?"· "+esc(x.due):""}</small></span></label>`).join("")||'<p class="muted">Keine Aufgaben.</p>'}</div>`}
-function documents(){return intro("AKTEN","Dokumente","Dokumentenverzeichnis.","newdocument","+ Dokumenteintrag")+`<div class="panel">${db.documents.map(x=>`<div class="listrow"><b>📄 ${esc(x.name)}</b><small>${esc(x.type)} · ${esc(db.cases.find(c=>c.id===x.case_id)?.file_number||"Allgemein")}</small><button class="mini" data-del-doc="${x.id}">Löschen</button></div>`).join("")||'<p class="muted">Keine Dokumente.</p>'}</div>`}
-function messages(){return intro("INTERN","Nachrichten","Interner Kanzlei-Chat.","newmessage","+ Nachricht")+`<div class="chat"><div class="chathead"><b>Kanzlei intern</b></div>${db.messages.map(x=>`<div class="message"><div class="avatar">TD</div><div><b>${esc(x.sender)}</b><small>${esc(x.date||"")}</small><p>${esc(x.text)}</p></div></div>`).join("")||'<p class="muted">Noch keine Nachrichten.</p>'}</div>`}
-function announcements(){return intro("KANZLEI","Ankündigungen","Interne Bekanntmachungen.","newannouncement","+ Ankündigung")+`<div class="announce">${db.announcements.map(x=>`<div class="panel"><div class="eyebrow">${esc(x.date)}</div><h3>${esc(x.title)}</h3><p>${esc(x.text)}</p><small>${esc(x.author)}</small></div>`).join("")||'<p class="muted">Keine Ankündigungen.</p>'}</div>`}
-function notifications(){let c=db.cases.filter(x=>x.deadline&&x.status!=="Abgeschlossen"),i=db.invoices.filter(x=>x.status==="Überfällig");return intro("SYSTEM","Benachrichtigungen","Fristen und Zahlungsstatus.")+`<div class="panel">${c.map(x=>`<div class="notification">🔔 <span><b>Frist ${esc(x.file_number)}</b><small>${esc(x.deadline)} · ${esc(x.title)}</small></span></div>`).join("")}${i.map(x=>`<div class="notification">💶 <span><b>${esc(x.invoice_number)} überfällig</b><small>${money(x.amount)} · ${esc(db.clients.find(c=>c.id===x.client_id)?.name||"")}</small></span></div>`).join("")}${!c.length&&!i.length?'<p class="muted">Keine kritischen Benachrichtigungen.</p>':""}</div>`}
-function notes(){return intro("ARBEIT","Notizen","Interne Notizen.","newnote","+ Notiz")+`<div class="cards">${db.notes.map(x=>`<div class="panel"><div class="eyebrow">${esc(db.cases.find(c=>c.id===x.case_id)?.file_number||"ALLGEMEIN")}</div><h3>${esc(x.title)}</h3><p>${esc(x.text)}</p></div>`).join("")||'<p class="muted">Keine Notizen.</p>'}</div>`}
-function search(){return intro("SUCHEN","Zentrale Suche","Suche über Mandanten, Akten und Rechnungen.")+`<div class="panel"><input class="fullinput" id="globalq" placeholder="Suchbegriff…"><div class="searchresults" id="results"></div></div>`}
-function employees(){return intro("VERWALTUNG","Mitarbeiter","Derzeit nur für den Kanzleiinhaber, später erweiterbar.","newemployee","+ Mitarbeiter")+`<div class="cards">${db.employees.map(x=>`<div class="client"><div class="avatar">${esc(x.name.slice(0,2))}</div><div><b>${esc(x.name)}</b><small>${esc(x.role)}</small><small>${esc(x.status)}</small></div></div>`).join("")}</div>`}
-function admin(){return intro("VERWALTUNG","Systemverwaltung","Deine Daten liegen lokal im Browser.")+`<div class="grid2"><div class="panel"><b>Datenbank & Backup</b><p class="muted">GitHub Pages benötigt keinen Server. Diese Version speichert deine Kanzleidaten lokal und bietet vollständige Sicherungen.</p><button class="btn dark" id="export">Daten sichern</button> <button class="btn outline" id="import">Sicherung wiederherstellen</button><input type="file" id="importfile" accept=".json" hidden></div><div class="panel"><b>System</b><p class="muted">GitHub Pages · Local-first · keine Node.js-Installation.</p><p class="muted">${db.clients.length} Mandanten · ${db.cases.length} Akten · ${db.invoices.length} Rechnungen</p></div></div>`}
-async function render(){
-let c=page==="dashboard"?await dashboard():page==="cases"?(caseId?caseDetail(caseId):await cases()):page==="clients"?clients():page==="invoices"?invoices():page==="calendar"?calendar():page==="tasks"?tasks():page==="documents"?documents():page==="messages"?messages():page==="announcements"?announcements():page==="notifications"?notifications():page==="notes"?notes():page==="search"?search():page==="employees"?employees():admin();
-shell(c);bind();
+async function inventory(){
+ const {data:items=[],error}=await supabase.from("vineyard_inventory").select("*").order("category").order("item_name");
+ if(error)return errorBox(error.message);
+ return intro("LAGER","Lagerübersicht","Bestände, Mindestbestände und Bewegungen zentral verwalten.",can("inventory_edit")?"newitem":null,can("inventory_edit")?"+ Artikel":null)+
+ '<div class="panel"><input class="fullinput" id="q" placeholder="Lagerartikel suchen …"></div><div class="itemgrid" id="items">'+itemCards(items)+"</div>";
 }
+function itemCards(items){return items.map(x=>'<div class="itemcard"><div class="eyebrow">'+esc(x.category)+" · "+esc(x.unit)+'</div><h3>'+esc(x.item_name)+'</h3><div class="qty '+(Number(x.quantity)<=Number(x.min_stock)?"low":"")+'">'+Number(x.quantity).toLocaleString("de-DE")+" "+esc(x.unit)+"</div><small class="muted">Mindestbestand: "+Number(x.min_stock).toLocaleString("de-DE")+" · Verkauf: "+money(x.sale_price)+"</small><div style="margin-top:12px">'+(can("inventory_edit")?'<button class="mini gold" data-stock="'+x.id+'">Bestand ändern</button> <button class="mini" data-edit-item="'+x.id+'">Bearbeiten</button>':"")+"</div></div>").join("")||'<p class="muted">Noch keine Lagerartikel.</p>'}
+async function cash(){
+ const {data:rows=[],error}=await supabase.from("vineyard_cashbook").select("*").order("created_at",{ascending:false});
+ if(error)return errorBox(error.message);
+ const balance=rows.reduce((s,x)=>s+(x.kind==="in"?1:-1)*Number(x.amount||0),0);
+ return intro("KASSE","Kassenbuch","Ein- und Auszahlungen mit Benutzerprotokoll.",can("cash_edit")?"newcash":null,can("cash_edit")?"+ Buchung":null)+
+ '<div class="stats">'+stat("€","AKTUELLER KASSENSTAND",money(balance))+stat("↗","EINNAHMEN",money(rows.filter(x=>x.kind==="in").reduce((s,x)=>s+Number(x.amount),0)))+stat("↘","AUSGABEN",money(rows.filter(x=>x.kind==="out").reduce((s,x)=>s+Number(x.amount),0)))+stat("▤","BUCHUNGEN",rows.length)+"</div>"+
+ '<div class="panel"><div class="tablewrap"><table><thead><tr><th>DATUM</th><th>ART</th><th>BETRAG</th><th>KATEGORIE</th><th>BESCHREIBUNG</th></tr></thead><tbody>'+rows.map(x=>'<tr><td>'+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</td><td>'+(x.kind==="in"?'<span class="badge good">Einnahme</span>':'<span class="badge bad">Ausgabe</span>')+'</td><td><b>'+money(x.amount)+"</b></td><td>"+esc(x.category)+"</td><td>"+esc(x.description)+"</td></tr>").join("")||'<tr><td colspan="5">Keine Buchungen.</td></tr>'+"</tbody></table></div></div>";
+}
+async function employees(){
+ const [{data:emps=[]},{data:roles=[]}]=await Promise.all([
+  supabase.from("vineyard_profiles").select("user_id,display_name,role_key,active,phone,vineyard_roles:role_key(label)").order("display_name"),
+  supabase.from("vineyard_roles").select("key,label,permissions").order("key")
+ ]);
+ return intro("TEAM","Mitarbeiter","Konten, Rollen und Rechte werden ausschließlich über den Master verwaltet.",can("employees_edit")?"newemployee":null,can("employees_edit")?"+ Mitarbeiter":null)+
+ '<div class="employeegrid">'+emps.map(x=>'<div class="employee"><div class="avatar">'+esc(initials(x.display_name))+'</div><div style="flex:1"><b>'+esc(x.display_name)+"</b><small>"+esc(x.vineyard_roles?.label||x.role_key)+" · "+(x.active?'<span class="good">Aktiv</span>':'<span class="bad">Deaktiviert</span>')+"</small>"+(x.phone?'<small>'+esc(x.phone)+"</small>":"")+'</div>'+(can("employees_edit")?'<button class="mini" data-edit-employee="'+x.user_id+'">Verwalten</button>':"")+"</div>").join("")+"</div>";
+}
+async function audit(){
+ const {data:rows=[],error}=await supabase.from("vineyard_audit_log").select("*,vineyard_profiles:actor_id(display_name)").order("created_at",{ascending:false}).limit(100);
+ if(error)return errorBox(error.message);
+ return intro("SICHERHEIT","Änderungsprotokoll","Nachvollziehbare Protokollierung wichtiger Verwaltungsvorgänge.")+
+ '<div class="panel">'+rows.map(x=>'<div class="row"><span>◷</span><div class="rowgrow"><b>'+esc(x.action)+"</b><small>"+esc(x.vineyard_profiles?.display_name||"SYSTEM")+" · "+esc(x.entity)+" · "+esc(new Date(x.created_at).toLocaleString("de-DE"))+"</small></div></div>").join("")||'<p class="muted">Noch keine Einträge.</p>'+"</div>";
+}
+function errorBox(t){return '<div class="panel"><b>Fehler</b><p class="muted">'+esc(t)+"</p></div>"}
+
+async function render(){let content=page==="dashboard"?await dashboard():page==="inventory"?await inventory():page==="cash"?await cash():page==="employees"?await employees():await audit();shell(content);bind()}
 function bind(){
-$$("[data-action]").forEach(b=>b.onclick=()=>action(b.dataset.action));
-$$("[data-case]").forEach(b=>b.onclick=()=>{caseId=b.dataset.case;page="cases";render()});
-$("#back")?.addEventListener("click",()=>{caseId=null;render()});
-$("#editcase")?.addEventListener("click",()=>openCaseForm(db.cases.find(x=>x.id===caseId)));
-$$("[data-status]").forEach(b=>b.onclick=()=>{const i=db.invoices.find(x=>x.id===b.dataset.status);const order={Offen:"Bezahlt",Bezahlt:"Überfällig",Überfällig:"Offen",Storniert:"Offen"};i.status=order[i.status]||"Offen";log(`Rechnung ${i.invoice_number}: Status → ${i.status}`);render()});
-$$("[data-task]").forEach(x=>x.onchange=()=>{let t=db.tasks.find(t=>t.id===x.dataset.task);t.done=x.checked;log(`Aufgabe ${t.text}: ${t.done?"erledigt":"offen"}`);render()});
-$("#caseq")?.addEventListener("input",e=>{$("#casetable").innerHTML=caseRows(db.cases.filter(c=>(c.file_number+" "+c.title+" "+c.court+" "+(db.clients.find(x=>x.id===c.client_id)?.name||"")).toLowerCase().includes(e.target.value.toLowerCase())))});
-$("#clientq")?.addEventListener("input",e=>$("#clientcards").innerHTML=clientCards(db.clients.filter(c=>c.name.toLowerCase().includes(e.target.value.toLowerCase()))));
-$$("[data-client]").forEach(b=>b.onclick=()=>{const c=db.clients.find(x=>x.id===b.dataset.client);modal("Mandant bearbeiten",[{label:"Name",name:"name",value:c.name,required:true},{label:"Geburtsdatum",name:"birth",type:"date",value:c.birth},{label:"Telefon",name:"phone",value:c.phone},{label:"E-Mail",name:"email",type:"email",value:c.email},{label:"Anschrift",name:"address",value:c.address},{label:"Beruf",name:"occupation",value:c.occupation},{label:"Notiz",name:"notes",type:"textarea",value:c.notes}],v=>{Object.assign(c,v);log(`Mandant geändert: ${c.name}`)})});
-$$("[data-delete-appt]").forEach(b=>b.onclick=()=>{if(confirm("Termin löschen?")){db.appointments=db.appointments.filter(x=>x.id!==b.dataset.deleteAppt);log("Termin gelöscht");render()}});
-$$("[data-del-doc]").forEach(b=>b.onclick=()=>{if(confirm("Dokumenteintrag löschen?")){db.documents=db.documents.filter(x=>x.id!==b.dataset.delDoc);log("Dokumenteintrag gelöscht");render()}});
-$("#globalq")?.addEventListener("input",e=>{let q=e.target.value.toLowerCase(),r=$("#results");if(!q){r.innerHTML="";return}let cc=db.clients.filter(x=>x.name.toLowerCase().includes(q)),cs=db.cases.filter(x=>(x.file_number+" "+x.title+" "+(db.clients.find(c=>c.id===x.client_id)?.name||"")).toLowerCase().includes(q)),ii=db.invoices.filter(x=>(x.invoice_number+" "+x.description).toLowerCase().includes(q));r.innerHTML=[...cc.map(x=>`<div class="result">👤 <b>${esc(x.name)}</b> · Mandant</div>`),...cs.map(x=>`<div class="result">⚖ <b>${esc(x.file_number)}</b> · ${esc(x.title)}</div>`),...ii.map(x=>`<div class="result">€ <b>${esc(x.invoice_number)}</b> · ${money(x.amount)} · ${badge(x.status)}</div>`)].join("")||'<p class="muted">Keine Treffer.</p>'});
-$("#export")?.addEventListener("click",()=>{const blob=new Blob([JSON.stringify(db,null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`kanzlei-backup-${today()}.json`;a.click();URL.revokeObjectURL(a.href)});
-$("#import")?.addEventListener("click",()=>$("#importfile").click());
-$("#importfile")?.addEventListener("change",e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const x=JSON.parse(r.result);if(!x.clients||!x.cases)throw Error();db=Object.assign(empty(),x);save();alert("Sicherung erfolgreich wiederhergestellt.");render()}catch{alert("Ungültige Sicherungsdatei.")}};r.readAsText(f)});
+ $$("[data-action]").forEach(b=>b.onclick=()=>action(b.dataset.action));
+ $("#q")?.addEventListener("input",async e=>{const {data=[]}=await supabase.from("vineyard_inventory").select("*").order("item_name");$("#items").innerHTML=itemCards(data.filter(x=>x.item_name.toLowerCase().includes(e.target.value.toLowerCase())))});
+ $$("[data-stock]").forEach(b=>b.onclick=()=>stockModal(b.dataset.stock));
+ $$("[data-edit-item]").forEach(b=>b.onclick=()=>itemModal(b.dataset.editItem));
+ $$("[data-edit-employee]").forEach(b=>b.onclick=()=>employeeModal(b.dataset.editEmployee));
 }
-render();
+function action(a){if(a==="newitem")itemModal();if(a==="newcash")cashModal();if(a==="newemployee")employeeModal()}
+
+function modal(title,body,onSubmit){
+ $("#modalroot").innerHTML='<div class="modalback"><div class="modal"><div class="modalhead"><b>'+title+'</b><button id="x">×</button></div><form id="mf">'+body+'<div class="actions"><button type="button" class="btn outline" id="cancel">Abbrechen</button><button class="btn primary">Speichern</button></div></form></div></div>';
+ $("#x").onclick=$("#cancel").onclick=()=>$("#modalroot").innerHTML="";
+ $("#mf").onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{await onSubmit(Object.fromEntries(new FormData(e.target)));$("#modalroot").innerHTML="";await render()}catch(err){alert(err.message||err)}finally{b.disabled=false}};
+}
+function field(label,name,type="text",value="",required=false){return '<label>'+label+'<input name="'+name+'" type="'+type+'" value="'+esc(value)+'" '+(required?"required":"")+"></label>"}
+function selectField(label,name,opts,value=""){return '<label>'+label+'<select name="'+name+'">'+opts.map(o=>'<option value="'+esc(o.value??o)+'" '+(String(value)===String(o.value??o)?"selected":"")+'>'+esc(o.label??o)+"</option>").join("")+"</select></label>"}
+
+async function itemModal(id){
+ let item=null;if(id){const {data}=await supabase.from("vineyard_inventory").select("*").eq("id",id).single();item=data}
+ modal(id?"Lagerartikel bearbeiten":"Neuer Lagerartikel",
+ field("Artikelname","item_name","text",item?.item_name||"",true)+selectField("Kategorie","category",["Rohstoff","Wein","Material","Verpackung","Sonstiges"],item?.category||"Sonstiges")+field("Einheit","unit","text",item?.unit||"Stück",true)+field("Bestand","quantity","number",item?.quantity??0)+field("Mindestbestand","min_stock","number",item?.min_stock??0)+field("Einkaufspreis","purchase_price","number",item?.purchase_price??0)+field("Verkaufspreis","sale_price","number",item?.sale_price??0),
+ async v=>{const patch={item_name:v.item_name.trim(),category:v.category,unit:v.unit.trim(),quantity:Number(v.quantity)||0,min_stock:Number(v.min_stock)||0,purchase_price:Number(v.purchase_price)||0,sale_price:Number(v.sale_price)||0,updated_at:new Date().toISOString(),updated_by:(await supabase.auth.getUser()).data.user.id};const r=id?await supabase.from("vineyard_inventory").update(patch).eq("id",id):await supabase.from("vineyard_inventory").insert(patch);if(r.error)throw r.error;await auditLog(id?"Lagerartikel geändert":"Lagerartikel angelegt","inventory",id||v.item_name,patch)})
+}
+async function stockModal(id){
+ const {data:item}=await supabase.from("vineyard_inventory").select("*").eq("id",id).single();
+ modal("Bestandsbewegung · "+item.item_name,selectField("Bewegung","mode",[{value:"in",label:"Zugang (+)"},{value:"out",label:"Abgang (-)"}])+field("Menge","amount","number","",true)+field("Grund","reason","text","",true),
+ async v=>{const amount=Math.abs(Number(v.amount)||0);if(!amount)throw Error("Menge muss größer als 0 sein.");const delta=v.mode==="in"?amount:-amount;if(Number(item.quantity)+delta<0)throw Error("Bestand kann nicht negativ werden.");const r1=await supabase.from("vineyard_inventory").update({quantity:Number(item.quantity)+delta,updated_at:new Date().toISOString(),updated_by:(await supabase.auth.getUser()).data.user.id}).eq("id",id);if(r1.error)throw r1.error;const r2=await supabase.from("vineyard_inventory_movements").insert({inventory_id:id,delta,reason:v.reason.trim(),created_by:(await supabase.auth.getUser()).data.user.id});if(r2.error)throw r2.error;await auditLog("Lagerbestand geändert","inventory",id,{delta,reason:v.reason.trim()})})
+}
+async function cashModal(){
+ modal("Kassenbuchung",selectField("Art","kind",[{value:"in",label:"Einnahme (+)"},{value:"out",label:"Ausgabe (-)"}])+selectField("Kategorie","category",["Weinverkauf","Trauben","Material","Lohn","Betriebskosten","Sonstiges"])+field("Betrag (€)","amount","number","",true)+field("Beschreibung","description","text","",true),
+ async v=>{const amount=Number(v.amount)||0;if(amount<=0)throw Error("Betrag muss größer als 0 sein.");const r=await supabase.from("vineyard_cashbook").insert({kind:v.kind,category:v.category,amount,description:v.description.trim(),created_by:(await supabase.auth.getUser()).data.user.id});if(r.error)throw r.error;await auditLog("Kassenbuchung","cashbook",null,{kind:v.kind,amount,category:v.category,description:v.description.trim()})})
+}
+async function employeeModal(id){
+ const [{data:e},{data:roles}]=await Promise.all([supabase.from("vineyard_profiles").select("*").eq("user_id",id||"00000000-0000-0000-0000-000000000000").maybeSingle(),supabase.from("vineyard_roles").select("key,label").order("key")]);
+ if(id){
+  modal("Mitarbeiter verwalten",field("Name","display_name","text",e?.display_name||"",true)+selectField("Rolle","role_key",roles,e?.role_key||"mitarbeiter")+field("Telefon","phone","text",e?.phone||"")+selectField("Status","active",[{value:"true",label:"Aktiv"},{value:"false",label:"Deaktiviert"}],String(e?.active!==false)),
+  async v=>{const r=await supabase.functions.invoke("vineyard-admin-users",{body:{action:"update",user_id:id,display_name:v.display_name,role_key:v.role_key,phone:v.phone,active:v.active==="true"}});if(r.error)throw r.error;await auditLog("Mitarbeiter geändert","employee",id,{role_key:v.role_key,active:v.active==="true"})})
+ }else{
+  modal("Neuen Mitarbeiter anlegen",field("Name","display_name","text","",true)+field("E-Mail","email","email","",true)+field("Startpasswort","password","password","",true)+selectField("Rolle","role_key",roles,"mitarbeiter")+field("Telefon","phone"),
+  async v=>{if(v.password.length<8)throw Error("Das Startpasswort muss mindestens 8 Zeichen haben.");const r=await supabase.functions.invoke("vineyard-admin-users",{body:{action:"create",display_name:v.display_name,email:v.email,password:v.password,role_key:v.role_key,phone:v.phone}});if(r.error)throw r.error;if(r.data?.error)throw Error(r.data.error);await auditLog("Mitarbeiter angelegt","employee",r.data.user_id,{email:v.email,role_key:v.role_key})})
+ }
+}
+async function auditLog(action,entity,entityId,details){const user=(await supabase.auth.getUser()).data.user;await supabase.from("vineyard_audit_log").insert({actor_id:user.id,action,entity,entity_id:entityId?String(entityId):null,details:details||{}})}
+init();
