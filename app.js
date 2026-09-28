@@ -331,4 +331,4 @@ function showBootError(err){
 }
 window.addEventListener("error",e=>{if(!window.__vineyardBooted&&e.error)showBootError(e.error)});
 window.addEventListener("unhandledrejection",e=>{if(!window.__vineyardBooted)showBootError(e.reason||Error("Unbekannter Startfehler"))});
-init().then(()=>{window.__vineyardBooted=true}).catch(showBootError);
+init().then(()=>{window.__vineyardBooted=true;window.__vineyardAppFinished=true}).catch(err=>{window.__vineyardAppFinished=true;showBootError(err)});
