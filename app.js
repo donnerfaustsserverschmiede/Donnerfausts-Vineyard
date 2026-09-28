@@ -333,17 +333,18 @@ async function deleteRecipe(id){
  if(r.error)return alert(r.error.message);
  await render();
 }
-async function invoiceModal(){
+async function invoiceModal(id){
  $("#modalroot").innerHTML='<div class="modalback"><div class="modal"><div class="modalhead"><b>Rechnung wird vorbereitet</b></div><p class="muted">Lagerartikel werden geladen…</p></div></div>';
- const {data:inventory=[],error}=await supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category,purchase_price,sale_price").order("category").order("item_name");
+ const [{data:inventory=[],error},{data:existingInvoice}]=await Promise.all([supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category,purchase_price,sale_price").order("category").order("item_name"),id?supabaseClient.from("vineyard_invoices").select("id,invoice_type,partner_name,status").eq("id",id).single():Promise.resolve({data:null})]);
  if(error)throw error;
+ if(id&&!existingInvoice)throw Error("Rechnung nicht gefunden.");
  if(!inventory.length)throw Error("Lege zuerst Artikel im Lager an. Nur dort hinterlegte Artikel können auf Rechnungen ausgewählt werden.");
  const typeOptions=[{value:"Verkauf",label:"🛒 Verkauf"},{value:"Einkauf",label:"📦 Einkauf"},{value:"Bestellung",label:"📋 Bestellung"}];
- const rows=[{inventory_id:inventory[0].id,quantity:1,unit_price:0}];
+ let existingItems=[];if(id){const {data:its,error:ie}=await supabaseClient.from("vineyard_invoice_items").select("inventory_id,quantity,unit_price").eq("invoice_id",id).order("created_at");if(ie)throw ie;existingItems=its||[]}const rows=existingItems.length?existingItems.map(x=>({inventory_id:x.inventory_id,quantity:x.quantity,unit_price:x.unit_price})):[{inventory_id:inventory[0].id,quantity:1,unit_price:0}];
  const defaultPrice=(item,type)=>type==="Einkauf"?Number(item?.purchase_price||0):Number(item?.sale_price||0);
- $( "#modalroot").innerHTML='<div class="modalback"><div class="modal invoiceModal"><div class="modalhead"><b>Neue Rechnung</b><button id="x">×</button></div><form id="invoiceform">'+
- selectField("Handelsvorgang","invoice_type",typeOptions,"Verkauf")+
- field("Handelspartner","partner_name","text","",true)+
+ $( "#modalroot").innerHTML='<div class="modalback"><div class="modal invoiceModal"><div class="modalhead"><b>${id?"Rechnung bearbeiten":"Neue Rechnung"}</b><button id="x">×</button></div><form id="invoiceform">'+
+ selectField("Handelsvorgang","invoice_type",typeOptions,existingInvoice?.invoice_type||"Verkauf")+selectField("Status","status",[{value:"Offen",label:"Offen"},{value:"Bezahlt",label:"Bezahlt"},{value:"Storniert",label:"Storniert"}],existingInvoice?.status||"Offen")+
+ field("Handelspartner","partner_name","text",existingInvoice?.partner_name||"",true)+
  '<div class="recipeformhead"><b>Gehandelte Positionen</b><button type="button" class="mini gold" id="addinvoiceitem">+ Position</button></div><div id="invoiceitemsform"></div>'+
  '<div class="invoiceTotal" id="invoiceTotal"></div>'+
  '<div class="actions"><button type="button" class="btn outline" id="cancel">Abbrechen</button><button class="btn primary">Rechnung speichern</button></div></form></div></div>';
@@ -376,7 +377,7 @@ async function invoiceModal(){
    rows.forEach((r,n)=>{r.quantity=Number($("[data-iq='"+n+"']").value);r.unit_price=Number($("[data-ip='"+n+"']").value)});
    if(!rows.length||rows.some(r=>!r.inventory_id||!Number.isFinite(r.quantity)||r.quantity<=0||!Number.isFinite(r.unit_price)||r.unit_price<0))throw Error("Bitte Positionen, Mengen und Preise prüfen.");
    const partner=e.target.partner_name.value.trim();if(!partner)throw Error("Bitte einen Handelspartner angeben.");
-   const r=await supabaseClient.rpc("vineyard_create_invoice",{p_type:typeEl.value,p_partner_name:partner,p_items:rows});
+   const r=await supabaseClient.rpc("vineyard_save_invoice",{p_invoice_id:id||null,p_type:typeEl.value,p_partner_name:partner,p_status:statusEl.value,p_items:rows});
    if(r.error)throw r.error;
    close();await render();
   }catch(err){alert(err.message||String(err))}finally{b.disabled=false}
