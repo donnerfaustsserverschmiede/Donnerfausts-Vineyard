@@ -3,13 +3,29 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#1f3d2b">
+<meta name="theme-color" content="#0b1220">
 <title>Donnerfausts Vineyard</title>
 <style>
-body{margin:0;font-family:system-ui,sans-serif;background:#f6f1e7;color:#243024;display:grid;place-items:center;min-height:100vh}
+body{margin:0;font-family:system-ui,sans-serif;background:#f5f0e5;color:#17202a;display:grid;place-items:center;min-height:100vh}
 main{max-width:520px;margin:24px;padding:32px;background:white;border-radius:20px;box-shadow:0 12px 40px #0001;text-align:center}
-h1{margin:0 0 10px}p{color:#687268}a{display:inline-block;margin-top:18px;padding:12px 18px;border-radius:12px;background:#1f3d2b;color:white;text-decoration:none}
+.logo{width:72px;height:72px;object-fit:cover;border-radius:16px}
+h1{margin:14px 0 10px;font-family:Georgia,serif}p{color:#687078}
+a{display:inline-block;margin-top:18px;padding:12px 18px;border-radius:12px;background:#0b1220;color:#fff;text-decoration:none}
 </style>
 </head>
-<body><main><div style="font-size:42px">🍇</div><h1>Seite nicht gefunden</h1><p>Diese Seite gehört nicht zur Verwaltung von Donnerfausts Vineyard.</p><a href="./">Zur Vineyard-Verwaltung</a></main></body>
+<body><main>
+<img class="logo" src="./assets/donnerfaust-vineyards-logo.jpg" alt="Donnerfaust Vineyards">
+<h1>Seite nicht gefunden</h1>
+<p>Diese Seite gehört nicht zur Verwaltung von Donnerfausts Vineyard.</p>
+<a href="./">Zur Vineyard-Verwaltung</a>
+</main>
+<script>
+(function(){
+  var p=location.pathname;
+  var base="/Donnerfausts-Vineyard/";
+  if(p.endsWith("/bestellung.html")) location.replace(base+"bestellung/");
+  else if(p.endsWith("/bestellstatus.html")) location.replace(base+"bestellstatus/"+location.search);
+})();
+</script>
+</body>
 </html>
