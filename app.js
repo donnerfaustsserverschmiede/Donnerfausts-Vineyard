@@ -211,7 +211,7 @@ async function orders(){
  const open=rows.filter(x=>x.status==="Eingegangen"||x.status==="In Bearbeitung");
  const recent=rows.filter(x=>x.status==="Bestellung abgeschlossen").slice(0,10);
  const totalOpen=open.reduce((n,x)=>n+Number(x.total||0),0);
- const formLink=new URL("./bestellung/",location.href).href;
+ const formLink=new URL("./bestellung.html",location.href).href;
  const card=x=>'<div class="ordercard"><div class="ordercardtop"><div><span class="orderNo">'+esc(x.order_number)+'</span>'+badge(x.status)+'</div><b>'+money(x.total)+'</b></div>'+
  '<div class="ordercustomer"><strong>'+esc(x.customer_name)+'</strong><span>'+esc(x.customer_email)+'</span>'+(x.customer_phone?'<span>'+esc(x.customer_phone)+'</span>':'')+'</div>'+
  '<div class="ordermeta"><span>Erstellt: '+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</span><span>Mitarbeiter: '+esc(x.employee_name)+'</span>'+(x.commission_amount?'<span>Provision: '+money(x.commission_amount)+'</span>':'')+'</div>'+
