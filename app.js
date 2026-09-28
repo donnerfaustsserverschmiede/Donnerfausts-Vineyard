@@ -12,6 +12,56 @@ const dateTime=()=>new Date().toLocaleString("de-DE");
 let profile=null, role=null, page="dashboard";
 let presenceChannel=null, onlineCount=0;
 
+function startPresence(){
+  try{
+    if(!profile?.user_id || !supabaseClient?.channel)return;
+    if(presenceChannel){
+      try{supabaseClient.removeChannel(presenceChannel)}catch(_){}
+      presenceChannel=null;
+    }
+    const channel=supabaseClient.channel("donnerfaust-vineyards-online",{config:{presence:{key:String(profile.user_id)}}});
+    const updateOnline=()=>{
+      try{
+        const state=channel.presenceState()||{};
+        const ids=new Set();
+        Object.keys(state).forEach(k=>{
+          (state[k]||[]).forEach(entry=>{
+            const id=String(entry?.user_id||k);
+            if(id)ids.add(id);
+          });
+        });
+        onlineCount=ids.size||1;
+        const el=document.querySelector("#onlineCount");
+        if(el)el.textContent=String(onlineCount);
+      }catch(_){
+        onlineCount=1;
+        const el=document.querySelector("#onlineCount");
+        if(el)el.textContent="1";
+      }
+    };
+    channel
+      .on("presence",{event:"sync"},updateOnline)
+      .on("presence",{event:"join"},updateOnline)
+      .on("presence",{event:"leave"},updateOnline)
+      .subscribe(async status=>{
+        if(status!=="SUBSCRIBED")return;
+        try{
+          await channel.track({user_id:String(profile.user_id),display_name:String(profile.display_name||"")});
+          updateOnline();
+        }catch(_){
+          onlineCount=1;
+          const el=document.querySelector("#onlineCount");
+          if(el)el.textContent="1";
+        }
+      });
+    presenceChannel=channel;
+  }catch(_){
+    onlineCount=1;
+    const el=document.querySelector("#onlineCount");
+    if(el)el.textContent="1";
+  }
+}
+
 const NAV=[
 ["dashboard","⌂","Übersicht","dashboard"],
 ["invoices","▤","Rechnungen","invoice_view"],
