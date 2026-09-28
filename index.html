@@ -39,6 +39,10 @@ window.setTimeout(function(){
   }
 },12000);
 </script>
-<script src="./app.js?v=commission3" onload="window.__vineyardAppLoaded=true" onerror="vineyardDiagnostic('Donnerfaust Vineyards – app.js nicht geladen','Die Datei app.js konnte von GitHub Pages nicht geladen werden.')"></script>
+<script>
+  // Startup compatibility guard: protects against a cached older app.js that calls startPresence before its implementation is available.
+  window.startPresence = window.startPresence || function(){};
+</script>
+<script src="./app.js?v=presencefix20260928b" onload="window.__vineyardAppLoaded=true" onerror="vineyardDiagnostic('Donnerfaust Vineyards – app.js nicht geladen','Die Datei app.js konnte von GitHub Pages nicht geladen werden.')"></script>
 </body>
 </html>
