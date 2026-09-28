@@ -11,7 +11,7 @@ let presenceChannel=null, onlineCount=0;
 
 const NAV=[
 ["dashboard","⌂","Übersicht","dashboard"],
-["invoices","▤","Rechnungen","dashboard"],
+["invoices","▤","Rechnungen","invoice_view"],
 ["orders","🛒","Bestellungen","dashboard"],
 ["inventory","▦","Lager","inventory_view"],
 ["recipes","♜","Rezepte","inventory_view"],
@@ -25,6 +25,8 @@ function badge(s){return '<span class="badge '+(s==="Bezahlt"||s==="OK"?"good":s
 
 async function init(){
  if(!window.supabase||typeof window.supabase.createClient!=="function")throw Error("Die Supabase-Bibliothek konnte nicht geladen werden.");
+ const publicToken=new URLSearchParams(location.search).get("rechnung");
+ if(publicToken)return publicInvoice(publicToken);
  const sessionResult=await Promise.race([
   supabaseClient.auth.getSession(),
   new Promise((_,reject)=>setTimeout(()=>reject(Error("Die Anmeldung konnte nicht innerhalb von 10 Sekunden initialisiert werden.")),10000))
@@ -112,7 +114,17 @@ async function dashboard(){
   </div>`;
 }
 
-async function invoices(){return '<div class="placeholder"><div class="placeholdericon">▤</div><div class="eyebrow">RECHNUNGEN</div><h1>Rechnungsmenü</h1><p>Hier werden offene Rechnungen und Zahlungen verwaltet.</p><div class="placeholderstate">Noch keine Rechnungen hinterlegt.</div></div>';}
+async function invoices(){
+ const {data:rows=[],error}=await supabaseClient.from("vineyard_invoices").select("id,invoice_number,invoice_type,partner_name,status,created_at,created_by").order("created_at",{ascending:false});
+ if(error)return errorBox(error.message);
+ const open=rows.filter(x=>x.status==="Offen").length;
+ const total=rows.reduce((s,x)=>s+1,0);
+ return intro("HANDELSNACHWEISE","Rechnungen","Verkauf, Einkauf und Bestellungen als nachvollziehbare Handelsnachweise verwalten.",can("invoice_edit")?"newinvoice":null,can("invoice_edit")?"+ Rechnung erstellen":null)+
+ '<div class="stats">'+stat("▤","OFFENE RECHNUNGEN",open)+stat("€","HANDELSVORGÄNGE",total)+stat("↗","VERKAUF",rows.filter(x=>x.invoice_type==="Verkauf").length)+stat("↙","EINKAUF",rows.filter(x=>x.invoice_type==="Einkauf").length)+'</div>'+
+ '<div class="panel"><div class="tablewrap"><table><thead><tr><th>NUMMER</th><th>ART</th><th>HANDELSPARTNER</th><th>DATUM</th><th>STATUS</th><th></th></tr></thead><tbody>'+
+ (rows.map(x=>'<tr><td><b>'+esc(x.invoice_number)+'</b></td><td>'+esc(x.invoice_type)+'</td><td>'+esc(x.partner_name)+'</td><td>'+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</td><td>'+badge(x.status)+'</td><td><button class="mini gold" data-share-invoice="'+x.id+'">Teilen</button></td></tr>').join("")||'<tr><td colspan="6">Noch keine Rechnungen vorhanden.</td></tr>')+
+ '</tbody></table></div></div>';
+}
 async function orders(){return '<div class="placeholder"><div class="placeholdericon">🛒</div><div class="eyebrow">BESTELLUNGEN</div><h1>Bestellungsmenü</h1><p>Hier werden offene Bestellungen und Lieferungen verwaltet.</p><div class="placeholderstate">Noch keine Bestellungen hinterlegt.</div></div>';}
 function startPresence(){
  if(presenceChannel)return;
@@ -201,9 +213,10 @@ function bind(){
  $("[data-edit-item]").forEach(b=>b.onclick=()=>itemModal(b.dataset.editItem));
  $("[data-edit-recipe]").forEach(b=>b.onclick=()=>recipeModal(b.dataset.editRecipe));
  $("[data-delete-recipe]").forEach(b=>b.onclick=()=>deleteRecipe(b.dataset.deleteRecipe));
- $$("[data-edit-employee]").forEach(b=>b.onclick=()=>employeeModal(b.dataset.editEmployee));
+ $("[data-edit-employee]").forEach(b=>b.onclick=()=>employeeModal(b.dataset.editEmployee));
+ $("[data-share-invoice]").forEach(b=>b.onclick=()=>shareInvoice(b.dataset.shareInvoice));
 }
-function action(a){if(a==="openinventory"){page="inventory";render()}if(a==="newitem")itemModal();if(a==="newrecipe")recipeModal();if(a==="newcash")cashModal();if(a==="newemployee")employeeModal()}
+function action(a){if(a==="openinventory"){page="inventory";render()}if(a==="newitem")itemModal();if(a==="newrecipe")recipeModal();if(a==="newcash")cashModal();if(a==="newemployee")employeeModal();if(a==="newinvoice")invoiceModal()}
 
 function modal(title,body,onSubmit){
  $("#modalroot").innerHTML='<div class="modalback"><div class="modal"><div class="modalhead"><b>'+title+'</b><button id="x">×</button></div><form id="mf">'+body+'<div class="actions"><button type="button" class="btn outline" id="cancel">Abbrechen</button><button class="btn primary">Speichern</button></div></form></div></div>';
@@ -293,6 +306,68 @@ async function deleteRecipe(id){
  const r=await supabaseClient.rpc("vineyard_delete_recipe",{p_recipe_id:id});
  if(r.error)return alert(r.error.message);
  await render();
+}
+async function invoiceModal(){
+ const {data:inventory=[],error}=await supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category,purchase_price,sale_price").order("category").order("item_name");
+ if(error)throw error;
+ if(!inventory.length)throw Error("Lege zuerst Artikel im Lager an. Nur dort hinterlegte Artikel können auf Rechnungen ausgewählt werden.");
+ const typeOptions=[{value:"Verkauf",label:"🛒 Verkauf"},{value:"Einkauf",label:"📦 Einkauf"},{value:"Bestellung",label:"📋 Bestellung"}];
+ const rows=[{inventory_id:inventory[0].id,quantity:1,unit_price:0}];
+ const defaultPrice=(item,type)=>type==="Einkauf"?Number(item?.purchase_price||0):Number(item?.sale_price||0);
+ $( "#modalroot").innerHTML='<div class="modalback"><div class="modal invoiceModal"><div class="modalhead"><b>Neue Rechnung</b><button id="x">×</button></div><form id="invoiceform">'+
+ selectField("Handelsvorgang","invoice_type",typeOptions,"Verkauf")+
+ field("Handelspartner","partner_name","text","",true)+
+ '<div class="recipeformhead"><b>Gehandelte Positionen</b><button type="button" class="mini gold" id="addinvoiceitem">+ Position</button></div><div id="invoiceitemsform"></div>'+
+ '<div class="invoiceTotal" id="invoiceTotal"></div>'+
+ '<div class="actions"><button type="button" class="btn outline" id="cancel">Abbrechen</button><button class="btn primary">Rechnung speichern</button></div></form></div></div>';
+ const close=()=>$("#modalroot").innerHTML="";
+ $("#x").onclick=$("#cancel").onclick=close;
+ const typeEl=$("#invoiceform [name=invoice_type]");
+ const draw=()=>{
+  $("#invoiceitemsform").innerHTML=rows.map((r,n)=>'<div class="invoiceformrow"><select data-ii="'+n+'" class="invoiceitem">'+inventory.map(x=>'<option value="'+esc(x.id)+'" '+(x.id===r.inventory_id?"selected":"")+'>'+esc(x.item_name)+' · '+esc(x.unit)+'</option>').join("")+'</select><input data-iq="'+n+'" class="invoicequantity" type="number" min="0.0001" step="any" value="'+esc(r.quantity)+'" required><input data-ip="'+n+'" class="invoiceprice" type="number" min="0" step="0.01" value="'+esc(r.unit_price)+'" required><button type="button" class="mini" data-remove-ii="'+n+'">×</button></div>').join("");
+  const refresh=()=>{
+   let sum=0;
+   rows.forEach((r,n)=>{const q=Number($("[data-iq='"+n+"']")?.value)||0,p=Number($("[data-ip='"+n+"']")?.value)||0;sum+=q*p;});
+   $("#invoiceTotal").innerHTML="<span>Gesamtsumme</span><b>"+money(sum)+"</b>";
+  };
+  $(".invoiceitem").forEach(s=>s.onchange=()=>{const n=Number(s.dataset.ii),item=inventory.find(x=>x.id===s.value);rows[n].inventory_id=s.value;rows[n].unit_price=defaultPrice(item,typeEl.value);$("[data-ip='"+n+"']").value=rows[n].unit_price.toFixed(2);refresh()});
+  $(".invoicequantity").forEach(i=>i.oninput=refresh);
+  $(".invoiceprice").forEach(i=>i.oninput=refresh);
+  $(".invoicequantity").forEach(i=>i.onchange=()=>rows[Number(i.dataset.iq)].quantity=Number(i.value));
+  $(".invoiceprice").forEach(i=>i.onchange=()=>rows[Number(i.dataset.ip)].unit_price=Number(i.value));
+  $(".invoiceitem").forEach(s=>{const n=Number(s.dataset.ii);if(!rows[n].unit_price){const item=inventory.find(x=>x.id===s.value);rows[n].unit_price=defaultPrice(item,typeEl.value);$("[data-ip='"+n+"']").value=rows[n].unit_price.toFixed(2)}});
+  $(".invoiceitem").forEach(s=>s.oninput=refresh);
+  $(".invoiceformrow [data-remove-ii]").forEach(b=>b.onclick=()=>{rows.splice(Number(b.dataset.removeIi),1);if(!rows.length)rows.push({inventory_id:inventory[0].id,quantity:1,unit_price:defaultPrice(inventory[0],typeEl.value)});draw()});
+  refresh();
+ };
+ $("#addinvoiceitem").onclick=()=>{const item=inventory[0];rows.push({inventory_id:item.id,quantity:1,unit_price:defaultPrice(item,typeEl.value)});draw()};
+ typeEl.onchange=()=>{rows.forEach(r=>{const item=inventory.find(x=>x.id===r.inventory_id);r.unit_price=defaultPrice(item,typeEl.value)});draw()};
+ rows[0].unit_price=defaultPrice(inventory[0],"Verkauf");draw();
+ $("#invoiceform").onsubmit=async e=>{
+  e.preventDefault();const b=e.submitter;b.disabled=true;
+  try{
+   rows.forEach((r,n)=>{r.quantity=Number($("[data-iq='"+n+"']").value);r.unit_price=Number($("[data-ip='"+n+"']").value)});
+   if(!rows.length||rows.some(r=>!r.inventory_id||!Number.isFinite(r.quantity)||r.quantity<=0||!Number.isFinite(r.unit_price)||r.unit_price<0))throw Error("Bitte Positionen, Mengen und Preise prüfen.");
+   const partner=e.target.partner_name.value.trim();if(!partner)throw Error("Bitte einen Handelspartner angeben.");
+   const r=await supabaseClient.rpc("vineyard_create_invoice",{p_type:typeEl.value,p_partner_name:partner,p_items:rows});
+   if(r.error)throw r.error;
+   close();await render();
+  }catch(err){alert(err.message||String(err))}finally{b.disabled=false}
+ };
+}
+async function shareInvoice(id){
+ const {data,error}=await supabaseClient.from("vineyard_invoices").select("invoice_number,share_token").eq("id",id).single();
+ if(error)throw error;
+ const link=location.origin+location.pathname+"?rechnung="+encodeURIComponent(data.share_token);
+ try{await navigator.clipboard.writeText(link);alert("Rechnungslink wurde kopiert.\n\n"+link)}catch(_){prompt("Rechnungslink:",link)}
+}
+async function publicInvoice(token){
+ const {data,error}=await supabaseClient.rpc("vineyard_public_invoice",{p_share_token:token});
+ const invoice=data?.invoice;
+ if(error||!invoice)return document.body.innerHTML='<div class="publicInvoice"><div class="publicInvoiceBox"><div class="brandmark">🍇</div><h1>Rechnung nicht verfügbar</h1><p>Der Link ist ungültig oder die Rechnung wurde storniert.</p></div></div>';
+ const items=Array.isArray(data.items)?data.items:[];
+ const total=items.reduce((s,x)=>s+Number(x.line_total||0),0);
+ document.body.innerHTML='<main class="publicInvoice"><div class="publicInvoiceBox"><div class="publicHead"><div><div class="eyebrow">DONNERFAUST VINEYARDS</div><h1>Rechnung</h1><p>Schreibgeschützter Handelsnachweis</p></div><div class="publicNumber">'+esc(invoice.invoice_number)+'</div></div><div class="publicMeta"><div><small>VORGANG</small><b>'+esc(invoice.invoice_type)+'</b></div><div><small>HANDELSPARTNER</small><b>'+esc(invoice.partner_name)+'</b></div><div><small>DATUM</small><b>'+esc(new Date(invoice.created_at).toLocaleString("de-DE"))+'</b></div><div><small>STATUS</small><b>'+esc(invoice.status)+'</b></div></div><div class="publicTable"><table><thead><tr><th>Artikel</th><th>Menge</th><th>Einzelpreis</th><th>Gesamt</th></tr></thead><tbody>'+items.map(x=>'<tr><td>'+esc(x.item_name)+'</td><td>'+Number(x.quantity).toLocaleString("de-DE")+' '+esc(x.unit)+'</td><td>'+money(x.unit_price)+'</td><td>'+money(x.line_total)+'</td></tr>').join("")+'</tbody></table></div><div class="publicTotal"><span>Gesamtsumme</span><b>'+money(total)+'</b></div><p class="publicReadonly">Diese Ansicht ist schreibgeschützt. Es besteht kein Zugriff auf die interne Vineyard-Verwaltung.</p></div></main>';
 }
 async function stockModal(id){
  const {data:item}=await supabaseClient.from("vineyard_inventory").select("*").eq("id",id).single();
