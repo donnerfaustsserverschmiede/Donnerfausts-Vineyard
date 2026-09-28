@@ -342,7 +342,7 @@ async function invoiceModal(id){
  const typeOptions=[{value:"Verkauf",label:"🛒 Verkauf"},{value:"Einkauf",label:"📦 Einkauf"},{value:"Bestellung",label:"📋 Bestellung"}];
  let existingItems=[];if(id){const {data:its,error:ie}=await supabaseClient.from("vineyard_invoice_items").select("inventory_id,quantity,unit_price").eq("invoice_id",id).order("created_at");if(ie)throw ie;existingItems=its||[]}const rows=existingItems.length?existingItems.map(x=>({inventory_id:x.inventory_id,quantity:x.quantity,unit_price:x.unit_price})):[{inventory_id:inventory[0].id,quantity:1,unit_price:0}];
  const defaultPrice=(item,type)=>type==="Einkauf"?Number(item?.purchase_price||0):Number(item?.sale_price||0);
- $( "#modalroot").innerHTML='<div class="modalback"><div class="modal invoiceModal"><div class="modalhead"><b>${id?"Rechnung bearbeiten":"Neue Rechnung"}</b><button id="x">×</button></div><form id="invoiceform">'+
+ $( "#modalroot").innerHTML='<div class="modalback"><div class="modal invoiceModal"><div class="modalhead"><b>'+(id?"Rechnung bearbeiten":"Neue Rechnung")+'</b><button id="x">×</button></div><form id="invoiceform">'+
  selectField("Handelsvorgang","invoice_type",typeOptions,existingInvoice?.invoice_type||"Verkauf")+selectField("Status","status",[{value:"Offen",label:"Offen"},{value:"Bezahlt",label:"Bezahlt"},{value:"Storniert",label:"Storniert"}],existingInvoice?.status||"Offen")+
  field("Handelspartner","partner_name","text",existingInvoice?.partner_name||"",true)+
  '<div class="recipeformhead"><b>Gehandelte Positionen</b><button type="button" class="mini gold" id="addinvoiceitem">+ Position</button></div><div id="invoiceitemsform"></div>'+
