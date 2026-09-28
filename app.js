@@ -564,7 +564,7 @@ async function publicOrderForm(){
  '<div id="publicOrderItems"></div><div class="invoiceTotal" id="publicOrderTotal"></div>'+
  '<div class="actions"><button class="btn gold">Bestellung verbindlich absenden</button></div></form>');
  const draw=()=>{
-  $("#publicOrderItems").innerHTML=rows.map((r,n)=>'<div class="invoiceformrow"><select data-poi="'+n+'">'+products.map(p=>'<option value="'+esc(p.id)+'" '+(p.id===r.inventory_id?"selected":"")+'>'+esc(p.item_name)+' · '+esc(p.unit)+' · '+money(p.sale_price)+'</option>').join("")+'</select><input data-poq="'+n+'" type="number" min="0.0001" step="any" value="'+esc(r.quantity)+'" required><button type="button" class="mini" data-remove-poi="'+n+'">×</button></div>').join("");
+  $("#publicOrderItems").innerHTML=rows.map((r,n)=>'<div class="publicOrderRow"><select data-poi="'+n+'">'+products.map(p=>'<option value="'+esc(p.id)+'" '+(p.id===r.inventory_id?"selected":"")+'>'+esc(p.item_name)+' · '+esc(p.unit)+' · '+money(p.sale_price)+'</option>').join("")+'</select><input data-poq="'+n+'" type="number" min="0.0001" step="any" value="'+esc(r.quantity)+'" required><button type="button" class="mini" data-remove-poi="'+n+'">×</button></div>').join("");
   const refresh=()=>{
    let sum=0;
    rows.forEach((r,n)=>{const q=Number($("[data-poq='"+n+"']")?.value)||0;const p=products.find(x=>x.id===r.inventory_id);sum+=q*Number(p?.sale_price||0)});
