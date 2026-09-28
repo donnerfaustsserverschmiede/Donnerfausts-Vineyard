@@ -81,6 +81,7 @@ const NAV=[
 ["inventory","▦","Lager","inventory_view"],
 ["recipes","♜","Rezepte","inventory_view"],
 ["production","⚗","Produktion","inventory_view"],
+["trades","⇄","Ein- und Verkauf","trade_edit"],
 ["cash","$","Kasse","cash_view"],
 ["employees","♟","Mitarbeiter","employees_view"],
 ["audit","◷","Protokoll","audit_view"],
@@ -157,7 +158,7 @@ function shell(content){
  document.body.innerHTML=`<aside class="sidebar" id="sidebar"><div class="brand"><div class="brandmark"><img src="./assets/donnerfaust-vineyards-logo.jpg" alt=""></div><div><b>Donnerfaust Barrelworks</b><small>Interne Verwaltung</small></div></div><nav>${nav}</nav><div class="sidefoot"><span class="online"></span>${esc(profile.display_name)} · ${esc(role.label)}<br><button id="logout" class="mini" style="margin-top:9px">Abmelden</button></div></aside><main class="main"><header class="top"><div class="topTitle"><img class="topbrandlogo" src="./assets/donnerfaust-vineyards-logo.jpg" alt="Donnerfaust Barrelworks"><div><button class="hamb" id="hamb">☰</button><span class="crumb">DONNERFAUST BARRELWORKS</span><h2>${esc(pageTitle())}</h2></div></div><div class="topright"><span class="online"></span><b>${esc(profile.display_name)}</b><span class="avatar">${esc(initials(profile.display_name))}</span></div></header><section class="content">${content}</section></main><div id="modalroot"></div>`;
  $$(".nav").forEach(b=>b.onclick=()=>{page=b.dataset.page;render();});$("#hamb").onclick=()=>$("#sidebar").classList.toggle("open");$("#logout").onclick=()=>supabaseClient.auth.signOut();
 }
-function pageTitle(){return ({dashboard:"Übersicht",invoices:"Rechnungen",orders:"Bestellungen",inventory:"Lagerübersicht",recipes:"Rezepte",cash:"Kasse",production:"Produktion",employees:"Mitarbeiter",audit:"Protokoll",admin:"Administration"})[page]||"Übersicht"}
+function pageTitle(){return ({dashboard:"Übersicht",invoices:"Rechnungen",orders:"Bestellungen",inventory:"Lagerübersicht",recipes:"Rezepte",production:"Produktion",trades:"Ein- und Verkauf",cash:"Kasse",employees:"Mitarbeiter",audit:"Protokoll",admin:"Administration"})[page]||"Übersicht"}
 function initials(n){return String(n||"DF").split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase()}
 function stat(icon,label,value){return '<div class="stat"><span class="icon">'+icon+'</span><div><small>'+label+"</small><b>"+value+"</b></div></div>"}
 function intro(k,h,p,action,label){return '<div class="intro"><div><div class="eyebrow">'+k+"</div><h1>"+h+"</h1><p>"+p+"</p></div>"+(action?'<button type="button" class="btn gold" data-action="'+action+'">'+label+"</button>":"")+"</div>"}
@@ -323,13 +324,32 @@ async function production(){
  '</div>';
 }
 
+async function trades(){
+ const {data:rows=[],error}=await supabaseClient.from("vineyard_trades").select("*").order("created_at",{ascending:false});
+ if(error)return errorBox(error.message);
+ const purchases=rows.filter(x=>x.trade_type==="Einkauf");
+ const sales=rows.filter(x=>x.trade_type==="Verkauf");
+ const purchaseTotal=purchases.reduce((sum,x)=>sum+Number(x.total||0),0);
+ const salesTotal=sales.reduce((sum,x)=>sum+Number(x.total||0),0);
+ return intro("HANDEL","Ein- und Verkauf","Ein- und Verkäufe buchen. Lagerbestand und Kasse werden dabei automatisch und gemeinsam aktualisiert.",can("trade_edit")?"newtrade":null,can("trade_edit")?"+ Ein-/Verkauf":null)+
+ '<div class="stats">'+
+ stat("↘","EINKÄUFE",money(purchaseTotal))+
+ stat("↗","VERKÄUFE",money(salesTotal))+
+ stat("$","HANDELSVORGÄNGE",rows.length)+
+ stat("▦","NETTO",money(salesTotal-purchaseTotal))+
+ '</div>'+
+ '<div class="panel tradehint"><b>Automatik:</b> Einkauf erhöht den Lagerbestand und belastet die Kasse. Verkauf reduziert den Lagerbestand und schreibt den Verkauf als Einnahme in die Kasse.</div>'+
+ '<div class="panel"><div class="tablewrap"><table><thead><tr><th>DATUM</th><th>ART</th><th>ARTIKEL</th><th>MENGE</th><th>EINZELPREIS</th><th>GESAMT</th><th></th></tr></thead><tbody>'+
+ (rows.map(x=>'<tr><td>'+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</td><td>'+(x.trade_type==="Einkauf"?'<span class="badge warn">Einkauf</span>':'<span class="badge good">Verkauf</span>')+'</td><td><b>'+esc(x.item_name)+'</b><small class="tableunit">'+esc(x.unit)+'</small></td><td>'+Number(x.quantity).toLocaleString("de-DE")+'</td><td>'+money(x.unit_price)+'</td><td><b>'+money(x.total)+'</b></td><td><button class="mini gold" data-edit-trade="'+x.id+'">Bearbeiten</button> <button class="mini" data-delete-trade="'+x.id+'">Löschen</button></td></tr>').join("")||'<tr><td colspan="7">Noch keine Ein- oder Verkäufe gebucht.</td></tr>')+
+ '</tbody></table></div></div>';
+}
 async function cash(){
  const {data:rows=[],error}=await supabaseClient.from("vineyard_cashbook").select("*").order("created_at",{ascending:false});
  if(error)return errorBox(error.message);
  const balance=rows.reduce((s,x)=>s+(x.kind==="in"?1:-1)*Number(x.amount||0),0);
  return intro("KASSE","Kassenbuch","Ein- und Auszahlungen mit Benutzerprotokoll.",can("cash_edit")?"newcash":null,can("cash_edit")?"+ Buchung":null)+
  '<div class="stats">'+stat("$","AKTUELLER KASSENSTAND",money(balance))+stat("↗","EINNAHMEN",money(rows.filter(x=>x.kind==="in").reduce((s,x)=>s+Number(x.amount),0)))+stat("↘","AUSGABEN",money(rows.filter(x=>x.kind==="out").reduce((s,x)=>s+Number(x.amount),0)))+stat("▤","BUCHUNGEN",rows.length)+"</div>"+
- '<div class="panel"><div class="tablewrap"><table><thead><tr><th>DATUM</th><th>ART</th><th>BETRAG</th><th>KATEGORIE</th><th>BESCHREIBUNG</th><th></th></tr></thead><tbody>'+rows.map(x=>'<tr><td>'+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</td><td>'+(x.kind==="in"?'<span class="badge good">Einnahme</span>':'<span class="badge bad">Ausgabe</span>')+'</td><td><b>'+money(x.amount)+"</b></td><td>"+esc(x.category)+"</td><td>"+esc(x.description)+"</td><td><button class=\"mini\" data-edit-cash=\""+x.id+"\">Bearbeiten</button> <button class=\"mini\" data-delete-cash=\""+x.id+"\">Löschen</button></td></tr>").join("")||'<tr><td colspan="6">Keine Buchungen.</td></tr>'+"</tbody></table></div></div>";
+ '<div class="panel"><div class="tablewrap"><table><thead><tr><th>DATUM</th><th>ART</th><th>BETRAG</th><th>KATEGORIE</th><th>BESCHREIBUNG</th><th></th></tr></thead><tbody>'+rows.map(x=>'<tr><td>'+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</td><td>'+(x.kind==="in"?'<span class="badge good">Einnahme</span>':'<span class="badge bad">Ausgabe</span>')+'</td><td><b>'+money(x.amount)+"</b></td><td>"+esc(x.category)+(x.source_type==="trade"?' <span class="badge warn">Ein-/Verkauf</span>':"")+"</td><td>"+esc(x.description)+"</td><td>"+(x.source_type==="trade"?'<span class="muted">Über Ein-/Verkauf</span>':'<button class=\"mini\" data-edit-cash=\""+x.id+"\">Bearbeiten</button> <button class=\"mini\" data-delete-cash=\""+x.id+"\">Löschen</button>')+"</td></tr>").join("")||'<tr><td colspan="6">Keine Buchungen.</td></tr>'+"</tbody></table></div></div>";
 }
 async function employees(){
  const [{data:emps=[]},{data:roles=[]}]=await Promise.all([
@@ -348,7 +368,7 @@ async function audit(){
 function errorBox(t){return '<div class="panel"><b>Fehler</b><p class="muted">'+esc(t)+"</p></div>"}
 
 async function render(){
- let content=page==="dashboard"?await dashboard():page==="invoices"?await invoices():page==="orders"?await orders():page==="inventory"?await inventory():page==="recipes"?await recipes():page==="production"?await production():page==="cash"?await cash():page==="employees"?await employees():page==="admin"?await admin():await audit();
+ let content=page==="dashboard"?await dashboard():page==="invoices"?await invoices():page==="orders"?await orders():page==="inventory"?await inventory():page==="recipes"?await recipes():page==="production"?await production():page==="trades"?await trades():page==="cash"?await cash():page==="employees"?await employees():page==="admin"?await admin():await audit();
  shell(content);bind();
  if(page==="orders")startOrderRealtime();else stopOrderRealtime();
 }
@@ -401,8 +421,10 @@ function bind(){
  $$("[data-delete-item]").forEach(b=>b.onclick=()=>deleteItem(b.dataset.deleteItem));
  $$("[data-edit-recipe]").forEach(b=>b.onclick=()=>recipeModal(b.dataset.editRecipe));
  $$("[data-delete-recipe]").forEach(b=>b.onclick=()=>deleteRecipe(b.dataset.deleteRecipe));
- $$("[data-edit-cash]").forEach(b=>b.onclick=()=>cashModal(b.dataset.editCash));
- $$("[data-delete-cash]").forEach(b=>b.onclick=()=>deleteCash(b.dataset.deleteCash));
+ $("[data-edit-trade]").forEach(b=>b.onclick=()=>tradeModal(b.dataset.editTrade));
+ $("[data-delete-trade]").forEach(b=>b.onclick=()=>deleteTrade(b.dataset.deleteTrade));
+ $("[data-edit-cash]").forEach(b=>b.onclick=()=>cashModal(b.dataset.editCash));
+ $("[data-delete-cash]").forEach(b=>b.onclick=()=>deleteCash(b.dataset.deleteCash));
  $$("[data-edit-employee]").forEach(b=>b.onclick=()=>employeeModal(b.dataset.editEmployee));
  $$("[data-delete-employee]").forEach(b=>b.onclick=()=>deleteEmployee(b.dataset.deleteEmployee));
  $$("[data-share-invoice]").forEach(b=>b.onclick=()=>shareInvoice(b.dataset.shareInvoice));
@@ -418,6 +440,7 @@ async function action(a){
  if(a==="newitem"){await itemModal();return}
  if(a==="newrecipe"){await recipeModal();return}
  if(a==="newcash"){await cashModal();return}
+ if(a==="newtrade"){await tradeModal();return}
  if(a==="newemployee"){await employeeModal();return}
  if(a==="newinvoice"){await invoiceModal();return}
  if(a==="copy-order-link"){const link=new URL("./bestellung.html",location.href).href;try{await navigator.clipboard.writeText(link);alert("Kunden-Bestelllink kopiert.")}catch(_){prompt("Kunden-Bestelllink",link)}return}
@@ -641,6 +664,12 @@ async function deleteItem(id){
  if(!confirm("Diesen Lagerartikel wirklich löschen? Zugehörige Rezepte werden dabei entfernt; historische Rechnungspositionen bleiben erhalten."))return;
  const {error}=await supabaseClient.rpc("vineyard_delete_inventory",{p_inventory_id:id});if(error)throw error;await render();
 }
+async function deleteTrade(id){
+ if(!confirm("Diesen Ein-/Verkauf wirklich löschen? Lagerbestand und Kassenbuchung werden dabei automatisch zurückgebucht."))return;
+ const {error}=await supabaseClient.rpc("vineyard_delete_trade",{p_trade_id:id});
+ if(error)throw error;
+ await render();
+}
 async function deleteCash(id){
  if(!confirm("Diese Kassenbuchung wirklich löschen?"))return;
  const {error}=await supabaseClient.from("vineyard_cashbook").delete().eq("id",id);if(error)throw error;await auditLog("Kassenbuchung gelöscht","cashbook",id,{});await render();
@@ -673,6 +702,67 @@ async function stockModal(id){
  if(!item)throw Error("Lagerartikel nicht gefunden.");
  modal("Bestandsbewegung · "+item.item_name,selectField("Bewegung","mode",[{value:"in",label:"Zugang (+)"},{value:"out",label:"Abgang (-)"}])+field("Menge","amount","number","",true)+field("Grund","reason","text","",true),
  async v=>{const amount=Math.abs(Number(v.amount)||0);if(!amount)throw Error("Menge muss größer als 0 sein.");const delta=v.mode==="in"?amount:-amount;const {error}=await supabaseClient.rpc("vineyard_adjust_inventory",{p_inventory_id:id,p_delta:delta,p_reason:v.reason.trim()});if(error)throw error})
+}
+async function tradeModal(id){
+ const [{data:items=[],error:ie},{data:existing,error:te}]=await Promise.all([
+  supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category,purchase_price,sale_price,quantity").order("category").order("item_name"),
+  id?supabaseClient.from("vineyard_trades").select("*").eq("id",id).single():Promise.resolve({data:null,error:null})
+ ]);
+ if(ie)throw ie;
+ if(te)throw te;
+ if(id&&!existing)throw Error("Handelsvorgang nicht gefunden.");
+ const type=existing?.trade_type||"Einkauf";
+ const initialItems=items.filter(x=>x.category===(type==="Einkauf"?"Zutaten":"Produkte"));
+ if(!initialItems.length)throw Error(type==="Einkauf"?"Lege zuerst mindestens eine Zutat mit Einkaufspreis im Lager an.":"Lege zuerst mindestens ein Produkt mit Verkaufspreis im Lager an.");
+ const optionsFor=t=>items.filter(x=>x.category===(t==="Einkauf"?"Zutaten":"Produkte"));
+ const optionHtml=(t,selected)=>{
+  const list=optionsFor(t);
+  return list.map(x=>'<option value="'+esc(x.id)+'" '+(String(selected)===String(x.id)?"selected":"")+'>'+esc(x.item_name)+' · '+esc(x.unit)+'</option>').join("");
+ };
+ const selected=existing?.inventory_id||initialItems[0].id;
+ $("#modalroot").innerHTML='<div class="modalback"><div class="modal tradeModal"><div class="modalhead"><b>'+(id?"Ein-/Verkauf bearbeiten":"Ein- und Verkauf")+'</b><button id="x">×</button></div><form id="tradeform">'+
+ selectField("Ein- oder Verkauf","trade_type",[{value:"Einkauf",label:"Einkauf"},{value:"Verkauf",label:"Verkauf"}],type)+
+ '<label>Was wurde ein/verkauft?<select id="trade_inventory" name="inventory_id">'+optionHtml(type,selected)+'</select></label>'+
+ field("Menge","quantity","number",existing?.quantity??1,true)+
+ '<div class="tradeprice"><div><span>PREIS</span><b id="tradeTotal">'+money(existing?.total||0)+'</b><small id="tradeUnitPrice"></small></div><div class="tradeformula" id="tradeFormula"></div></div>'+
+ '<div class="actions"><button type="button" class="btn outline" id="cancel">Abbrechen</button><button class="btn primary">Buchen</button></div></form></div></div>';
+ const close=()=>$("#modalroot").innerHTML="";
+ $("#x").onclick=$("#cancel").onclick=close;
+ const typeEl=$("#tradeform [name=trade_type]"),itemEl=$("#trade_inventory"),qtyEl=$("#tradeform [name=quantity]"),totalEl=$("#tradeTotal"),unitEl=$("#tradeUnitPrice"),formulaEl=$("#tradeFormula"),submitBtn=$("#tradeform button[type=submit]");
+ const refreshItems=(t,selectedId)=>{
+  const list=optionsFor(t);
+  itemEl.innerHTML=optionHtml(t,selectedId&&list.some(x=>String(x.id)===String(selectedId))?selectedId:(list[0]?.id||""));
+  updatePrice();
+ };
+ const updatePrice=()=>{
+  const item=items.find(x=>String(x.id)===String(itemEl.value));
+  const qty=Number(qtyEl.value)||0;
+  if(!item){totalEl.textContent=money(0);unitEl.textContent="";formulaEl.textContent="";return}
+  const unitPrice=typeEl.value==="Einkauf"?Number(item.purchase_price||0):Number(item.sale_price||0);
+  const total=Math.round(unitPrice*qty*100)/100;
+  totalEl.textContent=money(total);
+  unitEl.textContent="Einzelpreis: "+money(unitPrice)+" · "+(typeEl.value==="Einkauf"?"Zugang zum Lager":"Abgang aus dem Lager");
+  formulaEl.textContent=qty.toLocaleString("de-DE")+" × "+money(unitPrice)+" = "+money(total);
+ };
+ typeEl.onchange=()=>refreshItems(typeEl.value,null);
+ itemEl.onchange=updatePrice;
+ qtyEl.oninput=updatePrice;
+ updatePrice();
+ $("#tradeform").onsubmit=async e=>{
+  e.preventDefault();
+  const b=e.submitter;
+  b.disabled=true;
+  try{
+   const quantity=Number(qtyEl.value);
+   if(!Number.isFinite(quantity)||quantity<=0)throw Error("Die Menge muss größer als 0 sein.");
+   const rpc=id?"vineyard_update_trade":"vineyard_create_trade";
+   const args=id?{p_trade_id:id,p_trade_type:typeEl.value,p_inventory_id:itemEl.value,p_quantity:quantity}:{p_trade_type:typeEl.value,p_inventory_id:itemEl.value,p_quantity:quantity};
+   const {error}=await supabaseClient.rpc(rpc,args);
+   if(error)throw error;
+   close();
+   await render();
+  }catch(err){alert(err.message||String(err));b.disabled=false}
+ };
 }
 async function cashModal(id){
  let existing=null;
