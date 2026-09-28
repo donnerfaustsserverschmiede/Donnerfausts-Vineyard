@@ -13,12 +13,27 @@
 <div id="app"><div class="loading">Donnerfaust Vineyards wird geladen…</div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" onerror="this.onerror=null;this.src='https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.min.js'"></script>
 <script>
+window.__vineyardAppStarted=false;
+window.__vineyardAppFinished=false;
+function vineyardDiagnostic(title,detail){
+  var app=document.querySelector("#app");
+  if(app){
+    app.innerHTML='<div class="loading"><b>'+title+'</b><br><small>'+detail+'</small></div>';
+  }
+}
 window.addEventListener("error",function(e){
-  if(!window.supabase && document.querySelector("#app")){
-    document.querySelector("#app").innerHTML='<div class="loading">Donnerfaust Vineyards konnte nicht geladen werden.<br><small>Bitte Internetverbindung prüfen und Seite neu laden.</small></div>';
+  if(e.filename && e.filename.indexOf("app.js")!==-1){
+    vineyardDiagnostic("Donnerfaust Vineyards – JavaScript-Fehler",e.message||"app.js konnte nicht ausgeführt werden.");
+  }else if(!window.supabase){
+    vineyardDiagnostic("Donnerfaust Vineyards – Supabase konnte nicht geladen werden","Die Browser-Bibliothek wurde nicht geladen.");
   }
 });
+window.setTimeout(function(){
+  if(!window.__vineyardAppStarted && !window.__vineyardAppFinished){
+    vineyardDiagnostic("Donnerfaust Vineyards – Startdiagnose","app.js wurde vom Browser nicht ausgeführt. Damit liegt der Fehler vor der eigentlichen Supabase-Anmeldung.");
+  }
+},4000);
 </script>
-<script src="./app.js?v=9"></script>
+<script src="./app.js?v=10" onload="window.__vineyardAppLoaded=true" onerror="vineyardDiagnostic('Donnerfaust Vineyards – app.js nicht geladen','Die Datei app.js konnte von GitHub Pages nicht geladen werden.')"></script>
 </body>
 </html>
