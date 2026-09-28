@@ -38,9 +38,30 @@ async function loadProfile(){
  profile=data;role=data.vineyard_roles;
 }
 function login(message=""){
- document.body.innerHTML=`<div class="login"><div class="loginbox"><div class="loginbrand"><div class="brandmark">🍇</div><h1>Donnerfaust Vineyards</h1><p>Interne Betriebsverwaltung</p></div>${message?`<div class="error">${esc(message)}</div>`:""}<form id="loginform"><label>E-Mail<input id="email" type="email" autocomplete="username" placeholder="deine E-Mail-Adresse" required></label><label>Passwort<input id="password" type="password" autocomplete="current-password" required></label><button class="btn primary">Anmelden</button></form></div></div>`;
- $("#loginform").onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;const {error}=await supabase.auth.signInWithPassword({email:$("#email").value.trim(),password:$("#password").value});if(error){b.disabled=false;return login(error.message);}await loadProfile();if(!profile){await supabase.auth.signOut();return login("Dieser Benutzer hat noch kein Vineyards-Profil.");}if(profile.must_change_password)return forcePasswordChange();await render();startPresence();};
+ document.body.innerHTML=`
+  <div class="login"><div class="loginbox">
+   <div class="loginbrand"><div class="brandmark">🍇</div><h1>Donnerfaust Vineyards</h1><p>Interne Betriebsverwaltung</p></div>
+   ${message?`<div class="error">${esc(message)}</div>`:""}
+   <form id="loginform">
+    <label>E-Mail<input id="email" type="email" autocomplete="username" placeholder="deine E-Mail-Adresse" required></label>
+    <label>Passwort<input id="password" type="password" autocomplete="current-password" required></label>
+    <button class="btn primary">Anmelden</button>
+   </form>
+  </div></div>`;
+ $("#loginform").onsubmit=async e=>{
+  e.preventDefault();
+  const b=e.submitter;
+  b.disabled=true;
+  const {error}=await supabase.auth.signInWithPassword({email:$("#email").value.trim(),password:$("#password").value});
+  if(error){b.disabled=false;return login(error.message);}
+  await loadProfile();
+  if(!profile){await supabase.auth.signOut();return login("Dieser Benutzer hat noch kein Vineyards-Profil.");}
+  if(profile.must_change_password)return forcePasswordChange();
+  await render();
+  startPresence();
+ };
 }
+
 function forcePasswordChange(){
  document.body.innerHTML='<div class="login"><div class="loginbox"><div class="loginbrand"><div class="brandmark">🔐</div><h1>Passwort aktualisieren</h1><p>Bei der ersten Anmeldung musst du das vom Master vergebene Startpasswort ändern.</p></div><div class="error" style="background:#fff0cf;color:#765714">Dein Zugang ist aktiv. Bevor du fortfährst, lege dein persönliches Passwort fest.</div><form id="passwordform"><label>Neues Passwort<input id="newpassword" type="password" autocomplete="new-password" minlength="8" required></label><label>Neues Passwort wiederholen<input id="newpassword2" type="password" autocomplete="new-password" minlength="8" required></label><button class="btn primary">Passwort speichern</button></form></div></div>';
  $("#passwordform").onsubmit=async e=>{
@@ -68,14 +89,23 @@ function intro(k,h,p,action,label){return '<div class="intro"><div><div class="e
 
 async function dashboard(){
  const openInvoices=0,openOrders=0;
- return `<div class="welcome"><div><div class="eyebrow">DONNERFAUST VINEYARDS</div><h1>Willkommen, ${esc(profile.display_name)}</h1><p>Deine aktuelle Übersicht für den Weinbetrieb.</p></div><div class="welcomegrape">🍇</div></div>
- <div class="overviewgrid"><button class="overviewcard" data-page-action="invoices"><div class="overviewicon invoice">▤</div><div class="overviewtext"><small>OFFENE RECHNUNGEN</small><b>${openInvoices}</b><span>Rechnungsmenü öffnen</span></div><span class="arrow">→</span></button>
- <button class="overviewcard" data-page-action="orders"><div class="overviewicon order">🛒</div><div class="overviewtext"><small>OFFENE BESTELLUNGEN</small><b>${openOrders}</b><span>Bestellungsmenü öffnen</span></div><span class="arrow">→</span></button>
- <div class="overviewcard static"><div class="overviewicon staff">♟</div><div class="overviewtext"><small>MITARBEITER ONLINE</small><b id="onlineCount">${onlineCount||1}</b><span>Aktuell im System angemeldet</span></div><span class="live"><i></i> LIVE</span></div></div>
- <div class="quickgrid"><button class="quickcard" data-page-action="inventory"><span>📦</span><div><b>Lager</b><small>Bestände verwalten</small></div><span class="arrow">→</span></button>
- <button class="quickcard" data-page-action="cash"><span>€</span><div><b>Kasse</b><small>Kassenbuch öffnen</small></div><span class="arrow">→</span></button>
- <button class="quickcard" data-page-action="employees"><span>♟</span><div><b>Mitarbeiter</b><small>Team verwalten</small></div><span class="arrow">→</span></button></div>`;
+ return `
+  <div class="welcome">
+   <div><div class="eyebrow">DONNERFAUST VINEYARDS</div><h1>Willkommen, ${esc(profile.display_name)}</h1><p>Deine aktuelle Übersicht für den Weinbetrieb.</p></div>
+   <div class="welcomegrape">🍇</div>
+  </div>
+  <div class="overviewgrid">
+   <button class="overviewcard" data-page-action="invoices"><div class="overviewicon invoice">▤</div><div class="overviewtext"><small>OFFENE RECHNUNGEN</small><b>${openInvoices}</b><span>Rechnungsmenü öffnen</span></div><span class="arrow">→</span></button>
+   <button class="overviewcard" data-page-action="orders"><div class="overviewicon order">🛒</div><div class="overviewtext"><small>OFFENE BESTELLUNGEN</small><b>${openOrders}</b><span>Bestellungsmenü öffnen</span></div><span class="arrow">→</span></button>
+   <div class="overviewcard static"><div class="overviewicon staff">♟</div><div class="overviewtext"><small>MITARBEITER ONLINE</small><b id="onlineCount">${onlineCount||1}</b><span>Aktuell im System angemeldet</span></div><span class="live"><i></i> LIVE</span></div>
+  </div>
+  <div class="quickgrid">
+   <button class="quickcard" data-page-action="inventory"><span>📦</span><div><b>Lager</b><small>Bestände verwalten</small></div><span class="arrow">→</span></button>
+   <button class="quickcard" data-page-action="cash"><span>€</span><div><b>Kasse</b><small>Kassenbuch öffnen</small></div><span class="arrow">→</span></button>
+   <button class="quickcard" data-page-action="employees"><span>♟</span><div><b>Mitarbeiter</b><small>Team verwalten</small></div><span class="arrow">→</span></button>
+  </div>`;
 }
+
 async function invoices(){return '<div class="placeholder"><div class="placeholdericon">▤</div><div class="eyebrow">RECHNUNGEN</div><h1>Rechnungsmenü</h1><p>Hier werden offene Rechnungen und Zahlungen verwaltet.</p><div class="placeholderstate">Noch keine Rechnungen hinterlegt.</div></div>';}
 async function orders(){return '<div class="placeholder"><div class="placeholdericon">🛒</div><div class="eyebrow">BESTELLUNGEN</div><h1>Bestellungsmenü</h1><p>Hier werden offene Bestellungen und Lieferungen verwaltet.</p><div class="placeholderstate">Noch keine Bestellungen hinterlegt.</div></div>';}
 function startPresence(){
@@ -102,9 +132,17 @@ function itemCards(items){
   const production=x.category==="Produkte"&&can("inventory_edit")?`<button class="mini gold" data-production="${x.id}">+ Produktion</button> `:"";
   const actions=can("inventory_edit")?`<button class="mini gold" data-stock="${x.id}">Bestand ändern</button> ${production}<button class="mini" data-edit-item="${x.id}">Bearbeiten</button>`:"";
   const price=x.category==="Zutaten"?"Einkaufspreis: "+money(x.purchase_price):"Verkaufspreis: "+money(x.sale_price);
-  return `<div class="itemcard"><div class="eyebrow">${esc(x.category)} · ${esc(x.unit)}</div><h3>${esc(x.item_name)}</h3><div class="qty ${low?"low":""}">${Number(x.quantity).toLocaleString("de-DE")} ${esc(x.unit)}</div><small class="muted">Mindestbestand: ${Number(x.min_stock).toLocaleString("de-DE")} · ${price}</small><div style="margin-top:12px">${actions}</div></div>`;
+  return `
+   <div class="itemcard">
+    <div class="eyebrow">${esc(x.category)} · ${esc(x.unit)}</div>
+    <h3>${esc(x.item_name)}</h3>
+    <div class="qty ${low?"low":""}">${Number(x.quantity).toLocaleString("de-DE")} ${esc(x.unit)}</div>
+    <small class="muted">Mindestbestand: ${Number(x.min_stock).toLocaleString("de-DE")} · ${price}</small>
+    <div style="margin-top:12px">${actions}</div>
+   </div>`;
  }).join("")||'<p class="muted">Noch keine Einträge in dieser Kategorie.</p>';
 }
+
 async function recipes(){
  const {data:rows=[],error}=await supabase.from("vineyard_recipes").select("*").order("name");
  if(error)return errorBox(error.message);
