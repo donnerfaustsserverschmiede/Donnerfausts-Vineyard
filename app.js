@@ -709,7 +709,7 @@ async function deleteCash(id){
 }
 async function deleteInvoice(id){
  if(!confirm("Diese Rechnung wirklich löschen? Der öffentliche Rechnungslink funktioniert danach nicht mehr."))return;
- const {error}=await supabaseClient.rpc("vineyard_delete_invoice",{p_invoice_id:id});if(error)throw error;await render();
+ const {error}=await supabaseClient.rpc("vineyard_delete_invoice",{p_invoice_id:id});if(error)throw error;await auditLog("Rechnung gelöscht","invoice",id,{});await render();
 }
 async function deleteEmployee(id){
  if(role?.key!=="master")throw Error("Nur der Master darf Mitarbeiter löschen.");
