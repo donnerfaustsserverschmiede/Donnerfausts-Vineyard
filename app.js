@@ -84,7 +84,6 @@ const NAV=[
 ["trades","⇄","Ein- und Verkauf","trade_edit"],
 ["cash","$","Kasse","cash_view"],
 ["employees","♟","Mitarbeiter","employees_view"],
-["audit","◷","Protokoll","audit_view"],
 ["admin","⚙","Administration","admin_access"]
 ];
 
@@ -158,7 +157,7 @@ function shell(content){
  document.body.innerHTML=`<aside class="sidebar" id="sidebar"><div class="brand"><div class="brandmark"><img src="./assets/donnerfaust-vineyards-logo.jpg" alt=""></div><div><b>Donnerfaust Barrelworks</b><small>Interne Verwaltung</small></div></div><nav>${nav}</nav><div class="sidefoot"><span class="online"></span>${esc(profile.display_name)} · ${esc(role.label)}<br><button id="logout" class="mini" style="margin-top:9px">Abmelden</button></div></aside><main class="main"><header class="top"><div class="topTitle"><img class="topbrandlogo" src="./assets/donnerfaust-vineyards-logo.jpg" alt="Donnerfaust Barrelworks"><div><button class="hamb" id="hamb">☰</button><span class="crumb">DONNERFAUST BARRELWORKS</span><h2>${esc(pageTitle())}</h2></div></div><div class="topright"><span class="online"></span><b>${esc(profile.display_name)}</b><span class="avatar">${esc(initials(profile.display_name))}</span></div></header><section class="content">${content}</section></main><div id="modalroot"></div>`;
  $$(".nav").forEach(b=>b.onclick=()=>{page=b.dataset.page;render();});$("#hamb").onclick=()=>$("#sidebar").classList.toggle("open");$("#logout").onclick=()=>supabaseClient.auth.signOut();
 }
-function pageTitle(){return ({dashboard:"Übersicht",invoices:"Rechnungen",orders:"Bestellungen",inventory:"Lagerübersicht",recipes:"Rezepte",production:"Produktion",trades:"Ein- und Verkauf",cash:"Kasse",employees:"Mitarbeiter",audit:"Protokoll",admin:"Administration"})[page]||"Übersicht"}
+function pageTitle(){return ({dashboard:"Übersicht",invoices:"Rechnungen",orders:"Bestellungen",inventory:"Lagerübersicht",recipes:"Rezepte",production:"Produktion",trades:"Ein- und Verkauf",cash:"Kasse",employees:"Mitarbeiter",admin:"Administration"})[page]||"Übersicht"}
 function initials(n){return String(n||"DF").split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase()}
 function stat(icon,label,value){return '<div class="stat"><span class="icon">'+icon+'</span><div><small>'+label+"</small><b>"+value+"</b></div></div>"}
 function intro(k,h,p,action,label){return '<div class="intro"><div><div class="eyebrow">'+k+"</div><h1>"+h+"</h1><p>"+p+"</p></div>"+(action?'<button type="button" class="btn gold" data-action="'+action+'">'+label+"</button>":"")+"</div>"}
@@ -232,7 +231,35 @@ async function orders(){
 }
 async function admin(){
  if(!role?.permissions?.admin_access)return errorBox("Kein Admin-Zugang.");
- return '<div class="placeholder"><div class="placeholdericon">⚙</div><div class="eyebrow">ADMINISTRATION</div><h1>Administrationsbereich</h1><p>Dieser Bereich ist ausschließlich für den Eigentümer und den Familienvogt freigeschaltet.</p><div class="placeholderstate">Admin-Zugang aktiv.</div></div>';
+ const {data:rows=[],error}=await supabaseClient.from("vineyard_audit_log").select("*,vineyard_profiles:actor_id(display_name)").order("created_at",{ascending:false}).limit(500);
+ if(error)return errorBox(error.message);
+ const actorName=x=>x.vineyard_profiles?.display_name||x.details?.actor_name||"SYSTEM";
+ const formatDate=x=>{const d=new Date(x.created_at);return d.toLocaleDateString("de-DE")+" · "+d.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})+" Uhr"};
+ const message=x=>{
+  const d=x.details||{}, a=String(x.action||"").toLowerCase(), name=actorName(x);
+  if(a.includes("rezept produziert")) return name+" hat "+Number(d.output_quantity||0).toLocaleString("de-DE")+" "+(d.output_unit||"")+" "+(d.recipe||"produziert")+".";
+  if(a.includes("ein-/verkauf gebucht")||a.includes("einkauf gebucht")||a.includes("verkauf gebucht")) return name+" hat "+String(d.quantity||"")+" "+String(d.unit||"")+" "+String(d.item_name||"Artikel")+" als "+String(d.trade_type||"Vorgang")+" gebucht: "+money(d.total||0)+".";
+  if(a.includes("kassenbuchung")) return name+" hat "+(d.kind==="in"?"eine Einnahme":"eine Ausgabe")+" von "+money(d.amount||0)+" in die Kasse gebucht.";
+  if(a==="lagerbestand geändert") return name+" hat den Lagerbestand von "+String(d.item_name||"Artikel")+" um "+Number(d.delta||0).toLocaleString("de-DE")+" verändert.";
+  if(a.includes("bestellung eingegangen")) return "KUNDE hat Bestellung "+String(d.order_number||"")+" über "+money(d.total||0)+" eingereicht.";
+  if(a.includes("bestellung angenommen")) return name+" hat Bestellung "+String(d.order_number||"")+" angenommen.";
+  if(a.includes("bestellung abgeschlossen")) return name+" hat Bestellung "+String(d.order_number||"")+" abgeschlossen.";
+  if(a.includes("rechnung erstellt")) return name+" hat eine Rechnung erstellt.";
+  if(a.includes("rechnung geändert")) return name+" hat eine Rechnung geändert.";
+  if(a.includes("rechnung gelöscht")) return name+" hat eine Rechnung gelöscht.";
+  if(a.includes("rezept gelöscht")) return name+" hat das Rezept "+String(d.name||"")+" gelöscht.";
+  if(a.includes("lagerartikel gelöscht")) return name+" hat den Lagerartikel gelöscht.";
+  if(a.includes("mitarbeiter angelegt")) return name+" hat einen Mitarbeiter angelegt.";
+  if(a.includes("mitarbeiter geändert")) return name+" hat einen Mitarbeiter geändert.";
+  if(a.includes("mitarbeiter gelöscht")) return name+" hat einen Mitarbeiter gelöscht.";
+  if(a.includes("ein-/verkauf geändert")) return name+" hat einen Ein-/Verkauf geändert.";
+  if(a.includes("ein-/verkauf gelöscht")) return name+" hat einen Ein-/Verkauf gelöscht.";
+  return name+" hat "+String(x.action||"eine Änderung")+" durchgeführt.";
+ };
+ return '<div class="intro"><div><div class="eyebrow">ADMINISTRATION</div><h1>Aktivitätslog</h1><p>Hier wird nachvollziehbar festgehalten, was im Barrelworks-System passiert ist – mit Datum, Uhrzeit, Mitarbeiter und Vorgang.</p></div></div>'+
+ '<div class="panel adminlog"><div class="adminloghead"><div><b>Vollständiges Systemprotokoll</b><small>Die neuesten 500 Einträge</small></div><span class="badge good">'+rows.length+' Einträge</span></div>'+
+ (rows.map(x=>'<div class="adminlogrow"><div class="adminlogtime">'+esc(formatDate(x))+'</div><div class="adminlogicon">◷</div><div class="adminlogbody"><b>'+esc(message(x))+'</b><small>'+esc(actorName(x))+' · '+esc(x.entity||"System")+'</small></div></div>').join("")||'<p class="muted">Noch keine Aktivitäten protokolliert.</p>')+
+ '</div>';
 }
 async function inventory(){
  const {data:items=[],error}=await supabaseClient.from("vineyard_inventory").select("*").order("category").order("item_name");
@@ -359,16 +386,10 @@ async function employees(){
  return intro("TEAM","Mitarbeiter","Konten, Rollen und Rechte werden ausschließlich über den Master verwaltet.",can("employees_edit")?"newemployee":null,can("employees_edit")?"+ Mitarbeiter":null)+
  '<div class="employeegrid">'+emps.map(x=>'<div class="employee"><div class="avatar">'+esc(initials(x.display_name))+'</div><div style="flex:1"><b>'+esc(x.display_name)+"</b><small>"+esc(x.vineyard_roles?.label||x.role_key)+" · "+(x.active?'<span class="good">Aktiv</span>':'<span class="bad">Deaktiviert</span>')+"</small>"+(x.phone?'<small>'+esc(x.phone)+"</small>":"")+'</div>'+(role?.key==="master"?'<button class="mini" data-edit-employee="'+x.user_id+'">Bearbeiten</button> <button class="mini" data-delete-employee="'+x.user_id+'">Löschen</button>':"")+"</div>").join("")+"</div>";
 }
-async function audit(){
- const {data:rows=[],error}=await supabaseClient.from("vineyard_audit_log").select("*,vineyard_profiles:actor_id(display_name)").order("created_at",{ascending:false}).limit(100);
- if(error)return errorBox(error.message);
- return intro("SICHERHEIT","Änderungsprotokoll","Nachvollziehbare Protokollierung wichtiger Verwaltungsvorgänge.")+
- '<div class="panel">'+rows.map(x=>'<div class="row"><span>◷</span><div class="rowgrow"><b>'+esc(x.action)+"</b><small>"+esc(x.vineyard_profiles?.display_name||"SYSTEM")+" · "+esc(x.entity)+" · "+esc(new Date(x.created_at).toLocaleString("de-DE"))+"</small></div></div>").join("")||'<p class="muted">Noch keine Einträge.</p>'+"</div>";
-}
 function errorBox(t){return '<div class="panel"><b>Fehler</b><p class="muted">'+esc(t)+"</p></div>"}
 
 async function render(){
- let content=page==="dashboard"?await dashboard():page==="invoices"?await invoices():page==="orders"?await orders():page==="inventory"?await inventory():page==="recipes"?await recipes():page==="production"?await production():page==="trades"?await trades():page==="cash"?await cash():page==="employees"?await employees():page==="admin"?await admin():await audit();
+ let content=page==="dashboard"?await dashboard():page==="invoices"?await invoices():page==="orders"?await orders():page==="inventory"?await inventory():page==="recipes"?await recipes():page==="production"?await production():page==="trades"?await trades():page==="cash"?await cash():page==="employees"?await employees():page==="admin"?await admin():await dashboard();
  shell(content);bind();
  if(page==="orders")startOrderRealtime();else stopOrderRealtime();
 }
@@ -780,7 +801,12 @@ async function employeeModal(id){
   async v=>{if(v.password.length<8)throw Error("Das Startpasswort muss mindestens 8 Zeichen haben.");const r=await supabaseClient.functions.invoke("vineyard-admin-users",{body:{action:"create",display_name:v.display_name,email:v.email,password:v.password,role_key:v.role_key,phone:v.phone}});if(r.error)throw r.error;if(r.data?.error)throw Error(r.data.error);await auditLog("Mitarbeiter angelegt","employee",r.data.user_id,{email:v.email,role_key:v.role_key})})
  }
 }
-async function auditLog(action,entity,entityId,details){const user=(await supabaseClient.auth.getUser()).data.user;await supabaseClient.from("vineyard_audit_log").insert({actor_id:user.id,action,entity,entity_id:entityId?String(entityId):null,details:details||{}})}
+async function auditLog(action,entity,entityId,details){
+ const user=(await supabaseClient.auth.getUser()).data.user;
+ const d={...(details||{})};
+ if(!d.actor_name)d.actor_name=profile?.display_name||"";
+ await supabaseClient.from("vineyard_audit_log").insert({actor_id:user.id,action,entity,entity_id:entityId?String(entityId):null,details:d});
+}
 function showBootError(err){
  console.error("Donnerfaust Barrelworks Startfehler:",err);
  document.body.innerHTML='<div class="login"><div class="loginbox"><div class="loginbrand"><div class="brandmark"><img src="./assets/donnerfaust-vineyards-logo.jpg" alt="Donnerfaust Barrelworks"></div><h1>Donnerfaust Barrelworks</h1><p>Die Anwendung konnte nicht gestartet werden.</p></div><div class="error">Technischer Fehler beim Start.<br><small>'+esc(err?.message||String(err))+'</small></div><button class="btn primary" onclick="location.reload()">Erneut versuchen</button></div></div>';
