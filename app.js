@@ -188,7 +188,7 @@ async function dashboard(){
 async function invoices(){
  const {data:rows=[],error}=await supabaseClient.from("vineyard_invoices").select("id,invoice_number,invoice_type,partner_name,status,created_at,created_by,employee_id,commission_rate,commission_amount").order("created_at",{ascending:false});
  if(error)return errorBox(error.message);
- const {data:employees=[],error:ee}=await supabaseClient.rpc("vineyard_invoice_employees");
+ const {data:employees=[],error:ee}=await supabaseClient.rpc("vineyard_order_employees");
  if(ee)return errorBox(ee.message);
  const emap=Object.fromEntries((employees||[]).map(x=>[x.user_id,x.display_name]));
  rows.forEach(x=>x.employee_name=emap[x.employee_id]||"—");
@@ -221,7 +221,7 @@ async function orders(){
  '<button class="mini" data-delete-order="'+x.id+'">Löschen</button>'+
  '</div></div>';
  return intro("BESTELLUNGEN","Bestellungsmenü","Kunden bestellen über einen öffentlichen Link. Mitarbeiter nehmen Bestellungen an, bearbeiten sie und schließen sie anschließend ab.",null,null)+
- '<div class="orderlinkpanel"><div><div class="eyebrow">KUNDENFORMULAR</div><b>Bestelllink für Kunden</b><p>Über diesen Link kann ein Kunde seine Bestellung selbst zusammenstellen. Der Preis wird dabei automatisch aus dem Verkaufspreis des Lagers berechnet.</p></div><div class="orderlinkactions"><button class="btn gold" data-action="copy-order-link">Link kopieren</button><button class="btn outline" data-action="open-order-form">Formular öffnen</button></div></div>'+
+ '<div class="orderlinkpanel"><div><div class="eyebrow">KUNDENFORMULAR</div><b>Bestelllink für Kunden</b><p>Über diesen Link kann ein Kunde seine Bestellung selbst zusammenstellen. Der Preis wird dabei automatisch aus dem Verkaufspreis des Lagers berechnet.</p></div><div class="orderlinkactions"><input class="orderlinkinput" readonly value="'+esc(formLink)+'"><button class="btn gold" data-action="copy-order-link">Link kopieren</button><button class="btn outline" data-action="open-order-form">Formular öffnen</button></div></div>'+
  '<div class="stats">'+stat("🛒","OFFENE BESTELLUNGEN",open.length)+stat("$","OFFENER BESTELLWERT",money(totalOpen))+stat("↗","IN BEARBEITUNG",rows.filter(x=>x.status==="In Bearbeitung").length)+stat("✓","LETZTE BESTELLUNGEN",recent.length)+'</div>'+
  '<div class="orderssection"><div class="sectiontitle"><div><div class="eyebrow">AKTUELL</div><h2>Offene Bestellungen</h2><p>Neue Bestellungen und Bestellungen in Bearbeitung.</p></div></div>'+
  '<div class="ordergrid">'+(open.map(card).join("")||'<div class="panel"><p class="muted">Aktuell liegen keine offenen Bestellungen vor.</p></div>')+'</div></div>'+
