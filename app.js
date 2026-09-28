@@ -220,10 +220,10 @@ async function orders(){
  const card=x=>'<div class="ordercard"><div class="ordercardtop"><div><span class="orderNo">'+esc(x.order_number)+'</span>'+badge(x.status)+'</div><b>'+money(x.total)+'</b></div>'+
  '<div class="ordercustomer"><strong>'+esc(x.customer_name)+'</strong><span>'+esc(x.customer_email)+'</span>'+(x.customer_phone?'<span>'+esc(x.customer_phone)+'</span>':'')+'</div>'+
  '<div class="ordermeta"><span>Erstellt: '+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</span><span>Mitarbeiter: '+esc(x.employee_name)+'</span>'+(x.commission_amount?'<span>Provision: '+money(x.commission_amount)+'</span>':'')+'</div>'+
- '<div class="orderactions"><button class="mini gold" data-view-order="'+x.id+'">Details</button>'+
+ '<div class="orderactions"><button class="mini gold" data-view-order="'+x.id+'">Details</button><button class="mini" data-edit-order="'+x.id+'">Bearbeiten</button>'+
  (x.status==="Eingegangen"?'<button class="mini gold" data-order-status="'+x.id+'|In Bearbeitung">Bestellung annehmen</button>':"")+
  (x.status==="In Bearbeitung"?'<button class="mini gold" data-order-status="'+x.id+'|Bestellung abgeschlossen">Bestellung abschließen</button>':"")+
- (x.status!=="In Bearbeitung"&&x.status!=="Bestellung abgeschlossen"?'<button class="mini" data-delete-order="'+x.id+'">Löschen</button>':"")+
+ '<button class="mini" data-delete-order="'+x.id+'">Löschen</button>'+
  '</div></div>';
  return intro("BESTELLUNGEN","Bestellungsmenü","Kunden bestellen über einen öffentlichen Link. Mitarbeiter nehmen Bestellungen an, bearbeiten sie und schließen sie anschließend ab.",null,null)+
  '<div class="orderlinkpanel"><div><div class="eyebrow">KUNDENFORMULAR</div><b>Bestelllink für Kunden</b><p>Über diesen Link kann ein Kunde seine Bestellung selbst zusammenstellen. Der Preis wird dabei automatisch aus dem Verkaufspreis des Lagers berechnet.</p></div><div class="orderlinkactions"><button class="btn gold" data-action="copy-order-link">Link kopieren</button><button class="btn outline" data-action="open-order-form">Formular öffnen</button></div></div>'+
@@ -625,6 +625,44 @@ async function orderModal(id){
  if($("#acceptOrder"))$("#acceptOrder").onclick=async()=>{await updateOrderStatus(id,"In Bearbeitung")};
  if($("#completeOrder"))$("#completeOrder").onclick=async()=>{await updateOrderStatus(id,"Bestellung abgeschlossen")};
  if($("#cancelOrder"))$("#cancelOrder").onclick=async()=>{if(confirm("Bestellung wirklich stornieren?"))await updateOrderStatus(id,"Storniert")};
+}
+
+
+async function orderEditModal(id){
+ const [{data:order,error},{data:products=[],error:pe},{data:items=[],error:ie}]=await Promise.all([
+  supabaseClient.from("vineyard_orders").select("*").eq("id",id).single(),
+  supabaseClient.rpc("vineyard_order_products"),
+  supabaseClient.from("vineyard_order_items").select("inventory_id,quantity").eq("order_id",id).order("created_at")
+ ]);
+ if(error)throw error;if(pe)throw pe;if(ie)throw ie;
+ if(!products.length)throw Error("Lege zuerst mindestens ein Produkt im Lager an.");
+ const rows=(items||[]).length?items.map(x=>({inventory_id:x.inventory_id,quantity:x.quantity})):([{inventory_id:products[0].id,quantity:1}]);
+ $("#modalroot").innerHTML='<div class="modalback"><div class="modal orderModal"><div class="modalhead"><b>Bestellung '+esc(order.order_number)+' bearbeiten</b><button id="x">×</button></div><form id="orderEditForm">'+
+ field("Name","customer_name","text",order.customer_name,true)+field("E-Mail","customer_email","email",order.customer_email,true)+field("Telefon","customer_phone","tel",order.customer_phone||"")+field("Liefer-/Abholadresse","customer_address","text",order.customer_address||"")+
+ '<label>Nachricht / Hinweise<textarea name="customer_note">'+esc(order.customer_note||"")+'</textarea></label>'+
+ '<div class="recipeformhead"><b>Produkte</b><button type="button" class="mini gold" id="addEditOrderItem">+ Produkt</button></div><div id="editOrderItems"></div><div class="invoiceTotal" id="editOrderTotal"></div>'+
+ '<div class="actions"><button type="button" class="btn outline" id="cancel">Abbrechen</button><button class="btn primary">Änderungen speichern</button></div></form></div></div>';
+ const close=()=>$("#modalroot").innerHTML="";$("#x").onclick=$("#cancel").onclick=close;
+ const draw=()=>{
+  $("#editOrderItems").innerHTML=rows.map((r,n)=>'<div class="publicOrderRow"><select data-eoi="'+n+'">'+products.map(p=>'<option value="'+esc(p.id)+'" '+(p.id===r.inventory_id?"selected":"")+'>'+esc(p.item_name)+' · '+esc(p.unit)+' · '+money(p.sale_price)+'</option>').join("")+'</select><input data-eoq="'+n+'" type="number" min="0.0001" step="any" value="'+esc(r.quantity)+'" required><button type="button" class="mini" data-remove-eoi="'+n+'">×</button></div>').join("");
+  const refresh=()=>{let sum=0;rows.forEach((r,n)=>{const q=Number($("[data-eoq='"+n+"']")?.value)||0;const p=products.find(x=>x.id===r.inventory_id);sum+=q*Number(p?.sale_price||0)});$("#editOrderTotal").innerHTML="<span>Neue Gesamtsumme</span><b>"+money(sum)+"</b>"};
+  $("[data-eoi]").forEach(el=>el.onchange=()=>{rows[Number(el.dataset.eoi)].inventory_id=el.value;refresh()});
+  $("[data-eoq]").forEach(el=>el.oninput=refresh);
+  $("[data-remove-eoi]").forEach(el=>el.onclick=()=>{rows.splice(Number(el.dataset.removeEoi),1);if(!rows.length)rows.push({inventory_id:products[0].id,quantity:1});draw()});
+  refresh();
+ };
+ $("#addEditOrderItem").onclick=()=>{rows.push({inventory_id:products[0].id,quantity:1});draw()};
+ $("#orderEditForm").onsubmit=async e=>{
+  e.preventDefault();const b=e.submitter;b.disabled=true;
+  try{
+   const v=Object.fromEntries(new FormData(e.target));
+   const orderItems=rows.map((r,n)=>({inventory_id:$("[data-eoi='"+n+"']").value,quantity:Number($("[data-eoq='"+n+"']").value)})).filter(x=>x.quantity>0);
+   const {error}=await supabaseClient.rpc("vineyard_save_order",{p_order_id:id,p_customer_name:v.customer_name,p_customer_email:v.customer_email,p_customer_phone:v.customer_phone,p_customer_address:v.customer_address,p_customer_note:v.customer_note,p_items:orderItems});
+   if(error)throw error;
+   close();await render();
+  }catch(err){alert(err.message||String(err));b.disabled=false}
+ };
+ draw();
 }
 
 async function updateOrderStatus(id,status){
