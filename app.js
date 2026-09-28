@@ -7,7 +7,7 @@ if(!window.supabase||typeof window.supabase.createClient!=="function"){
 const supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
-const money=n=>new Intl.NumberFormat("de-DE",{style:"currency",currency:"EUR"}).format(Number(n)||0);
+const money=n=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format(Number(n)||0);
 const dateTime=()=>new Date().toLocaleString("de-DE");
 let profile=null, role=null, page="dashboard";
 let presenceChannel=null, onlineCount=0;
@@ -18,7 +18,7 @@ const NAV=[
 ["orders","🛒","Bestellungen","dashboard"],
 ["inventory","▦","Lager","inventory_view"],
 ["recipes","♜","Rezepte","inventory_view"],
-["cash","€","Kasse","cash_view"],
+["cash","$","Kasse","cash_view"],
 ["employees","♟","Mitarbeiter","employees_view"],
 ["audit","◷","Protokoll","audit_view"]
 ];
@@ -112,7 +112,7 @@ async function dashboard(){
   </div>
   <div class="quickgrid">
    <button class="quickcard" data-page-action="inventory"><span>📦</span><div><b>Lager</b><small>Bestände verwalten</small></div><span class="arrow">→</span></button>
-   <button class="quickcard" data-page-action="cash"><span>€</span><div><b>Kasse</b><small>Kassenbuch öffnen</small></div><span class="arrow">→</span></button>
+   <button class="quickcard" data-page-action="cash"><span>$</span><div><b>Kasse</b><small>Kassenbuch öffnen</small></div><span class="arrow">→</span></button>
    <button class="quickcard" data-page-action="employees"><span>♟</span><div><b>Mitarbeiter</b><small>Team verwalten</small></div><span class="arrow">→</span></button>
   </div>`;
 }
@@ -123,7 +123,7 @@ async function invoices(){
  const open=rows.filter(x=>x.status==="Offen").length;
  const total=rows.reduce((s,x)=>s+1,0);
  return intro("HANDELSNACHWEISE","Rechnungen","Verkauf, Einkauf und Bestellungen als nachvollziehbare Handelsnachweise verwalten.",can("invoice_edit")?"newinvoice":null,can("invoice_edit")?"+ Rechnung erstellen":null)+
- '<div class="stats">'+stat("▤","OFFENE RECHNUNGEN",open)+stat("€","HANDELSVORGÄNGE",total)+stat("↗","VERKAUF",rows.filter(x=>x.invoice_type==="Verkauf").length)+stat("↙","EINKAUF",rows.filter(x=>x.invoice_type==="Einkauf").length)+'</div>'+
+ '<div class="stats">'+stat("▤","OFFENE RECHNUNGEN",open)+stat("$","HANDELSVORGÄNGE",total)+stat("↗","VERKAUF",rows.filter(x=>x.invoice_type==="Verkauf").length)+stat("↙","EINKAUF",rows.filter(x=>x.invoice_type==="Einkauf").length)+'</div>'+
  '<div class="panel"><div class="tablewrap"><table><thead><tr><th>NUMMER</th><th>ART</th><th>HANDELSPARTNER</th><th>DATUM</th><th>STATUS</th><th></th></tr></thead><tbody>'+
  (rows.map(x=>'<tr><td><b>'+esc(x.invoice_number)+'</b></td><td>'+esc(x.invoice_type)+'</td><td>'+esc(x.partner_name)+'</td><td>'+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</td><td>'+badge(x.status)+'</td><td><button class="mini gold" data-share-invoice="'+x.id+'">Teilen</button></td></tr>').join("")||'<tr><td colspan="6">Noch keine Rechnungen vorhanden.</td></tr>')+
  '</tbody></table></div></div>';
@@ -187,7 +187,7 @@ async function cash(){
  if(error)return errorBox(error.message);
  const balance=rows.reduce((s,x)=>s+(x.kind==="in"?1:-1)*Number(x.amount||0),0);
  return intro("KASSE","Kassenbuch","Ein- und Auszahlungen mit Benutzerprotokoll.",can("cash_edit")?"newcash":null,can("cash_edit")?"+ Buchung":null)+
- '<div class="stats">'+stat("€","AKTUELLER KASSENSTAND",money(balance))+stat("↗","EINNAHMEN",money(rows.filter(x=>x.kind==="in").reduce((s,x)=>s+Number(x.amount),0)))+stat("↘","AUSGABEN",money(rows.filter(x=>x.kind==="out").reduce((s,x)=>s+Number(x.amount),0)))+stat("▤","BUCHUNGEN",rows.length)+"</div>"+
+ '<div class="stats">'+stat("$","AKTUELLER KASSENSTAND",money(balance))+stat("↗","EINNAHMEN",money(rows.filter(x=>x.kind==="in").reduce((s,x)=>s+Number(x.amount),0)))+stat("↘","AUSGABEN",money(rows.filter(x=>x.kind==="out").reduce((s,x)=>s+Number(x.amount),0)))+stat("▤","BUCHUNGEN",rows.length)+"</div>"+
  '<div class="panel"><div class="tablewrap"><table><thead><tr><th>DATUM</th><th>ART</th><th>BETRAG</th><th>KATEGORIE</th><th>BESCHREIBUNG</th></tr></thead><tbody>'+rows.map(x=>'<tr><td>'+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</td><td>'+(x.kind==="in"?'<span class="badge good">Einnahme</span>':'<span class="badge bad">Ausgabe</span>')+'</td><td><b>'+money(x.amount)+"</b></td><td>"+esc(x.category)+"</td><td>"+esc(x.description)+"</td></tr>").join("")||'<tr><td colspan="5">Keine Buchungen.</td></tr>'+"</tbody></table></div></div>";
 }
 async function employees(){
@@ -406,7 +406,7 @@ async function productionModal(id){
    async v=>{const amount=Math.abs(Number(v.amount)||0);if(!amount)throw Error("Die Produktionsmenge muss größer als 0 sein.");const {error}=await supabaseClient.rpc("vineyard_adjust_inventory",{p_inventory_id:id,p_delta:amount,p_reason:v.reason.trim()||"Produktion"});if(error)throw error})
 }
 async function cashModal(){
- modal("Kassenbuchung",selectField("Art","kind",[{value:"in",label:"Einnahme (+)"},{value:"out",label:"Ausgabe (-)"}])+selectField("Kategorie","category",["Weinverkauf","Trauben","Material","Lohn","Betriebskosten","Sonstiges"])+field("Betrag (€)","amount","number","",true)+field("Beschreibung","description","text","",true),
+ modal("Kassenbuchung",selectField("Art","kind",[{value:"in",label:"Einnahme (+)"},{value:"out",label:"Ausgabe (-)"}])+selectField("Kategorie","category",["Weinverkauf","Trauben","Material","Lohn","Betriebskosten","Sonstiges"])+field("Betrag ($)","amount","number","",true)+field("Beschreibung","description","text","",true),
  async v=>{const amount=Number(v.amount)||0;if(amount<=0)throw Error("Betrag muss größer als 0 sein.");const r=await supabaseClient.from("vineyard_cashbook").insert({kind:v.kind,category:v.category,amount,description:v.description.trim(),created_by:(await supabaseClient.auth.getUser()).data.user.id});if(r.error)throw r.error;await auditLog("Kassenbuchung","cashbook",null,{kind:v.kind,amount,category:v.category,description:v.description.trim()})})
 }
 async function employeeModal(id){
