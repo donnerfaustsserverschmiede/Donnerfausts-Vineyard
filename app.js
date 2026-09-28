@@ -407,30 +407,73 @@ async function recipeModal(id){
  ]);
  const recipe=recipeResult.data, existing=itemsResult.data||[];
  if(id&&!recipe)throw Error("Rezept nicht gefunden.");
- if(!ingredients.length)throw Error("Lege zuerst mindestens eine Zutat im Lager an. Nur Lagerartikel der Kategorie Zutaten können in Rezepten verwendet werden.");
- if(!products.length)throw Error("Lege zuerst mindestens ein Produkt im Lager an. Nur Lagerartikel der Kategorie Produkte können Rezept-Ergebnisse sein.");
- const rows=existing.length?existing.map(x=>({inventory_id:x.inventory_id,quantity:x.quantity})):([{inventory_id:ingredients[0]?.id||"",quantity:1}]);
+ if(!ingredients.length)throw Error("Lege zuerst mindestens eine Zutat im Lager an.");
+ if(!products.length)throw Error("Lege zuerst mindestens ein Produkt im Lager an.");
+
+ const rows=existing.length
+  ? existing.map(x=>({inventory_id:x.inventory_id,quantity:x.quantity}))
+  : [
+    {inventory_id:ingredients[0].id,quantity:1},
+    {inventory_id:ingredients[Math.min(1,ingredients.length-1)].id,quantity:1}
+   ];
+
  $("#modalroot").innerHTML='<div class="modalback"><div class="modal recipeModal"><div class="modalhead"><b>'+(id?"Rezept bearbeiten":"Neues Rezept")+'</b><button id="x">×</button></div><form id="recipeform">'+
- field("Rezeptname","name","text",recipe?.name||"",true)+
- field("Beschreibung","description","text",recipe?.description||"")+
- selectField("Ergebnis / fertiges Produkt","output_inventory_id",products.map(x=>({value:x.id,label:x.item_name+" · "+x.unit})),recipe?.output_inventory_id||products[0].id)+
- field("Produktionsmenge","output_quantity","number",recipe?.output_quantity??1,true)+
+ selectField("Produkt","output_inventory_id",products.map(x=>({value:x.id,label:x.item_name+" · "+x.unit})),recipe?.output_inventory_id||products[0].id)+
  '<div class="recipeformhead"><b>Zutaten</b><button type="button" class="mini gold" id="addingredient">+ Zutat</button></div><div id="recipeitemsform"></div>'+
- '<div class="actions"><button type="button" class="btn outline" id="cancel">Abbrechen</button><button class="btn primary">Rezept speichern</button></div></form></div></div>';
- const close=()=>$("#modalroot").innerHTML="";$("#x").onclick=$("#cancel").onclick=close;
- const draw=()=>{$("#recipeitemsform").innerHTML=rows.map((r,n)=>'<div class="recipeformrow"><select data-ri="'+n+'" class="recipeingredient">'+ingredients.map(x=>'<option value="'+esc(x.id)+'" '+(x.id===r.inventory_id?"selected":"")+'>'+esc(x.item_name)+' · '+esc(x.unit)+'</option>').join("")+'</select><input data-rq="'+n+'" class="recipequantity" type="number" min="0.0001" step="any" value="'+esc(r.quantity)+'" required><button type="button" class="mini" data-remove-ri="'+n+'">×</button></div>').join("")||'<p class="muted">Noch keine Zutaten. Füge mindestens eine hinzu.</p>';$$("[data-remove-ri]").forEach(b=>b.onclick=()=>{rows.splice(Number(b.dataset.removeRi),1);draw()});};
- $("#addingredient").onclick=()=>{rows.push({inventory_id:ingredients[0]?.id||"",quantity:1});draw()};draw();
- $("#recipeform").onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{
-   const name=e.target.name.value.trim(),description=e.target.description.value.trim(),output_inventory_id=e.target.output_inventory_id.value,output_quantity=Number(e.target.output_quantity.value);
-   const payload=[...$(".recipeformrow")].map(row=>({inventory_id:row.querySelector(".recipeingredient").value,quantity:Number(row.querySelector(".recipequantity").value)})).filter(x=>x.inventory_id);
-   if(!name)throw Error("Bitte einen Rezeptnamen eingeben.");
-   if(!Number.isFinite(output_quantity)||output_quantity<=0)throw Error("Die Produktionsmenge muss größer als 0 sein.");
+ '<div class="actions"><button type="button" class="btn outline" id="cancel">Abbrechen</button><button class="btn primary">Speichern</button></div></form></div></div>';
+
+ const close=()=>$("#modalroot").innerHTML="";
+ $("#x").onclick=$("#cancel").onclick=close;
+
+ const draw=()=>{
+  $("#recipeitemsform").innerHTML=rows.map((r,n)=>
+   '<div class="recipeformrow"><select data-ri="'+n+'" class="recipeingredient">'+
+   ingredients.map(x=>'<option value="'+esc(x.id)+'" '+(x.id===r.inventory_id?"selected":"")+'>'+esc(x.item_name)+' · '+esc(x.unit)+'</option>').join("")+
+   '</select><input data-rq="'+n+'" class="recipequantity" type="number" min="0.0001" step="any" value="'+esc(r.quantity)+'" required>'+
+   '<button type="button" class="mini" data-remove-ri="'+n+'">×</button></div>'
+  ).join("");
+  $$("[data-remove-ri]").forEach(b=>b.onclick=()=>{
+   if(rows.length<=1)return;
+   rows.splice(Number(b.dataset.removeRi),1);
+   draw();
+  });
+ };
+ $("#addingredient").onclick=()=>{
+  rows.push({inventory_id:ingredients[0].id,quantity:1});
+  draw();
+ };
+ draw();
+
+ $("#recipeform").onsubmit=async e=>{
+  e.preventDefault();
+  const b=e.submitter;b.disabled=true;
+  try{
+   const output_inventory_id=e.target.output_inventory_id.value;
+   const product=products.find(x=>x.id===output_inventory_id);
+   const payload=[...$(".recipeformrow")].map(row=>({
+    inventory_id:row.querySelector(".recipeingredient").value,
+    quantity:Number(row.querySelector(".recipequantity").value)
+   })).filter(x=>x.inventory_id);
+
+   if(!product)throw Error("Bitte ein Produkt auswählen.");
    if(!payload.length)throw Error("Ein Rezept benötigt mindestens eine Zutat.");
    if(payload.some(x=>!Number.isFinite(x.quantity)||x.quantity<=0))throw Error("Alle Zutatenmengen müssen größer als 0 sein.");
    if(new Set(payload.map(x=>x.inventory_id)).size!==payload.length)throw Error("Eine Zutat darf pro Rezept nur einmal vorkommen.");
-   const r=await supabaseClient.rpc("vineyard_save_recipe",{p_recipe_id:id||null,p_name:name,p_description:description,p_output_inventory_id:output_inventory_id,p_output_quantity:output_quantity,p_items:payload});
-   if(r.error)throw r.error;close();await render();
- }catch(err){alert(err.message||String(err))}finally{b.disabled=false}};
+
+   const r=await supabaseClient.rpc("vineyard_save_recipe",{
+    p_recipe_id:id||null,
+    p_name:product.item_name,
+    p_description:"",
+    p_output_inventory_id:output_inventory_id,
+    p_output_quantity:1,
+    p_items:payload
+   });
+   if(r.error)throw r.error;
+   close();
+   await render();
+  }catch(err){alert(err.message||String(err))}
+  finally{b.disabled=false}
+ };
 }
 async function deleteRecipe(id){
  if(!confirm("Dieses Rezept wirklich löschen?"))return;
@@ -557,13 +600,51 @@ async function stockModal(id){
  async v=>{const amount=Math.abs(Number(v.amount)||0);if(!amount)throw Error("Menge muss größer als 0 sein.");const delta=v.mode==="in"?amount:-amount;const {error}=await supabaseClient.rpc("vineyard_adjust_inventory",{p_inventory_id:id,p_delta:delta,p_reason:v.reason.trim()});if(error)throw error})
 }
 async function productionModal(id){
- const {data:item}=await supabaseClient.from("vineyard_inventory").select("*").eq("id",id).single();
- if(!item)throw Error("Lagerartikel nicht gefunden.");
+ const {data:item,error}=await supabaseClient.from("vineyard_inventory").select("*").eq("id",id).single();
+ if(error||!item)throw Error("Lagerartikel nicht gefunden.");
  if(item.category!=="Produkte")throw Error("Produktion kann nur bei Produkten gebucht werden.");
+
+ const {data:recipes=[],error:re}=await supabaseClient.from("vineyard_recipes")
+  .select("id,name,output_quantity")
+  .eq("output_inventory_id",id)
+  .eq("active",true)
+  .order("name");
+ if(re)throw re;
+ if(!recipes.length){
+  modal("Produktion · "+item.item_name,
+   '<div class="recipehint"><b>Kein Rezept hinterlegt.</b><br>Für dieses Produkt muss zuerst unter <b>Rezepte</b> ein Rezept angelegt werden.</div>'+
+   '<div class="actions"><button type="button" class="btn outline" id="cancel">Schließen</button></div>',
+   async()=>{}
+  );
+  return;
+ }
+
+ let selected=recipes[0].id;
+ const loadRecipe=async recipeId=>{
+  selected=recipeId;
+  const {data:items,error}=await supabaseClient.from("vineyard_recipe_items")
+   .select("quantity,vineyard_inventory:inventory_id(item_name,unit)")
+   .eq("recipe_id",recipeId)
+   .order("created_at");
+  if(error)throw error;
+  const recipe=recipes.find(x=>x.id===recipeId);
+  const list=(items||[]).map(x=>'<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #e5dfd4"><span>'+esc(x.vineyard_inventory?.item_name||"")+'</span><b>'+Number(x.quantity).toLocaleString("de-DE")+' '+esc(x.vineyard_inventory?.unit||"")+'</b></div>').join("");
+  $("#productionIngredients").innerHTML='<small>ZUTATEN PRO PRODUKTION</small>'+list;
+  $("#productionOutput").innerHTML='<small>ERGEBNIS</small><b>'+esc(item.item_name)+'</b><span>'+Number(recipe?.output_quantity||1).toLocaleString("de-DE")+' '+esc(item.unit)+' pro Produktion</span>';
+ };
  modal("Produktion · "+item.item_name,
-   field("Produzierte Menge","amount","number","",true)+
-   field("Produktionshinweis","reason","text","Produktion",true),
-   async v=>{const amount=Math.abs(Number(v.amount)||0);if(!amount)throw Error("Die Produktionsmenge muss größer als 0 sein.");const {error}=await supabaseClient.rpc("vineyard_adjust_inventory",{p_inventory_id:id,p_delta:amount,p_reason:v.reason.trim()||"Produktion"});if(error)throw error})
+  selectField("Rezept","recipe_id",recipes.map(x=>({value:x.id,label:x.name})),selected)+
+  field("Menge","batches","number",1,true)+
+  '<div id="productionIngredients" class="recipeingredients"></div><div id="productionOutput" class="recipeoutput"></div>',
+  async v=>{
+   const batches=Number(v.batches)||0;
+   if(!Number.isFinite(batches)||batches<=0)throw Error("Die Produktionsmenge muss größer als 0 sein.");
+   const r=await supabaseClient.rpc("vineyard_produce_recipe",{p_recipe_id:v.recipe_id,p_batches:batches});
+   if(r.error)throw r.error;
+  }
+ );
+ $("#modalroot [name=recipe_id]").onchange=async e=>{try{await loadRecipe(e.target.value)}catch(err){alert(err.message||String(err))}};
+ await loadRecipe(selected);
 }
 async function cashModal(id){
  let existing=null;
