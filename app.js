@@ -231,9 +231,12 @@ async function orders(){
 }
 async function admin(){
  if(!role?.permissions?.admin_access)return errorBox("Kein Admin-Zugang.");
- const {data:rows=[],error}=await supabaseClient.from("vineyard_audit_log").select("*,vineyard_profiles:actor_id(display_name)").order("created_at",{ascending:false}).limit(500);
+ const {data:rows=[],error}=await supabaseClient.from("vineyard_audit_log").select("*").order("created_at",{ascending:false}).limit(500);
  if(error)return errorBox(error.message);
- const actorName=x=>x.vineyard_profiles?.display_name||x.details?.actor_name||"SYSTEM";
+ const actorIds=[...new Set(rows.map(x=>x.actor_id).filter(Boolean))];
+ const {data:actors=[]}=actorIds.length?await supabaseClient.from("vineyard_profiles").select("user_id,display_name").in("user_id",actorIds):{data:[]};
+ const actorMap=Object.fromEntries((actors||[]).map(x=>[x.user_id,x.display_name]));
+ const actorName=x=>actorMap[x.actor_id]||x.details?.actor_name||"SYSTEM";
  const formatDate=x=>{const d=new Date(x.created_at);return d.toLocaleDateString("de-DE")+" · "+d.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})+" Uhr"};
  const message=x=>{
   const d=x.details||{}, a=String(x.action||"").toLowerCase(), name=actorName(x);
