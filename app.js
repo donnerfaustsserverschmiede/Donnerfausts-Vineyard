@@ -10,8 +10,20 @@ const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&
 const money=n=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format(Number(n)||0);
 const dateTime=()=>new Date().toLocaleString("de-DE");
 let profile=null, role=null, page="dashboard";
-let presenceChannel=null, onlineCount=0;
+let presenceChannel=null, onlineCount=0, orderRealtimeChannel=null;
 
+function startOrderRealtime(){
+ try{
+  if(page!=="orders"||orderRealtimeChannel||!supabaseClient?.channel)return;
+  const channel=supabaseClient.channel("donnerfaust-vineyards-orders");
+  channel.on("postgres_changes",{event:"*",schema:"public",table:"vineyard_orders"},()=>{if(page==="orders")render()});
+  channel.subscribe();
+  orderRealtimeChannel=channel;
+ }catch(_){}
+}
+function stopOrderRealtime(){
+ if(orderRealtimeChannel){try{supabaseClient.removeChannel(orderRealtimeChannel)}catch(_){}orderRealtimeChannel=null;}
+}
 function startPresence(){
   try{
     if(!profile?.user_id || !supabaseClient?.channel)return;
@@ -294,7 +306,11 @@ async function audit(){
 }
 function errorBox(t){return '<div class="panel"><b>Fehler</b><p class="muted">'+esc(t)+"</p></div>"}
 
-async function render(){let content=page==="dashboard"?await dashboard():page==="invoices"?await invoices():page==="orders"?await orders():page==="inventory"?await inventory():page==="recipes"?await recipes():page==="cash"?await cash():page==="employees"?await employees():page==="admin"?await admin():await audit();shell(content);bind()}
+async function render(){
+ let content=page==="dashboard"?await dashboard():page==="invoices"?await invoices():page==="orders"?await orders():page==="inventory"?await inventory():page==="recipes"?await recipes():page==="cash"?await cash():page==="employees"?await employees():page==="admin"?await admin():await audit();
+ shell(content);bind();
+ if(page==="orders")startOrderRealtime();else stopOrderRealtime();
+}
 function bind(){
  document.onclick=async e=>{
   const b=e.target.closest?.("[data-action]");
@@ -597,13 +613,15 @@ async function orderModal(id){
  if(ie)throw ie;
  const employee=order.employee_id?((await supabaseClient.rpc("vineyard_invoice_employees")).data||[]).find(x=>x.user_id===order.employee_id)?.display_name:"—";
  const statusButton=order.status==="Eingegangen"?'<button class="btn gold" id="acceptOrder">Bestellung annehmen</button>':order.status==="In Bearbeitung"?'<button class="btn gold" id="completeOrder">Bestellung abschließen</button>':"";
+ const statusLink=location.origin+location.pathname+"?bestellung=status&token="+encodeURIComponent(order.customer_token||"");
  const cancelButton=order.status!=="Bestellung abgeschlossen"&&order.status!=="Storniert"?'<button class="btn danger" id="cancelOrder">Stornieren</button>':"";
  $("#modalroot").innerHTML='<div class="modalback"><div class="modal orderModal"><div class="modalhead"><b>Bestellung '+esc(order.order_number)+'</b><button id="x">×</button></div>'+
  '<div class="publicMeta"><div><small>STATUS</small><b>'+esc(order.status)+'</b></div><div><small>KUNDE</small><b>'+esc(order.customer_name)+'</b></div><div><small>MITARBEITER</small><b>'+esc(employee||"—")+'</b></div><div><small>PROVISION</small><b>'+money(order.commission_amount||0)+'</b></div></div>'+
  '<p><b>E-Mail:</b> '+esc(order.customer_email)+'<br><b>Telefon:</b> '+esc(order.customer_phone||"—")+'<br><b>Adresse:</b> '+esc(order.customer_address||"—")+'<br><b>Hinweis:</b> '+esc(order.customer_note||"—")+'</p>'+
  '<div class="publicTable"><table><thead><tr><th>Produkt</th><th>Menge</th><th>Einzelpreis</th><th>Gesamt</th></tr></thead><tbody>'+items.map(x=>'<tr><td>'+esc(x.item_name)+'</td><td>'+Number(x.quantity).toLocaleString("de-DE")+' '+esc(x.unit)+'</td><td>'+money(x.unit_price)+'</td><td>'+money(x.line_total)+'</td></tr>').join("")+'</tbody></table></div>'+
- '<div class="publicTotal"><span>Gesamtsumme</span><b>'+money(order.total)+'</b></div><div class="actions">'+statusButton+cancelButton+'<button type="button" class="btn outline" id="cancel">Schließen</button></div></div></div>';
+ '<div class="publicTotal"><span>Gesamtsumme</span><b>'+money(order.total)+'</b></div><div class="orderstatuslink"><input readonly value="'+esc(statusLink)+'"><button type="button" class="btn outline" id="copyOrderStatus">Kunden-Link kopieren</button></div><div class="actions">'+statusButton+cancelButton+'<button type="button" class="btn outline" id="cancel">Schließen</button></div></div></div>';
  $("#x").onclick=$("#cancel").onclick=()=>$("#modalroot").innerHTML="";
+ if($("#copyOrderStatus"))$("#copyOrderStatus").onclick=async()=>{try{await navigator.clipboard.writeText(statusLink);alert("Kunden-Status-Link kopiert.")}catch(_){prompt("Kunden-Status-Link",statusLink)}};
  if($("#acceptOrder"))$("#acceptOrder").onclick=async()=>{await updateOrderStatus(id,"In Bearbeitung")};
  if($("#completeOrder"))$("#completeOrder").onclick=async()=>{await updateOrderStatus(id,"Bestellung abgeschlossen")};
  if($("#cancelOrder"))$("#cancelOrder").onclick=async()=>{if(confirm("Bestellung wirklich stornieren?"))await updateOrderStatus(id,"Storniert")};
