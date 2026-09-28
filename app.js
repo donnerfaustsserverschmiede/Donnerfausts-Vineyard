@@ -1,3 +1,4 @@
+window.__vineyardAppStarted=true;
 const SUPABASE_URL="https://qsyijgvikxmwmhaiulne.supabase.co";
 const SUPABASE_KEY="sb_publishable_5qeUg0c0T0IyLh8g0cUj6Q_ZJYgZYJ_";
 const supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
