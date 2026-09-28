@@ -1,6 +1,6 @@
-const SUPABASE_URL="https://qsyijgvikxmwmhaiulne.supabase.co";
+const SUPABASE_URL="https://qsyijgvikxmwmhaiulne.supabaseClient.co";
 const SUPABASE_KEY="sb_publishable_5qeUg0c0T0IyLh8g0cUj6Q_ZJYgZYJ_";
-const supabase=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
+const supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 const money=n=>new Intl.NumberFormat("de-DE",{style:"currency",currency:"EUR"}).format(Number(n)||0);
@@ -23,17 +23,22 @@ function can(p){return !!role?.permissions?.[p]}
 function badge(s){return '<span class="badge '+(s==="Bezahlt"||s==="OK"?"good":s==="Niedrig"||s==="Offen"?"warn":"bad")+'">'+esc(s)+"</span>"}
 
 async function init(){
- const {data:{session}}=await supabase.auth.getSession();
+ if(!window.supabase||typeof window.supabase.createClient!=="function")throw Error("Die Supabase-Bibliothek konnte nicht geladen werden.");
+ const sessionResult=await Promise.race([
+  supabaseClient.auth.getSession(),
+  new Promise((_,reject)=>setTimeout(()=>reject(Error("Die Anmeldung konnte nicht innerhalb von 10 Sekunden initialisiert werden.")),10000))
+ ]);
+ const {data:{session}}=sessionResult;
  if(!session)return login();
  await loadProfile();
- if(!profile){await supabase.auth.signOut();return login("Dein Konto ist für Donnerfaust Vineyards noch nicht freigeschaltet.");}
+ if(!profile){await supabaseClient.auth.signOut();return login("Dein Konto ist für Donnerfaust Vineyards noch nicht freigeschaltet.");}
  if(profile.must_change_password)return forcePasswordChange();
  render();
  startPresence();
- supabase.auth.onAuthStateChange(async (_e,s)=>{if(!s){if(presenceChannel)await supabase.removeChannel(presenceChannel);presenceChannel=null;login()}});
+ supabaseClient.auth.onAuthStateChange(async (_e,s)=>{if(!s){if(presenceChannel)await supabaseClient.removeChannel(presenceChannel);presenceChannel=null;login()}});
 }
 async function loadProfile(){
- const {data,error}=await supabase.from("vineyard_profiles").select("user_id,display_name,role_key,active,phone,must_change_password,vineyard_roles:role_key(key,label,permissions)").eq("user_id",(await supabase.auth.getUser()).data.user.id).maybeSingle();
+ const {data,error}=await supabaseClient.from("vineyard_profiles").select("user_id,display_name,role_key,active,phone,must_change_password,vineyard_roles:role_key(key,label,permissions)").eq("user_id",(await supabaseClient.auth.getUser()).data.user.id).maybeSingle();
  if(error||!data||!data.active){profile=null;return}
  profile=data;role=data.vineyard_roles;
 }
@@ -52,10 +57,10 @@ function login(message=""){
   e.preventDefault();
   const b=e.submitter;
   b.disabled=true;
-  const {error}=await supabase.auth.signInWithPassword({email:$("#email").value.trim(),password:$("#password").value});
+  const {error}=await supabaseClient.auth.signInWithPassword({email:$("#email").value.trim(),password:$("#password").value});
   if(error){b.disabled=false;return login(error.message);}
   await loadProfile();
-  if(!profile){await supabase.auth.signOut();return login("Dieser Benutzer hat noch kein Vineyards-Profil.");}
+  if(!profile){await supabaseClient.auth.signOut();return login("Dieser Benutzer hat noch kein Vineyards-Profil.");}
   if(profile.must_change_password)return forcePasswordChange();
   await render();
   startPresence();
@@ -70,7 +75,7 @@ function forcePasswordChange(){
   if(b1.length<8)return alert("Das Passwort muss mindestens 8 Zeichen haben.");
   if(b1!==b2)return alert("Die Passwörter stimmen nicht überein.");
   b.disabled=true;
-  const r=await supabase.functions.invoke("vineyard-admin-users",{body:{action:"change_password",password:b1}});
+  const r=await supabaseClient.functions.invoke("vineyard-admin-users",{body:{action:"change_password",password:b1}});
   if(r.error||r.data?.error){b.disabled=false;return alert(r.data?.error||r.error?.message||"Passwort konnte nicht geändert werden.");}
   await loadProfile();
   render();
@@ -80,7 +85,7 @@ function forcePasswordChange(){
 function shell(content){
  const nav=NAV.filter(n=>can(n[3])).map(n=>`<button class="nav ${page===n[0]?"active":""}" data-page="${n[0]}"><i>${n[1]}</i>${n[2]}</button>`).join("");
  document.body.innerHTML=`<aside class="sidebar" id="sidebar"><div class="brand"><div class="brandmark">🍇</div><div><b>Donnerfaust Vineyards</b><small>Interne Verwaltung</small></div></div><nav>${nav}</nav><div class="sidefoot"><span class="online"></span>${esc(profile.display_name)} · ${esc(role.label)}<br><button id="logout" class="mini" style="margin-top:9px">Abmelden</button></div></aside><main class="main"><header class="top"><div><button class="hamb" id="hamb">☰</button><span class="crumb">DONNERFAUST VINEYARDS</span><h2>${esc(pageTitle())}</h2></div><div class="topright"><span class="online"></span><b>${esc(profile.display_name)}</b><span class="avatar">${esc(initials(profile.display_name))}</span></div></header><section class="content">${content}</section></main><div id="modalroot"></div>`;
- $$(".nav").forEach(b=>b.onclick=()=>{page=b.dataset.page;render();});$("#hamb").onclick=()=>$("#sidebar").classList.toggle("open");$("#logout").onclick=()=>supabase.auth.signOut();
+ $$(".nav").forEach(b=>b.onclick=()=>{page=b.dataset.page;render();});$("#hamb").onclick=()=>$("#sidebar").classList.toggle("open");$("#logout").onclick=()=>supabaseClient.auth.signOut();
 }
 function pageTitle(){return ({dashboard:"Übersicht",invoices:"Rechnungen",orders:"Bestellungen",inventory:"Lagerübersicht",recipes:"Rezepte",cash:"Kasse",employees:"Mitarbeiter",audit:"Protokoll"})[page]||"Übersicht"}
 function initials(n){return String(n||"DF").split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase()}
@@ -110,14 +115,14 @@ async function invoices(){return '<div class="placeholder"><div class="placehold
 async function orders(){return '<div class="placeholder"><div class="placeholdericon">🛒</div><div class="eyebrow">BESTELLUNGEN</div><h1>Bestellungsmenü</h1><p>Hier werden offene Bestellungen und Lieferungen verwaltet.</p><div class="placeholderstate">Noch keine Bestellungen hinterlegt.</div></div>';}
 function startPresence(){
  if(presenceChannel)return;
- const channel=supabase.channel("vineyard-online",{config:{presence:{key:profile.user_id}}});
+ const channel=supabaseClient.channel("vineyard-online",{config:{presence:{key:profile.user_id}}});
  const update=()=>{const state=channel.presenceState();onlineCount=Object.keys(state).length;const el=$("#onlineCount");if(el)el.textContent=onlineCount;};
  channel.on("presence",{event:"sync"},update).on("presence",{event:"join"},update).on("presence",{event:"leave"},update);
  channel.subscribe(async status=>{if(status==="SUBSCRIBED"){await channel.track({user_id:profile.user_id,name:profile.display_name,online_at:new Date().toISOString()});update();}});
  presenceChannel=channel;
 }
 async function inventory(){
- const {data:items=[],error}=await supabase.from("vineyard_inventory").select("*").order("category").order("item_name");
+ const {data:items=[],error}=await supabaseClient.from("vineyard_inventory").select("*").order("category").order("item_name");
  if(error)return errorBox(error.message);
  const ingredients=items.filter(x=>x.category==="Zutaten");
  const products=items.filter(x=>x.category==="Produkte");
@@ -144,11 +149,11 @@ function itemCards(items){
 }
 
 async function recipes(){
- const {data:rows=[],error}=await supabase.from("vineyard_recipes").select("*").order("name");
+ const {data:rows=[],error}=await supabaseClient.from("vineyard_recipes").select("*").order("name");
  if(error)return errorBox(error.message);
- const {data:inv=[]}=await supabase.from("vineyard_inventory").select("id,item_name,unit,category");
+ const {data:inv=[]}=await supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category");
  const map=Object.fromEntries(inv.map(x=>[x.id,x]));
- const {data:items=[]}=await supabase.from("vineyard_recipe_items").select("recipe_id,quantity,inventory_id,vineyard_inventory:inventory_id(item_name,unit,category)").order("created_at");
+ const {data:items=[]}=await supabaseClient.from("vineyard_recipe_items").select("recipe_id,quantity,inventory_id,vineyard_inventory:inventory_id(item_name,unit,category)").order("created_at");
  const byRecipe={};items.forEach(x=>(byRecipe[x.recipe_id]??=[]).push(x));
  return intro("REZEPTE","Rezeptverwaltung","Hier legst du fest, welche im Lager angelegten Zutaten für ein Produkt benötigt werden.",can("inventory_edit")?"newrecipe":null,can("inventory_edit")?"+ Rezept":null)+
  '<div class="recipehint"><b>Wichtig:</b> Nur Artikel, die vorher im <b>Lager</b> angelegt wurden, können hier ausgewählt werden. Zutaten müssen als <b>Zutaten</b> und das Rezept-Ergebnis als <b>Produkte</b> angelegt sein.</div>'+
@@ -162,7 +167,7 @@ async function recipes(){
  }).join("")||'<div class="panel"><p class="muted">Noch keine Rezepte angelegt. Lege zuerst Zutaten und Produkte im Lager an.</p></div>'+'</div>';
 }
 async function cash(){
- const {data:rows=[],error}=await supabase.from("vineyard_cashbook").select("*").order("created_at",{ascending:false});
+ const {data:rows=[],error}=await supabaseClient.from("vineyard_cashbook").select("*").order("created_at",{ascending:false});
  if(error)return errorBox(error.message);
  const balance=rows.reduce((s,x)=>s+(x.kind==="in"?1:-1)*Number(x.amount||0),0);
  return intro("KASSE","Kassenbuch","Ein- und Auszahlungen mit Benutzerprotokoll.",can("cash_edit")?"newcash":null,can("cash_edit")?"+ Buchung":null)+
@@ -171,14 +176,14 @@ async function cash(){
 }
 async function employees(){
  const [{data:emps=[]},{data:roles=[]}]=await Promise.all([
-  supabase.from("vineyard_profiles").select("user_id,display_name,role_key,active,phone,vineyard_roles:role_key(label)").order("display_name"),
-  supabase.from("vineyard_roles").select("key,label,permissions").order("key")
+  supabaseClient.from("vineyard_profiles").select("user_id,display_name,role_key,active,phone,vineyard_roles:role_key(label)").order("display_name"),
+  supabaseClient.from("vineyard_roles").select("key,label,permissions").order("key")
  ]);
  return intro("TEAM","Mitarbeiter","Konten, Rollen und Rechte werden ausschließlich über den Master verwaltet.",can("employees_edit")?"newemployee":null,can("employees_edit")?"+ Mitarbeiter":null)+
  '<div class="employeegrid">'+emps.map(x=>'<div class="employee"><div class="avatar">'+esc(initials(x.display_name))+'</div><div style="flex:1"><b>'+esc(x.display_name)+"</b><small>"+esc(x.vineyard_roles?.label||x.role_key)+" · "+(x.active?'<span class="good">Aktiv</span>':'<span class="bad">Deaktiviert</span>')+"</small>"+(x.phone?'<small>'+esc(x.phone)+"</small>":"")+'</div>'+(can("employees_edit")?'<button class="mini" data-edit-employee="'+x.user_id+'">Verwalten</button>':"")+"</div>").join("")+"</div>";
 }
 async function audit(){
- const {data:rows=[],error}=await supabase.from("vineyard_audit_log").select("*,vineyard_profiles:actor_id(display_name)").order("created_at",{ascending:false}).limit(100);
+ const {data:rows=[],error}=await supabaseClient.from("vineyard_audit_log").select("*,vineyard_profiles:actor_id(display_name)").order("created_at",{ascending:false}).limit(100);
  if(error)return errorBox(error.message);
  return intro("SICHERHEIT","Änderungsprotokoll","Nachvollziehbare Protokollierung wichtiger Verwaltungsvorgänge.")+
  '<div class="panel">'+rows.map(x=>'<div class="row"><span>◷</span><div class="rowgrow"><b>'+esc(x.action)+"</b><small>"+esc(x.vineyard_profiles?.display_name||"SYSTEM")+" · "+esc(x.entity)+" · "+esc(new Date(x.created_at).toLocaleString("de-DE"))+"</small></div></div>").join("")||'<p class="muted">Noch keine Einträge.</p>'+"</div>";
@@ -189,7 +194,7 @@ async function render(){let content=page==="dashboard"?await dashboard():page===
 function bind(){
  $("[data-action]").forEach(b=>b.onclick=()=>action(b.dataset.action));
  $("[data-page-action]").forEach(b=>b.onclick=()=>{page=b.dataset.pageAction;render()});
- $("#q")?.addEventListener("input",async e=>{const {data=[]}=await supabase.from("vineyard_inventory").select("*").order("category").order("item_name");const q=e.target.value.toLowerCase();$("#ingredients").innerHTML=itemCards(data.filter(x=>x.category==="Zutaten"&&x.item_name.toLowerCase().includes(q)));$("#products").innerHTML=itemCards(data.filter(x=>x.category==="Produkte"&&x.item_name.toLowerCase().includes(q)))});
+ $("#q")?.addEventListener("input",async e=>{const {data=[]}=await supabaseClient.from("vineyard_inventory").select("*").order("category").order("item_name");const q=e.target.value.toLowerCase();$("#ingredients").innerHTML=itemCards(data.filter(x=>x.category==="Zutaten"&&x.item_name.toLowerCase().includes(q)));$("#products").innerHTML=itemCards(data.filter(x=>x.category==="Produkte"&&x.item_name.toLowerCase().includes(q)))});
  $$("[data-stock]").forEach(b=>b.onclick=()=>stockModal(b.dataset.stock));
  $$("[data-production]").forEach(b=>b.onclick=()=>productionModal(b.dataset.production));
  $("[data-edit-item]").forEach(b=>b.onclick=()=>itemModal(b.dataset.editItem));
@@ -209,7 +214,7 @@ function selectField(label,name,opts,value=""){return '<label>'+label+'<select n
 
 async function itemModal(id){
  let item=null;
- if(id){const {data,error}=await supabase.from("vineyard_inventory").select("*").eq("id",id).single();if(error)throw error;item=data}
+ if(id){const {data,error}=await supabaseClient.from("vineyard_inventory").select("*").eq("id",id).single();if(error)throw error;item=data}
  const cat=item?.category||"Zutaten";
  $("#modalroot").innerHTML='<div class="modalback"><div class="modal"><div class="modalhead"><b>'+(id?"Lagerartikel bearbeiten":"Neuer Lagerartikel")+'</b><button id="x">×</button></div><form id="mf">'+
  field("Artikel / Ressource","item_name","text",item?.item_name||"",true)+
@@ -234,14 +239,14 @@ async function itemModal(id){
  $("#mf").onsubmit=async e=>{
    e.preventDefault();const b=e.submitter;b.disabled=true;
    try{
-    const v=Object.fromEntries(new FormData(e.target)), user=(await supabase.auth.getUser()).data.user;
+    const v=Object.fromEntries(new FormData(e.target)), user=(await supabaseClient.auth.getUser()).data.user;
     const ingredient=v.category==="Zutaten";
     const purchase_price=ingredient?Number(v.purchase_price):0;
     const sale_price=ingredient?0:Number(v.sale_price);
     if(!ingredient&&!Number.isFinite(sale_price))throw Error("Bitte einen gültigen Verkaufspreis angeben.");
     if(ingredient&&!Number.isFinite(purchase_price))throw Error("Bitte einen gültigen Einkaufspreis angeben.");
     const patch={item_name:v.item_name.trim(),category:v.category,unit:v.unit.trim(),quantity:Number(v.quantity)||0,min_stock:Number(v.min_stock)||0,purchase_price,sale_price,updated_at:new Date().toISOString(),updated_by:user.id};
-    const r=id?await supabase.from("vineyard_inventory").update(patch).eq("id",id):await supabase.from("vineyard_inventory").insert(patch);
+    const r=id?await supabaseClient.from("vineyard_inventory").update(patch).eq("id",id):await supabaseClient.from("vineyard_inventory").insert(patch);
     if(r.error)throw r.error;
     await auditLog(id?"Lagerartikel geändert":"Lagerartikel angelegt","inventory",id||v.item_name,patch);
     close();await render();
@@ -250,10 +255,10 @@ async function itemModal(id){
 }
 async function recipeModal(id){
  const [{data:ingredients=[]},{data:products=[]},recipeResult,itemsResult]=await Promise.all([
-  supabase.from("vineyard_inventory").select("id,item_name,unit,category").eq("category","Zutaten").order("item_name"),
-  supabase.from("vineyard_inventory").select("id,item_name,unit,category").eq("category","Produkte").order("item_name"),
-  id?supabase.from("vineyard_recipes").select("*").eq("id",id).single():Promise.resolve({data:null}),
-  id?supabase.from("vineyard_recipe_items").select("inventory_id,quantity").eq("recipe_id",id).order("created_at"):Promise.resolve({data:[]})
+  supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category").eq("category","Zutaten").order("item_name"),
+  supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category").eq("category","Produkte").order("item_name"),
+  id?supabaseClient.from("vineyard_recipes").select("*").eq("id",id).single():Promise.resolve({data:null}),
+  id?supabaseClient.from("vineyard_recipe_items").select("inventory_id,quantity").eq("recipe_id",id).order("created_at"):Promise.resolve({data:[]})
  ]);
  const recipe=recipeResult.data, existing=itemsResult.data||[];
  if(id&&!recipe)throw Error("Rezept nicht gefunden.");
@@ -278,44 +283,51 @@ async function recipeModal(id){
    if(!payload.length)throw Error("Ein Rezept benötigt mindestens eine Zutat.");
    if(payload.some(x=>!Number.isFinite(x.quantity)||x.quantity<=0))throw Error("Alle Zutatenmengen müssen größer als 0 sein.");
    if(new Set(payload.map(x=>x.inventory_id)).size!==payload.length)throw Error("Eine Zutat darf pro Rezept nur einmal vorkommen.");
-   const r=await supabase.rpc("vineyard_save_recipe",{p_recipe_id:id||null,p_name:name,p_description:description,p_output_inventory_id:output_inventory_id,p_output_quantity:output_quantity,p_items:payload});
+   const r=await supabaseClient.rpc("vineyard_save_recipe",{p_recipe_id:id||null,p_name:name,p_description:description,p_output_inventory_id:output_inventory_id,p_output_quantity:output_quantity,p_items:payload});
    if(r.error)throw r.error;close();await render();
  }catch(err){alert(err.message||String(err))}finally{b.disabled=false}};
 }
 async function deleteRecipe(id){
  if(!confirm("Dieses Rezept wirklich löschen?"))return;
- const r=await supabase.rpc("vineyard_delete_recipe",{p_recipe_id:id});
+ const r=await supabaseClient.rpc("vineyard_delete_recipe",{p_recipe_id:id});
  if(r.error)return alert(r.error.message);
  await render();
 }
 async function stockModal(id){
- const {data:item}=await supabase.from("vineyard_inventory").select("*").eq("id",id).single();
+ const {data:item}=await supabaseClient.from("vineyard_inventory").select("*").eq("id",id).single();
  if(!item)throw Error("Lagerartikel nicht gefunden.");
  modal("Bestandsbewegung · "+item.item_name,selectField("Bewegung","mode",[{value:"in",label:"Zugang (+)"},{value:"out",label:"Abgang (-)"}])+field("Menge","amount","number","",true)+field("Grund","reason","text","",true),
- async v=>{const amount=Math.abs(Number(v.amount)||0);if(!amount)throw Error("Menge muss größer als 0 sein.");const delta=v.mode==="in"?amount:-amount;const {error}=await supabase.rpc("vineyard_adjust_inventory",{p_inventory_id:id,p_delta:delta,p_reason:v.reason.trim()});if(error)throw error})
+ async v=>{const amount=Math.abs(Number(v.amount)||0);if(!amount)throw Error("Menge muss größer als 0 sein.");const delta=v.mode==="in"?amount:-amount;const {error}=await supabaseClient.rpc("vineyard_adjust_inventory",{p_inventory_id:id,p_delta:delta,p_reason:v.reason.trim()});if(error)throw error})
 }
 async function productionModal(id){
- const {data:item}=await supabase.from("vineyard_inventory").select("*").eq("id",id).single();
+ const {data:item}=await supabaseClient.from("vineyard_inventory").select("*").eq("id",id).single();
  if(!item)throw Error("Lagerartikel nicht gefunden.");
  if(item.category!=="Produkte")throw Error("Produktion kann nur bei Produkten gebucht werden.");
  modal("Produktion · "+item.item_name,
    field("Produzierte Menge","amount","number","",true)+
    field("Produktionshinweis","reason","text","Produktion",true),
-   async v=>{const amount=Math.abs(Number(v.amount)||0);if(!amount)throw Error("Die Produktionsmenge muss größer als 0 sein.");const {error}=await supabase.rpc("vineyard_adjust_inventory",{p_inventory_id:id,p_delta:amount,p_reason:v.reason.trim()||"Produktion"});if(error)throw error})
+   async v=>{const amount=Math.abs(Number(v.amount)||0);if(!amount)throw Error("Die Produktionsmenge muss größer als 0 sein.");const {error}=await supabaseClient.rpc("vineyard_adjust_inventory",{p_inventory_id:id,p_delta:amount,p_reason:v.reason.trim()||"Produktion"});if(error)throw error})
 }
 async function cashModal(){
  modal("Kassenbuchung",selectField("Art","kind",[{value:"in",label:"Einnahme (+)"},{value:"out",label:"Ausgabe (-)"}])+selectField("Kategorie","category",["Weinverkauf","Trauben","Material","Lohn","Betriebskosten","Sonstiges"])+field("Betrag (€)","amount","number","",true)+field("Beschreibung","description","text","",true),
- async v=>{const amount=Number(v.amount)||0;if(amount<=0)throw Error("Betrag muss größer als 0 sein.");const r=await supabase.from("vineyard_cashbook").insert({kind:v.kind,category:v.category,amount,description:v.description.trim(),created_by:(await supabase.auth.getUser()).data.user.id});if(r.error)throw r.error;await auditLog("Kassenbuchung","cashbook",null,{kind:v.kind,amount,category:v.category,description:v.description.trim()})})
+ async v=>{const amount=Number(v.amount)||0;if(amount<=0)throw Error("Betrag muss größer als 0 sein.");const r=await supabaseClient.from("vineyard_cashbook").insert({kind:v.kind,category:v.category,amount,description:v.description.trim(),created_by:(await supabaseClient.auth.getUser()).data.user.id});if(r.error)throw r.error;await auditLog("Kassenbuchung","cashbook",null,{kind:v.kind,amount,category:v.category,description:v.description.trim()})})
 }
 async function employeeModal(id){
- const [{data:e},{data:roles}]=await Promise.all([supabase.from("vineyard_profiles").select("*").eq("user_id",id||"00000000-0000-0000-0000-000000000000").maybeSingle(),supabase.from("vineyard_roles").select("key,label").order("key")]);
+ const [{data:e},{data:roles}]=await Promise.all([supabaseClient.from("vineyard_profiles").select("*").eq("user_id",id||"00000000-0000-0000-0000-000000000000").maybeSingle(),supabaseClient.from("vineyard_roles").select("key,label").order("key")]);
  if(id){
   modal("Mitarbeiter verwalten",field("Name","display_name","text",e?.display_name||"",true)+selectField("Rolle","role_key",roles.map(r=>({value:r.key,label:r.label})),e?.role_key||"mitarbeiter")+field("Telefon","phone","text",e?.phone||"")+selectField("Status","active",[{value:"true",label:"Aktiv"},{value:"false",label:"Deaktiviert"}],String(e?.active!==false)),
-  async v=>{const r=await supabase.functions.invoke("vineyard-admin-users",{body:{action:"update",user_id:id,display_name:v.display_name,role_key:v.role_key,phone:v.phone,active:v.active==="true"}});if(r.error)throw r.error;await auditLog("Mitarbeiter geändert","employee",id,{role_key:v.role_key,active:v.active==="true"})})
+  async v=>{const r=await supabaseClient.functions.invoke("vineyard-admin-users",{body:{action:"update",user_id:id,display_name:v.display_name,role_key:v.role_key,phone:v.phone,active:v.active==="true"}});if(r.error)throw r.error;await auditLog("Mitarbeiter geändert","employee",id,{role_key:v.role_key,active:v.active==="true"})})
  }else{
   modal("Neuen Mitarbeiter anlegen",field("Name","display_name","text","",true)+field("E-Mail","email","email","",true)+field("Startpasswort","password","password","",true)+selectField("Rolle","role_key",roles.map(r=>({value:r.key,label:r.label})),"mitarbeiter")+field("Telefon","phone"),
-  async v=>{if(v.password.length<8)throw Error("Das Startpasswort muss mindestens 8 Zeichen haben.");const r=await supabase.functions.invoke("vineyard-admin-users",{body:{action:"create",display_name:v.display_name,email:v.email,password:v.password,role_key:v.role_key,phone:v.phone}});if(r.error)throw r.error;if(r.data?.error)throw Error(r.data.error);await auditLog("Mitarbeiter angelegt","employee",r.data.user_id,{email:v.email,role_key:v.role_key})})
+  async v=>{if(v.password.length<8)throw Error("Das Startpasswort muss mindestens 8 Zeichen haben.");const r=await supabaseClient.functions.invoke("vineyard-admin-users",{body:{action:"create",display_name:v.display_name,email:v.email,password:v.password,role_key:v.role_key,phone:v.phone}});if(r.error)throw r.error;if(r.data?.error)throw Error(r.data.error);await auditLog("Mitarbeiter angelegt","employee",r.data.user_id,{email:v.email,role_key:v.role_key})})
  }
 }
-async function auditLog(action,entity,entityId,details){const user=(await supabase.auth.getUser()).data.user;await supabase.from("vineyard_audit_log").insert({actor_id:user.id,action,entity,entity_id:entityId?String(entityId):null,details:details||{}})}
-init();
+async function auditLog(action,entity,entityId,details){const user=(await supabaseClient.auth.getUser()).data.user;await supabaseClient.from("vineyard_audit_log").insert({actor_id:user.id,action,entity,entity_id:entityId?String(entityId):null,details:details||{}})}
+window.__vineyardBooted=false;
+function showBootError(err){
+ console.error("Donnerfaust Vineyards Startfehler:",err);
+ document.body.innerHTML='<div class="login"><div class="loginbox"><div class="loginbrand"><div class="brandmark">🍇</div><h1>Donnerfaust Vineyards</h1><p>Die Anwendung konnte nicht gestartet werden.</p></div><div class="error">Technischer Fehler beim Start.<br><small>'+esc(err?.message||String(err))+'</small></div><button class="btn primary" onclick="location.reload()">Erneut versuchen</button></div></div>';
+}
+window.addEventListener("error",e=>{if(!window.__vineyardBooted&&e.error)showBootError(e.error)});
+window.addEventListener("unhandledrejection",e=>{if(!window.__vineyardBooted)showBootError(e.reason||Error("Unbekannter Startfehler"))});
+init().then(()=>{window.__vineyardBooted=true}).catch(showBootError);
