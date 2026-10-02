@@ -76,14 +76,17 @@ function startPresence(){
 
 const NAV=[
 ["dashboard","⌂","Übersicht","dashboard"],
-["invoices","▤","Rechnungen","invoice_view"],
 ["orders","🛒","Bestellungen","dashboard"],
 ["inventory","▦","Lager","inventory_view"],
-["recipes","♜","Rezepte","inventory_view"],
+["purchase","↘","Einkauf","trade_edit"],
+["sales","↗","Verkauf","trade_edit"],
 ["production","⚗","Produktion","inventory_view"],
-["trades","⇄","Ein- und Verkauf","trade_edit"],
+["invoices","▤","Rechnungen","invoice_view"],
 ["cash","$","Kasse","cash_view"],
 ["employees","♟","Mitarbeiter","employees_view"],
+["appointments","◷","Termine","dashboard"],
+["commission","%","Provision","invoice_view"],
+["recipes","♜","Rezepte","inventory_view"],
 ["admin","⚙","Administration","admin_access"]
 ];
 
@@ -162,7 +165,7 @@ function shell(content){
  const logout=$("#logout");
  if(logout) logout.onclick=async()=>{await auditLog("Abmeldung","session",profile?.user_id,{event:"logout"});await supabaseClient.auth.signOut()};
 }
-function pageTitle(){return ({dashboard:"Übersicht",invoices:"Rechnungen",orders:"Bestellungen",inventory:"Lagerübersicht",recipes:"Rezepte",production:"Produktion",trades:"Ein- und Verkauf",cash:"Kasse",employees:"Mitarbeiter",admin:"Administration"})[page]||"Übersicht"}
+function pageTitle(){return ({dashboard:"Übersicht",invoices:"Rechnungen",orders:"Bestellungen",inventory:"Lagerübersicht",purchase:"Einkauf",sales:"Verkauf",recipes:"Rezepte",production:"Produktion",cash:"Kasse",employees:"Mitarbeiter",appointments:"Termine",commission:"Provision",admin:"Administration"})[page]||"Übersicht"}
 function initials(n){return String(n||"DF").split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase()}
 function stat(icon,label,value){return '<div class="stat"><span class="icon">'+icon+'</span><div><small>'+label+"</small><b>"+value+"</b></div></div>"}
 function intro(k,h,p,action,label){return '<div class="intro"><div><div class="eyebrow">'+k+"</div><h1>"+h+"</h1><p>"+p+"</p></div>"+(action?'<button type="button" class="btn gold" data-action="'+action+'">'+label+"</button>":"")+"</div>"}
@@ -359,11 +362,12 @@ async function production(){
  '</div>';
 }
 
-async function trades(){
+async function trades(filter="all"){
  const {data:rows=[],error}=await supabaseClient.from("vineyard_trades").select("*").order("created_at",{ascending:false});
  if(error)return errorBox(error.message);
  const purchases=rows.filter(x=>x.trade_type==="Einkauf");
  const sales=rows.filter(x=>x.trade_type==="Verkauf");
+ const visibleRows=filter==="Einkauf"?purchases:filter==="Verkauf"?sales:rows;
  const purchaseTotal=purchases.reduce((sum,x)=>sum+Number(x.total||0),0);
  const salesTotal=sales.reduce((sum,x)=>sum+Number(x.total||0),0);
  return intro("HANDEL","Ein- und Verkauf","Ein- und Verkäufe buchen. Lagerbestand und Kasse werden dabei automatisch und gemeinsam aktualisiert.",can("trade_edit")?"newtrade":null,can("trade_edit")?"+ Ein-/Verkauf":null)+
@@ -375,7 +379,28 @@ async function trades(){
  '</div>'+
  '<div class="panel tradehint"><b>Automatik:</b> Einkauf erhöht den Lagerbestand und belastet die Kasse. Verkauf reduziert den Lagerbestand und schreibt den Verkauf als Einnahme in die Kasse.</div>'+
  '<div class="panel"><div class="tablewrap"><table><thead><tr><th>DATUM</th><th>ART</th><th>ARTIKEL</th><th>MENGE</th><th>EINZELPREIS</th><th>GESAMT</th><th></th></tr></thead><tbody>'+
- (rows.map(x=>'<tr><td>'+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</td><td>'+(x.trade_type==="Einkauf"?'<span class="badge warn">Einkauf</span>':'<span class="badge good">Verkauf</span>')+'</td><td><b>'+esc(x.item_name)+'</b><small class="tableunit">'+esc(x.unit)+'</small></td><td>'+Number(x.quantity).toLocaleString("de-DE")+'</td><td>'+money(x.unit_price)+'</td><td><b>'+money(x.total)+'</b></td><td><button class="mini gold" data-edit-trade="'+x.id+'">Bearbeiten</button> <button class="mini" data-delete-trade="'+x.id+'">Löschen</button></td></tr>').join("")||'<tr><td colspan="7">Noch keine Ein- oder Verkäufe gebucht.</td></tr>')+
+ (visibleRows.map(x=>'<tr><td>'+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</td><td>'+(x.trade_type==="Einkauf"?'<span class="badge warn">Einkauf</span>':'<span class="badge good">Verkauf</span>')+'</td><td><b>'+esc(x.item_name)+'</b><small class="tableunit">'+esc(x.unit)+'</small></td><td>'+Number(x.quantity).toLocaleString("de-DE")+'</td><td>'+money(x.unit_price)+'</td><td><b>'+money(x.total)+'</b></td><td><button class="mini gold" data-edit-trade="'+x.id+'">Bearbeiten</button> <button class="mini" data-delete-trade="'+x.id+'">Löschen</button></td></tr>').join("")||'<tr><td colspan="7">Noch keine Ein- oder Verkäufe gebucht.</td></tr>')+
+ '</tbody></table></div></div>';
+}
+async function appointments(){
+ return intro("TERMINE","Termine","Interne Terminübersicht für Besprechungen, Lieferungen und Veranstaltungen.")+
+ '<div class="panel placeholder"><div class="placeholdericon">◷</div><h2>Terminverwaltung</h2><p class="muted">Die Terminübersicht ist wieder im Menü erreichbar. Termine können hier als eigener Bereich gepflegt werden.</p><div class="placeholderstate">Noch keine Termine hinterlegt.</div></div>';
+}
+async function commissions(){
+ const [{data:invoices=[]},{data:orders=[]}]=await Promise.all([
+  supabaseClient.from("vineyard_invoices").select("invoice_number,partner_name,status,employee_id,commission_rate,commission_amount,created_at").order("created_at",{ascending:false}),
+  supabaseClient.from("vineyard_orders").select("order_number,customer_name,status,employee_id,commission_rate,commission_amount,created_at,completed_at").order("created_at",{ascending:false})
+ ]);
+ const rows=[
+  ...invoices.filter(x=>Number(x.commission_amount||0)>0).map(x=>({number:x.invoice_number,partner:x.partner_name,status:x.status,employee_id:x.employee_id,rate:x.commission_rate,amount:x.commission_amount,date:x.created_at,type:"Rechnung"})),
+  ...orders.filter(x=>Number(x.commission_amount||0)>0).map(x=>({number:x.order_number,partner:x.customer_name,status:x.status,employee_id:x.employee_id,rate:x.commission_rate,amount:x.commission_amount,date:x.completed_at||x.created_at,type:"Bestellung"}))
+ ].sort((a,b)=>new Date(b.date)-new Date(a.date));
+ const total=rows.reduce((s,x)=>s+Number(x.amount||0),0);
+ const open=rows.filter(x=>x.status!=="Bezahlt"&&x.status!=="Storniert").reduce((s,x)=>s+Number(x.amount||0),0);
+ return intro("PROVISION","Provisionen","Übersicht der aus Bestellungen und Rechnungen gespeicherten Provisionsbeträge.")+
+ '<div class="stats">'+stat("%","GESAMT",money(total))+stat("◷","OFFEN",money(open))+stat("▤","VORGÄNGE",rows.length)+stat("↗","SATZ","gespeichert")+'</div>'+
+ '<div class="panel"><div class="tablewrap"><table><thead><tr><th>DATUM</th><th>VORGANG</th><th>PARTNER</th><th>SATZ</th><th>PROVISION</th><th>STATUS</th></tr></thead><tbody>'+
+ (rows.map(x=>'<tr><td>'+esc(new Date(x.date).toLocaleString("de-DE"))+'</td><td><b>'+esc(x.number)+'</b><small class="tableunit">'+esc(x.type)+'</small></td><td>'+esc(x.partner||"—")+'</td><td>'+Number(x.rate||0).toLocaleString("de-DE")+'%</td><td><b>'+money(x.amount)+'</b></td><td>'+badge(x.status)+'</td></tr>').join("")||'<tr><td colspan="6">Noch keine Provisionen vorhanden.</td></tr>')+
  '</tbody></table></div></div>';
 }
 async function cash(){
@@ -384,7 +409,7 @@ async function cash(){
  const balance=rows.reduce((s,x)=>s+(x.kind==="in"?1:-1)*Number(x.amount||0),0);
  return intro("KASSE","Kassenbuch","Ein- und Auszahlungen mit Benutzerprotokoll.",can("cash_edit")?"newcash":null,can("cash_edit")?"+ Buchung":null)+
  '<div class="stats">'+stat("$","AKTUELLER KASSENSTAND",money(balance))+stat("↗","EINNAHMEN",money(rows.filter(x=>x.kind==="in").reduce((s,x)=>s+Number(x.amount),0)))+stat("↘","AUSGABEN",money(rows.filter(x=>x.kind==="out").reduce((s,x)=>s+Number(x.amount),0)))+stat("▤","BUCHUNGEN",rows.length)+"</div>"+
- '<div class="panel"><div class="tablewrap"><table><thead><tr><th>DATUM</th><th>ART</th><th>BETRAG</th><th>KATEGORIE</th><th>BESCHREIBUNG</th><th></th></tr></thead><tbody>'+rows.map(x=>'<tr><td>'+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</td><td>'+(x.kind==="in"?'<span class="badge good">Einnahme</span>':'<span class="badge bad">Ausgabe</span>')+'</td><td><b>'+money(x.amount)+"</b></td><td>"+esc(x.category)+(x.source_type==="trade"?' <span class="badge warn">Ein-/Verkauf</span>':"")+"</td><td>"+esc(x.description)+"</td><td>"+(x.source_type==="trade"?'<span class="muted">Über Ein-/Verkauf</span>':'<button class=\"mini\" data-edit-cash=\""+x.id+"\">Bearbeiten</button> <button class=\"mini\" data-delete-cash=\""+x.id+"\">Löschen</button>')+"</td></tr>").join("")||'<tr><td colspan="6">Keine Buchungen.</td></tr>'+"</tbody></table></div></div>";
+ '<div class="panel"><div class="tablewrap"><table><thead><tr><th>DATUM</th><th>ART</th><th>BETRAG</th><th>KATEGORIE</th><th>BESCHREIBUNG</th><th></th></tr></thead><tbody>'+visibleRows.map(x=>'<tr><td>'+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</td><td>'+(x.kind==="in"?'<span class="badge good">Einnahme</span>':'<span class="badge bad">Ausgabe</span>')+'</td><td><b>'+money(x.amount)+"</b></td><td>"+esc(x.category)+(x.source_type==="trade"?' <span class="badge warn">Ein-/Verkauf</span>':"")+"</td><td>"+esc(x.description)+"</td><td>"+(x.source_type==="trade"?'<span class="muted">Über Ein-/Verkauf</span>':'<button class=\"mini\" data-edit-cash=\""+x.id+"\">Bearbeiten</button> <button class=\"mini\" data-delete-cash=\""+x.id+"\">Löschen</button>')+"</td></tr>").join("")||'<tr><td colspan="6">Keine Buchungen.</td></tr>'+"</tbody></table></div></div>";
 }
 async function employees(){
  const [{data:emps=[]},{data:roles=[]}]=await Promise.all([
@@ -397,7 +422,7 @@ async function employees(){
 function errorBox(t){return '<div class="panel"><b>Fehler</b><p class="muted">'+esc(t)+"</p></div>"}
 
 async function render(){
- let content=page==="dashboard"?await dashboard():page==="invoices"?await invoices():page==="orders"?await orders():page==="inventory"?await inventory():page==="recipes"?await recipes():page==="production"?await production():page==="trades"?await trades():page==="cash"?await cash():page==="employees"?await employees():page==="admin"?await admin():await dashboard();
+ let content=page==="dashboard"?await dashboard():page==="invoices"?await invoices():page==="orders"?await orders():page==="inventory"?await inventory():page==="recipes"?await recipes():page==="production"?await production():page==="purchase"?await trades("Einkauf"):page==="sales"?await trades("Verkauf"):page==="trades"?await trades("all"):page==="cash"?await cash():page==="employees"?await employees():page==="appointments"?await appointments():page==="commission"?await commissions():page==="admin"?await admin():await dashboard();
  shell(content);bind();
  if(page==="orders")startOrderRealtime();else stopOrderRealtime();
 }
@@ -470,7 +495,7 @@ async function action(a){
  if(a==="newitem"){await itemModal();return}
  if(a==="newrecipe"){await recipeModal();return}
  if(a==="newcash"){await cashModal();return}
- if(a==="newtrade"){await tradeModal();return}
+ if(a==="newtrade"){await tradeModal(null,page==="purchase"?"Einkauf":page==="sales"?"Verkauf":null);return}
  if(a==="newemployee"){await employeeModal();return}
  if(a==="newinvoice"){await invoiceModal();return}
  if(a==="copy-order-link"){const link=new URL("./bestellung.html",location.href).href;try{await navigator.clipboard.writeText(link);alert("Kunden-Bestelllink kopiert.")}catch(_){prompt("Kunden-Bestelllink",link)}return}
@@ -737,7 +762,7 @@ async function stockModal(id){
  modal("Bestandsbewegung · "+item.item_name,selectField("Bewegung","mode",[{value:"in",label:"Zugang (+)"},{value:"out",label:"Abgang (-)"}])+field("Menge","amount","number","",true)+field("Grund","reason","text","",true),
  async v=>{const amount=Math.abs(Number(v.amount)||0);if(!amount)throw Error("Menge muss größer als 0 sein.");const delta=v.mode==="in"?amount:-amount;const {error}=await supabaseClient.rpc("vineyard_adjust_inventory",{p_inventory_id:id,p_delta:delta,p_reason:v.reason.trim()});if(error)throw error})
 }
-async function tradeModal(id){
+async function tradeModal(id,defaultType=null){
  const [{data:items=[],error:ie},{data:existing,error:te}]=await Promise.all([
   supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category,purchase_price,sale_price,quantity").order("category").order("item_name"),
   id?supabaseClient.from("vineyard_trades").select("*").eq("id",id).single():Promise.resolve({data:null,error:null})
@@ -745,7 +770,7 @@ async function tradeModal(id){
  if(ie)throw ie;
  if(te)throw te;
  if(id&&!existing)throw Error("Handelsvorgang nicht gefunden.");
- const type=existing?.trade_type||"Einkauf";
+ const type=existing?.trade_type||defaultType||"Einkauf";
  const initialItems=items.filter(x=>x.category===(type==="Einkauf"?"Zutaten":"Produkte"));
  if(!initialItems.length)throw Error(type==="Einkauf"?"Lege zuerst mindestens eine Zutat mit Einkaufspreis im Lager an.":"Lege zuerst mindestens ein Produkt mit Verkaufspreis im Lager an.");
  const optionsFor=t=>items.filter(x=>x.category===(t==="Einkauf"?"Zutaten":"Produkte"));
