@@ -115,7 +115,7 @@ async function loadProfile(){
 function login(message=""){
  document.body.innerHTML=`
   <div class="login"><div class="loginbox">
-   <div class="loginbrand"><div class="brandmark"><img src="./assets/donnerfaust-vineyards-logo.jpg" alt="Donnerfaust Barrelworks"></div><h1>Donnerfaust Barrelworks</h1><p>Interne Betriebsverwaltung</p></div>
+   <div class="loginbrand"><div class="brandmark"><img src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"></div><h1>Donnerfaust Barrelworks</h1><p>Interne Betriebsverwaltung</p></div>
    ${message?`<div class="error">${esc(message)}</div>`:""}
    <form id="loginform">
     <label>E-Mail<input id="email" type="email" autocomplete="username" placeholder="deine E-Mail-Adresse" required></label>
@@ -155,7 +155,7 @@ function forcePasswordChange(){
 }
 function shell(content){
  const nav=NAV.filter(n=>can(n[3])).map(n=>`<button class="nav ${page===n[0]?"active":""}" data-page="${n[0]}"><i>${n[1]}</i>${n[2]}</button>`).join("");
- document.body.innerHTML=`<aside class="sidebar" id="sidebar"><div class="brand"><div class="brandmark"><img src="./assets/donnerfaust-vineyards-logo.jpg" alt=""></div><div><b>Donnerfaust Barrelworks</b><small>Interne Verwaltung</small></div></div><nav>${nav}</nav><div class="sidefoot"><span class="online"></span>${esc(profile.display_name)} · ${esc(role.label)}<br><button id="logout" class="mini" style="margin-top:9px">Abmelden</button></div></aside><main class="main"><header class="top"><div class="topTitle"><img class="topbrandlogo" src="./assets/donnerfaust-vineyards-logo.jpg" alt="Donnerfaust Barrelworks"><div><button class="hamb" id="hamb">☰</button><span class="crumb">DONNERFAUST BARRELWORKS</span><h2>${esc(pageTitle())}</h2></div></div><div class="topright"><span class="online"></span><b>${esc(profile.display_name)}</b><span class="avatar">${esc(initials(profile.display_name))}</span></div></header><section class="content">${content}</section></main><div id="modalroot"></div>`;
+ document.body.innerHTML=`<aside class="sidebar" id="sidebar"><div class="brand"><div class="brandmark"><img src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"></div><div><b>Donnerfaust Barrelworks</b><small>Interne Verwaltung</small></div></div><nav>${nav}</nav><div class="sidefoot"><span class="online"></span>${esc(profile.display_name)} · ${esc(role.label)}<br><button id="logout" class="mini" style="margin-top:9px">Abmelden</button></div></aside><main class="main"><header class="top"><div class="topTitle"><img class="topbrandlogo" src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"><div><button class="hamb" id="hamb">☰</button><span class="crumb">DONNERFAUST BARRELWORKS</span><h2>${esc(pageTitle())}</h2></div></div><div class="topright"><span class="online"></span><b>${esc(profile.display_name)}</b><span class="avatar">${esc(initials(profile.display_name))}</span></div></header><section class="content">${content}</section></main><div id="modalroot"></div>`;
  $(".nav").forEach(b=>b.onclick=()=>{page=b.dataset.page;void auditLog("Seite geöffnet","navigation",page,{page_title:pageTitle()});render();});
  const hamburger=$("#hamb"), sidebar=$("#sidebar");
  if(hamburger&&sidebar) hamburger.onclick=()=>sidebar.classList.toggle("open");
@@ -177,18 +177,14 @@ async function dashboard(){
  return `
   <div class="welcome">
    <div><div class="eyebrow">DONNERFAUST BARRELWORKS</div><h1>Willkommen, ${esc(profile.display_name)}</h1><p>Deine aktuelle Übersicht für den Weinbetrieb.</p></div>
-   <div class="welcomegrape"><img src="./assets/donnerfaust-vineyards-logo.jpg" alt="Donnerfaust Barrelworks"></div>
+   <div class="welcomegrape"><img src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"></div>
   </div>
   <div class="overviewgrid">
    <button class="overviewcard" data-page-action="invoices"><div class="overviewicon invoice">▤</div><div class="overviewtext"><small>OFFENE RECHNUNGEN</small><b>${openInvoices}</b><span>Rechnungsmenü öffnen</span></div><span class="arrow">→</span></button>
    <button class="overviewcard" data-page-action="orders"><div class="overviewicon order">🛒</div><div class="overviewtext"><small>OFFENE BESTELLUNGEN</small><b>${openOrders}</b><span>Bestellungsmenü öffnen</span></div><span class="arrow">→</span></button>
    <div class="overviewcard static"><div class="overviewicon staff">♟</div><div class="overviewtext"><small>MITARBEITER ONLINE</small><b id="onlineCount">${onlineCount||1}</b><span>Aktuell im System angemeldet</span></div><span class="live"><i></i> LIVE</span></div>
   </div>
-  <div class="quickgrid">
-   <button class="quickcard" data-page-action="inventory"><span>📦</span><div><b>Lager</b><small>Bestände verwalten</small></div><span class="arrow">→</span></button>
-   <button class="quickcard" data-page-action="cash"><span>$</span><div><b>Kasse</b><small>Kassenbuch öffnen</small></div><span class="arrow">→</span></button>
-   <button class="quickcard" data-page-action="employees"><span>♟</span><div><b>Mitarbeiter</b><small>Team verwalten</small></div><span class="arrow">→</span></button>
-  </div>`;
+`;
 }
 
 async function invoices(){
@@ -730,7 +726,7 @@ async function shareInvoice(id){
 async function publicInvoice(token){
  const {data,error}=await supabaseClient.rpc("vineyard_public_invoice",{p_share_token:token});
  const invoice=data?.invoice;
- if(error||!invoice)return document.body.innerHTML='<div class="publicInvoice"><div class="publicInvoiceBox"><div class="brandmark"><img src="./assets/donnerfaust-vineyards-logo.jpg" alt="Donnerfaust Barrelworks"></div><h1>Rechnung nicht verfügbar</h1><p>Der Link ist ungültig oder die Rechnung wurde storniert.</p></div></div>';
+ if(error||!invoice)return document.body.innerHTML='<div class="publicInvoice"><div class="publicInvoiceBox"><div class="brandmark"><img src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"></div><h1>Rechnung nicht verfügbar</h1><p>Der Link ist ungültig oder die Rechnung wurde storniert.</p></div></div>';
  const items=Array.isArray(data.items)?data.items:[];
  const total=items.reduce((s,x)=>s+Number(x.line_total||0),0);
  document.body.innerHTML='<main class="publicInvoice"><div class="publicInvoiceBox"><div class="publicHead"><div><div class="eyebrow">DONNERFAUST BARRELWORKS</div><h1>Rechnung</h1><p>Schreibgeschützter Handelsnachweis</p></div><div class="publicNumber">'+esc(invoice.invoice_number)+'</div></div><div class="publicMeta"><div><small>VORGANG</small><b>'+esc(invoice.invoice_type)+'</b></div><div><small>HANDELSPARTNER</small><b>'+esc(invoice.partner_name)+'</b></div><div><small>DATUM</small><b>'+esc(new Date(invoice.created_at).toLocaleString("de-DE"))+'</b></div><div><small>STATUS</small><b>'+esc(invoice.status)+'</b></div><div><small>MITARBEITER</small><b>'+esc(invoice.employee_name||"—")+'</b></div></div><div class="publicTable"><table><thead><tr><th>Artikel</th><th>Menge</th><th>Einzelpreis</th><th>Gesamt</th></tr></thead><tbody>'+items.map(x=>'<tr><td>'+esc(x.item_name)+'</td><td>'+Number(x.quantity).toLocaleString("de-DE")+' '+esc(x.unit)+'</td><td>'+money(x.unit_price)+'</td><td>'+money(x.line_total)+'</td></tr>').join("")+'</tbody></table></div><div class="publicTotal"><span>Gesamtsumme</span><b>'+money(total)+'</b></div><p class="publicReadonly">Diese Ansicht ist schreibgeschützt. Es besteht kein Zugriff auf die interne Vineyard-Verwaltung.</p></div></main>';
@@ -830,6 +826,6 @@ async function auditLog(action,entity,entityId,details){
 }
 function showBootError(err){
  console.error("Donnerfaust Barrelworks Startfehler:",err);
- document.body.innerHTML='<div class="login"><div class="loginbox"><div class="loginbrand"><div class="brandmark"><img src="./assets/donnerfaust-vineyards-logo.jpg" alt="Donnerfaust Barrelworks"></div><h1>Donnerfaust Barrelworks</h1><p>Die Anwendung konnte nicht gestartet werden.</p></div><div class="error">Technischer Fehler beim Start.<br><small>'+esc(err?.message||String(err))+'</small></div><button class="btn primary" onclick="location.reload()">Erneut versuchen</button></div></div>';
+ document.body.innerHTML='<div class="login"><div class="loginbox"><div class="loginbrand"><div class="brandmark"><img src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"></div><h1>Donnerfaust Barrelworks</h1><p>Die Anwendung konnte nicht gestartet werden.</p></div><div class="error">Technischer Fehler beim Start.<br><small>'+esc(err?.message||String(err))+'</small></div><button class="btn primary" onclick="location.reload()">Erneut versuchen</button></div></div>';
 }
 init().catch(showBootError);
