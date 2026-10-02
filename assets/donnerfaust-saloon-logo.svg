@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<defs>
+ <linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0b1220"/><stop offset="1" stop-color="#182c4a"/></linearGradient>
+ <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f7df9b"/><stop offset=".5" stop-color="#c59a43"/><stop offset="1" stop-color="#8a6423"/></linearGradient>
+ <filter id="s"><feDropShadow dx="0" dy="6" stdDeviation="6" flood-opacity=".45"/></filter>
+</defs>
+<rect width="512" height="512" rx="72" fill="url(#g)"/>
+<circle cx="256" cy="205" r="174" fill="none" stroke="url(#gold)" stroke-width="8"/>
+<path d="M105 370 Q256 420 407 370" fill="none" stroke="url(#gold)" stroke-width="6"/>
+<g filter="url(#s)">
+ <text x="256" y="116" text-anchor="middle" font-family="Georgia,serif" font-size="36" font-weight="700" fill="url(#gold)" letter-spacing="5">DF</text>
+ <path d="M181 155 C164 132 172 110 192 119 L218 139 C225 119 242 110 255 126 L267 140 C278 116 300 115 306 133 L299 160 C321 143 342 153 335 174 L315 198 C328 201 339 211 335 225 C329 245 302 251 280 240 L256 227 L228 250 C206 268 176 257 176 236 C176 223 187 213 200 208 C182 197 170 183 177 168 C181 159 190 155 201 158 Z" fill="#6d4a2c" stroke="url(#gold)" stroke-width="5"/>
+ <path d="M257 118 L245 171 L272 165 L258 218" fill="none" stroke="#4ba1ff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+ <path d="M278 120 L266 172 L292 166 L277 217" fill="none" stroke="#f2c14e" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<text x="256" y="313" text-anchor="middle" font-family="Georgia,serif" font-size="43" font-weight="700" fill="url(#gold)" letter-spacing="2">DONNERFAUST</text>
+<text x="256" y="365" text-anchor="middle" font-family="Georgia,serif" font-size="52" font-weight="700" fill="#fff" letter-spacing="10">SALOON</text>
+<path d="M92 393 H420" stroke="url(#gold)" stroke-width="4"/>
+<text x="256" y="425" text-anchor="middle" font-family="Georgia,serif" font-size="15" fill="#e8d7ad" letter-spacing="4">FAMILIE • WEIN • GESCHÄFT</text>
+</svg>
