@@ -4,45 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0b1220">
-<meta name="description" content="Donnerfaust Barrelworks – Lager, Kasse und Mitarbeiterverwaltung">
+<meta name="description" content="Donnerfaust Barrelworks – interne Betriebsverwaltung">
 <link rel="manifest" href="./manifest.json">
-<link rel="stylesheet" href="./style.css?v=hambfix2">
+<link rel="stylesheet" href="./style.css?v=main20261003">
 <title>Donnerfaust Barrelworks</title>
 </head>
 <body>
 <div id="app"><div class="loading">Donnerfaust Barrelworks wird geladen…</div></div>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" onerror="this.onerror=null;this.src='https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.min.js'"></script>
-<script>
-window.__vineyardAppStarted=false;
-window.__vineyardAppFinished=false;
-function vineyardDiagnostic(title,detail){
-  var app=document.querySelector("#app");
-  if(app){
-    app.innerHTML='<div class="loading"><b>'+title+'</b><br><small>'+detail+'</small></div>';
-  }
-}
-window.addEventListener("error",function(e){
-  if(e.filename && e.filename.indexOf("app.js")!==-1){
-    vineyardDiagnostic("Donnerfaust Barrelworks – JavaScript-Fehler",e.message||"app.js konnte nicht ausgeführt werden.");
-  }else if(!window.supabase){
-    vineyardDiagnostic("Donnerfaust Barrelworks – Supabase konnte nicht geladen werden","Die Browser-Bibliothek wurde nicht geladen.");
-  }
-});
-window.setTimeout(function(){
-  if(!window.__vineyardAppStarted && !window.__vineyardAppFinished){
-    vineyardDiagnostic("Donnerfaust Barrelworks – Startdiagnose","app.js wurde vom Browser nicht ausgeführt. Damit liegt der Fehler vor der eigentlichen Supabase-Anmeldung.");
-  }
-},4000);
-window.setTimeout(function(){
-  if(window.__vineyardAppStarted && !window.__vineyardAppFinished){
-    vineyardDiagnostic("Donnerfaust Barrelworks – Start hängt","app.js läuft, aber die Initialisierung wurde nicht abgeschlossen.");
-  }
-},12000);
-</script>
-<script>
-  // Startup compatibility guard: protects against a cached older app.js that calls startPresence before its implementation is available.
-  window.startPresence = window.startPresence || function(){};
-</script>
-<script src="./app.js?v=hambfix2" onload="window.__vineyardAppLoaded=true" onerror="vineyardDiagnostic('Donnerfaust Barrelworks – app.js nicht geladen','Die Datei app.js konnte von GitHub Pages nicht geladen werden.')"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="./app.js?v=main20261003"></script>
 </body>
 </html>
