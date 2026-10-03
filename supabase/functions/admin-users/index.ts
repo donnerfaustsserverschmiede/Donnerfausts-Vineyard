@@ -90,6 +90,7 @@ export default {
 
         const { error: passwordError } = await admin.auth.admin.updateUserById(invited.user.id, {
           password,
+          email_confirm: true,
           user_metadata: { name: displayName, role_key: roleKey, must_change_password: true }
         })
         if (passwordError) {
