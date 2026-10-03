@@ -896,7 +896,7 @@ async function employeeModal(id){
   async v=>{const r=await adminUsers({action:"update",user_id:id,display_name:v.display_name,role_key:v.role_key,phone:v.phone,active:v.active==="true"});await auditLog("Mitarbeiter geändert","employee",id,{role_key:v.role_key,active:v.active==="true"})})
  }else{
   modal("Neuen Mitarbeiter anlegen",field("Name","display_name","text","",true)+field("E-Mail","email","email","",true)+field("Startpasswort","password","password","",true)+selectField("Rolle","role_key",roles.map(r=>({value:r.key,label:r.label})),"mitarbeiter")+field("Telefon","phone"),
-  async v=>{if(v.password.length<8)throw Error("Das Startpasswort muss mindestens 8 Zeichen haben.");const r=await adminUsers({action:"create",display_name:v.display_name,email:v.email,password:v.password,role_key:v.role_key,phone:v.phone});await auditLog("Mitarbeiter angelegt","employee",r.data.user_id,{email:v.email,role_key:v.role_key,invitation_sent:r.data.invitation_sent===true});alert("Mitarbeiter wurde angelegt. Eine Einladungs-E-Mail mit Link zu Donnerfaust Barrelworks wurde versendet.")})
+  async v=>{if(v.password.length<8)throw Error("Das Startpasswort muss mindestens 8 Zeichen haben.");const r=await adminUsers({action:"create",display_name:v.display_name,email:v.email,password:v.password,role_key:v.role_key,phone:v.phone});await auditLog("Mitarbeiter angelegt","employee",r.user_id,{email:v.email,role_key:v.role_key,invitation_sent:r.invitation_sent===true});alert("Mitarbeiter wurde angelegt. Eine Einladungs-E-Mail mit Link zu Donnerfaust Barrelworks wurde versendet.")})
  }
 }
 async function auditLog(action,entity,entityId,details){
