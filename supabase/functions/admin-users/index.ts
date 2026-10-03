@@ -68,6 +68,15 @@ export default {
         return json({ error: 'Nur der Masteraccount darf Mitarbeiter verwalten.' }, 403)
       }
 
+      if (action === 'repair') {
+        const { data: employees, error } = await admin.from('vineyard_profiles').select('user_id').neq('role_key', 'master')
+        if (error) return json({ error: error.message }, 400)
+        for (const employee of employees || []) {
+          await admin.auth.admin.updateUserById(employee.user_id, { email_confirm: true })
+        }
+        return json({ ok: true })
+      }
+
       if (action === 'create') {
         const email = String(body.email || '').trim().toLowerCase()
         const password = String(body.password || '')
