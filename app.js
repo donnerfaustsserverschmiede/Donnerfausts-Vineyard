@@ -158,10 +158,19 @@ function forcePasswordChange(){
 }
 function shell(content){
  const nav=NAV.filter(n=>can(n[3])).map(n=>`<button class="nav ${page===n[0]?"active":""}" data-page="${n[0]}"><i>${n[1]}</i>${n[2]}</button>`).join("");
- document.body.innerHTML=`<aside class="sidebar" id="sidebar"><div class="brand"><div class="brandmark"><img src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"></div><div><b>Donnerfaust Barrelworks</b><small>Interne Verwaltung</small></div></div><nav>${nav}</nav><div class="sidefoot"><span class="online"></span>${esc(profile.display_name)} · ${esc(role.label)}<br><button id="logout" class="mini" style="margin-top:9px">Abmelden</button></div></aside><main class="main"><header class="top"><div class="topTitle"><img class="topbrandlogo" src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"><div><button class="hamb" id="hamb">☰</button><span class="crumb">DONNERFAUST BARRELWORKS</span><h2>${esc(pageTitle())}</h2></div></div><div class="topright"><span class="online"></span><b>${esc(profile.display_name)}</b><span class="avatar">${esc(initials(profile.display_name))}</span></div></header><section class="content">${content}</section></main><div id="modalroot"></div>`;
+ document.body.innerHTML=`<div id="navOverlay"></div><aside class="sidebar" id="sidebar"><div class="brand"><div class="brandmark"><img src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"></div><div><b>Donnerfaust Barrelworks</b><small>Interne Verwaltung</small></div></div><nav>${nav}</nav><div class="sidefoot"><span class="online"></span>${esc(profile.display_name)} · ${esc(role.label)}<br><button id="logout" class="mini" style="margin-top:9px">Abmelden</button></div></aside><main class="main"><header class="top"><div class="topTitle"><img class="topbrandlogo" src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"><div><button class="hamb" id="hamb">☰</button><span class="crumb">DONNERFAUST BARRELWORKS</span><h2>${esc(pageTitle())}</h2></div></div><div class="topright"><span class="online"></span><b>${esc(profile.display_name)}</b><span class="avatar">${esc(initials(profile.display_name))}</span></div></header><section class="content">${content}</section></main><div id="modalroot"></div>`;
  $(".nav").forEach(b=>b.onclick=()=>{page=b.dataset.page;void auditLog("Seite geöffnet","navigation",page,{page_title:pageTitle()});render();});
- const hamburger=$("#hamb"), sidebar=$("#sidebar");
- if(hamburger&&sidebar) hamburger.onclick=()=>sidebar.classList.toggle("open");
+ const hamburger=$("#hamb"), sidebar=$("#sidebar"), navOverlay=$("#navOverlay");
+ const toggleNav=(force)=>{
+   if(!sidebar)return;
+   const open=typeof force==="boolean"?force:!sidebar.classList.contains("open");
+   sidebar.classList.toggle("open",open);
+   if(navOverlay) navOverlay.classList.toggle("open",open);
+   if(hamburger) hamburger.setAttribute("aria-expanded",open?"true":"false");
+ };
+ if(hamburger){hamburger.setAttribute("aria-expanded","false");hamburger.setAttribute("aria-label","Menü öffnen");hamburger.onclick=e=>{e.preventDefault();e.stopPropagation();toggleNav();};}
+ if(navOverlay) navOverlay.onclick=()=>toggleNav(false);
+ document.querySelectorAll(".nav").forEach(b=>b.addEventListener("click",()=>toggleNav(false)));
  const logout=$("#logout");
  if(logout) logout.onclick=async()=>{await auditLog("Abmeldung","session",profile?.user_id,{event:"logout"});await supabaseClient.auth.signOut()};
 }
