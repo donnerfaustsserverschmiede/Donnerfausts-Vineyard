@@ -64,7 +64,7 @@ export default {
             barrelworks: 'Donnerfaust Barrelworks'
           }
         })
-        if (inviteError) return Response.json({ error: 'Einladungs-E-Mail konnte nicht versendet werden: ' + inviteError.message }, { status: 400 })
+        if (inviteError) { console.error('Mitarbeiter-Einladung fehlgeschlagen:', inviteError); return Response.json({ error: 'Einladungs-E-Mail konnte nicht versendet werden: ' + inviteError.message }, { status: 400 }) }
         if (!invited?.user?.id) return Response.json({ error: 'Mitarbeiter konnte nicht angelegt werden.' }, { status: 500 })
 
         // Das vom Master gesetzte Startpasswort bleibt zusätzlich bestehen.
@@ -172,6 +172,7 @@ export default {
 
       return Response.json({ error: 'Unbekannte Aktion.' }, { status: 400 })
     } catch (e) {
+      console.error('vineyard-admin-users Fehler:', e)
       return Response.json({ error: e?.message || 'Interner Fehler.' }, { status: 500 })
     }
   })
