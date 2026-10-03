@@ -9,6 +9,25 @@ const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 const money=n=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format(Number(n)||0);
 const dateTime=()=>new Date().toLocaleString("de-DE");
+async function adminUsers(body){
+ const {data:{session}}=await supabaseClient.auth.getSession();
+ if(!session?.access_token)throw Error("Deine Anmeldung ist abgelaufen. Bitte melde dich neu an.");
+ const response=await fetch(SUPABASE_URL+"/functions/v1/vineyard-admin-users",{
+  method:"POST",
+  headers:{
+   "Content-Type":"application/json",
+   "apikey":SUPABASE_KEY,
+   "Authorization":"Bearer "+session.access_token
+  },
+  body:JSON.stringify(body)
+ });
+ const text=await response.text();
+ let data={};
+ try{data=text?JSON.parse(text):{}}catch(_){data={error:text||"Unbekannte Serverantwort."}}
+ if(!response.ok)throw Error(data?.error||("Serverfehler ("+response.status+")."));
+ if(data?.error)throw Error(data.error);
+ return data;
+}
 let profile=null, role=null, page="dashboard";
 let presenceChannel=null, onlineCount=0, orderRealtimeChannel=null;
 
@@ -149,7 +168,7 @@ function forcePasswordChange(){
   if(b1.length<8)return alert("Das Passwort muss mindestens 8 Zeichen haben.");
   if(b1!==b2)return alert("Die Passwörter stimmen nicht überein.");
   b.disabled=true;
-  const r=await supabaseClient.functions.invoke("vineyard-admin-users",{body:{action:"change_password",password:b1}});
+  const r=await adminUsers({action:"change_password",password:b1});
   if(r.error||r.data?.error){b.disabled=false;return alert(r.data?.error||r.error?.message||"Passwort konnte nicht geändert werden.");}
   await loadProfile();
   render();
@@ -780,7 +799,7 @@ async function deleteInvoice(id){
 async function deleteEmployee(id){
  if(role?.key!=="master")throw Error("Nur der Master darf Mitarbeiter löschen.");
  if(!confirm("Diesen Mitarbeiter und seinen Zugang wirklich dauerhaft löschen?"))return;
- const r=await supabaseClient.functions.invoke("vineyard-admin-users",{body:{action:"delete",user_id:id}});if(r.error)throw r.error;if(r.data?.error)throw Error(r.data.error);await auditLog("Mitarbeiter gelöscht","employee",id,{});await render();
+ const r=await adminUsers({action:"delete",user_id:id});await auditLog("Mitarbeiter gelöscht","employee",id,{});await render();
 }
 async function shareInvoice(id){
  const {data,error}=await supabaseClient.from("vineyard_invoices").select("invoice_number,share_token").eq("id",id).single();
@@ -874,10 +893,10 @@ async function employeeModal(id){
  const [{data:e},{data:roles}]=await Promise.all([supabaseClient.from("vineyard_profiles").select("*").eq("user_id",id||"00000000-0000-0000-0000-000000000000").maybeSingle(),supabaseClient.from("vineyard_roles").select("key,label,rank_order").order("rank_order",{ascending:true})]);
  if(id){
   modal("Mitarbeiter verwalten",field("Name","display_name","text",e?.display_name||"",true)+selectField("Rolle","role_key",roles.map(r=>({value:r.key,label:r.label})),e?.role_key||"mitarbeiter")+field("Telefon","phone","text",e?.phone||"")+selectField("Status","active",[{value:"true",label:"Aktiv"},{value:"false",label:"Deaktiviert"}],String(e?.active!==false)),
-  async v=>{const r=await supabaseClient.functions.invoke("vineyard-admin-users",{body:{action:"update",user_id:id,display_name:v.display_name,role_key:v.role_key,phone:v.phone,active:v.active==="true"}});if(r.error)throw r.error;await auditLog("Mitarbeiter geändert","employee",id,{role_key:v.role_key,active:v.active==="true"})})
+  async v=>{const r=await adminUsers({action:"update",user_id:id,display_name:v.display_name,role_key:v.role_key,phone:v.phone,active:v.active==="true"});await auditLog("Mitarbeiter geändert","employee",id,{role_key:v.role_key,active:v.active==="true"})})
  }else{
   modal("Neuen Mitarbeiter anlegen",field("Name","display_name","text","",true)+field("E-Mail","email","email","",true)+field("Startpasswort","password","password","",true)+selectField("Rolle","role_key",roles.map(r=>({value:r.key,label:r.label})),"mitarbeiter")+field("Telefon","phone"),
-  async v=>{if(v.password.length<8)throw Error("Das Startpasswort muss mindestens 8 Zeichen haben.");const r=await supabaseClient.functions.invoke("vineyard-admin-users",{body:{action:"create",display_name:v.display_name,email:v.email,password:v.password,role_key:v.role_key,phone:v.phone}});if(r.error){let detail=r.error.message||"Technischer Fehler.";try{if(r.error.context&&typeof r.error.context.clone==="function"){const raw=await r.error.context.clone().json();if(raw?.error)detail=raw.error}}catch(_){try{if(r.error.context&&typeof r.error.context.text==="function"){const rawText=await r.error.context.clone().text();if(rawText){try{const raw=JSON.parse(rawText);if(raw?.error)detail=raw.error}catch(_){detail=rawText}}}}catch(__){}}throw Error(detail)}if(r.data?.error)throw Error(r.data.error);await auditLog("Mitarbeiter angelegt","employee",r.data.user_id,{email:v.email,role_key:v.role_key,invitation_sent:r.data.invitation_sent===true});alert("Mitarbeiter wurde angelegt. Eine Einladungs-E-Mail mit Link zu Donnerfaust Barrelworks wurde versendet.")})
+  async v=>{if(v.password.length<8)throw Error("Das Startpasswort muss mindestens 8 Zeichen haben.");const r=await adminUsers({action:"create",display_name:v.display_name,email:v.email,password:v.password,role_key:v.role_key,phone:v.phone});await auditLog("Mitarbeiter angelegt","employee",r.data.user_id,{email:v.email,role_key:v.role_key,invitation_sent:r.data.invitation_sent===true});alert("Mitarbeiter wurde angelegt. Eine Einladungs-E-Mail mit Link zu Donnerfaust Barrelworks wurde versendet.")})
  }
 }
 async function auditLog(action,entity,entityId,details){
