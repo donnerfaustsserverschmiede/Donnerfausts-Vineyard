@@ -104,3 +104,15 @@ nav{padding:12px;overflow:auto}.nav{width:100%;padding:11px 12px;margin:2px 0;bo
  .adminlogicon{display:none}
  .adminlogtime{font-size:10px}
 }
+
+/* Mobile navigation hardening */
+@media(max-width:950px){
+  .sidebar{transform:translateX(-105%) !important;transition:transform .22s ease;z-index:1000;box-shadow:12px 0 35px rgba(0,0,0,.28);pointer-events:none}
+  .sidebar.open{transform:translateX(0) !important;pointer-events:auto}
+  .main{margin-left:0 !important}
+  .hamb{display:inline-flex !important;align-items:center;justify-content:center;width:44px;height:44px;position:relative;z-index:1100;cursor:pointer;pointer-events:auto;border-radius:10px;color:var(--navy)}
+  .hamb:active{transform:scale(.96)}
+  .nav{cursor:pointer}
+  #navOverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:900}
+  #navOverlay.open{display:block}
+}
