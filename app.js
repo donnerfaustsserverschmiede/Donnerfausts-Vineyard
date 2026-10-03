@@ -158,21 +158,9 @@ function forcePasswordChange(){
 }
 function shell(content){
  const nav=NAV.filter(n=>can(n[3])).map(n=>`<button class="nav ${page===n[0]?"active":""}" data-page="${n[0]}"><i>${n[1]}</i>${n[2]}</button>`).join("");
- document.body.innerHTML=`<div id="navOverlay"></div><aside class="sidebar" id="sidebar"><div class="brand"><div class="brandmark"><img src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"></div><div><b>Donnerfaust Barrelworks</b><small>Interne Verwaltung</small></div></div><nav>${nav}</nav><div class="sidefoot"><span class="online"></span>${esc(profile.display_name)} · ${esc(role.label)}<br><button id="logout" class="mini" style="margin-top:9px">Abmelden</button></div></aside><main class="main"><header class="top"><div class="topTitle"><img class="topbrandlogo" src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"><div><button class="hamb" id="hamb">☰</button><span class="crumb">DONNERFAUST BARRELWORKS</span><h2>${esc(pageTitle())}</h2></div></div><div class="topright"><span class="online"></span><b>${esc(profile.display_name)}</b><span class="avatar">${esc(initials(profile.display_name))}</span></div></header><section class="content">${content}</section></main><div id="modalroot"></div>`;
- $(".nav").forEach(b=>b.onclick=()=>{page=b.dataset.page;void auditLog("Seite geöffnet","navigation",page,{page_title:pageTitle()});render();});
- const hamburger=$("#hamb"), sidebar=$("#sidebar"), navOverlay=$("#navOverlay");
- const toggleNav=(force)=>{
-   if(!sidebar)return;
-   const open=typeof force==="boolean"?force:!sidebar.classList.contains("open");
-   sidebar.classList.toggle("open",open);
-   if(navOverlay) navOverlay.classList.toggle("open",open);
-   if(hamburger) hamburger.setAttribute("aria-expanded",open?"true":"false");
- };
- if(hamburger){hamburger.setAttribute("aria-expanded","false");hamburger.setAttribute("aria-label","Menü öffnen");hamburger.onclick=e=>{e.preventDefault();e.stopPropagation();toggleNav();};}
- if(navOverlay) navOverlay.onclick=()=>toggleNav(false);
- document.querySelectorAll(".nav").forEach(b=>b.addEventListener("click",()=>toggleNav(false)));
+ document.body.innerHTML=`<div class="nav-overlay" id="navOverlay"></div><aside class="sidebar" id="sidebar"><div class="brand"><div class="brandmark"><img src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"></div><div><b>Donnerfaust Barrelworks</b><small>Interne Verwaltung</small></div></div><nav>${nav}</nav><div class="sidefoot"><span class="online"></span>${esc(profile.display_name)} · ${esc(role.label)}<br><button id="logout" class="mini" style="margin-top:9px">Abmelden</button></div></aside><main class="main"><header class="top"><div class="topTitle"><button class="hamb" id="hamb" type="button" aria-label="Menü öffnen" aria-expanded="false">☰</button><img class="topbrandlogo" src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"><div><span class="crumb">DONNERFAUST BARRELWORKS</span><h2>${esc(pageTitle())}</h2></div></div><div class="topright"><span class="online"></span><b>${esc(profile.display_name)}</b><span class="avatar">${esc(initials(profile.display_name))}</span></div></header><section class="content">${content}</section></main><div id="modalroot"></div>`;
  const logout=$("#logout");
- if(logout) logout.onclick=async()=>{await auditLog("Abmeldung","session",profile?.user_id,{event:"logout"});await supabaseClient.auth.signOut()};
+ if(logout) logout.addEventListener("click",async e=>{e.preventDefault();await auditLog("Abmeldung","session",profile?.user_id,{event:"logout"});await supabaseClient.auth.signOut()});
 }
 function pageTitle(){return ({dashboard:"Übersicht",invoices:"Rechnungen",orders:"Bestellungen",inventory:"Lagerübersicht",purchase:"Einkauf",sales:"Verkauf",recipes:"Rezepte",production:"Produktion",cash:"Kasse",employees:"Mitarbeiter",appointments:"Termine",commission:"Provision",admin:"Administration"})[page]||"Übersicht"}
 function initials(n){return String(n||"DF").split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase()}
@@ -437,17 +425,60 @@ async function render(){
 }
 function bind(){
  document.onclick=async e=>{
-  const b=e.target.closest?.("[data-action]");
-  if(!b)return;
+  const hamburger=e.target.closest?.("#hamb");
+  if(hamburger){
+   e.preventDefault();
+   e.stopPropagation();
+   const sidebar=$("#sidebar"),overlay=$("#navOverlay");
+   if(sidebar){
+    const open=!sidebar.classList.contains("open");
+    sidebar.classList.toggle("open",open);
+    if(overlay)overlay.classList.toggle("open",open);
+    hamburger.setAttribute("aria-expanded",open?"true":"false");
+    hamburger.setAttribute("aria-label",open?"Menü schließen":"Menü öffnen");
+   }
+   return;
+  }
+  if(e.target.closest?.("#navOverlay")){
+   e.preventDefault();
+   const sidebar=$("#sidebar"),overlay=$("#navOverlay"),button=$("#hamb");
+   sidebar?.classList.remove("open");
+   overlay?.classList.remove("open");
+   button?.setAttribute("aria-expanded","false");
+   button?.setAttribute("aria-label","Menü öffnen");
+   return;
+  }
+  const navButton=e.target.closest?.(".nav");
+  if(navButton){
+   e.preventDefault();
+   page=navButton.dataset.page;
+   const sidebar=$("#sidebar"),overlay=$("#navOverlay"),button=$("#hamb");
+   sidebar?.classList.remove("open");
+   overlay?.classList.remove("open");
+   button?.setAttribute("aria-expanded","false");
+   button?.setAttribute("aria-label","Menü öffnen");
+   void auditLog("Seite geöffnet","navigation",page,{page_title:pageTitle()});
+   await render();
+   return;
+  }
+  const pageButton=e.target.closest?.("[data-page-action]");
+  if(pageButton){
+   e.preventDefault();
+   page=pageButton.dataset.pageAction;
+   await render();
+   return;
+  }
+  const actionButton=e.target.closest?.("[data-action]");
+  if(!actionButton)return;
   e.preventDefault();
   e.stopPropagation();
-  if(b.dataset.busy==="1")return;
-  b.dataset.busy="1";
-  b.disabled=true;
-  try{await action(b.dataset.action)}catch(err){console.error("Donnerfaust Barrelworks Aktion:",err);alert(err?.message||String(err))}
-  finally{b.disabled=false;b.dataset.busy="0"}
+  if(actionButton.dataset.busy==="1")return;
+  actionButton.dataset.busy="1";
+  actionButton.disabled=true;
+  try{await action(actionButton.dataset.action)}
+  catch(err){console.error("Donnerfaust Barrelworks Aktion:",err);alert(err?.message||String(err))}
+  finally{actionButton.disabled=false;actionButton.dataset.busy="0"}
  };
- $("[data-page-action]").forEach(b=>b.onclick=()=>{page=b.dataset.pageAction;render()});
  if(page==="production"){
   const recipeEl=$("#production_recipe"),batchEl=$("[name=production_batches]"),book=$("#bookProduction"),ingEl=$("#productionIngredients"),outName=$("#productionOutputName"),outQty=$("#productionOutputQty");
   const recipeData=[];
