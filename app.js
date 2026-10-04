@@ -174,7 +174,7 @@ function forcePasswordChange(){
  };
 }
 function shell(content){
- const nav=NAV.filter(n=>can(n[3])).map(n=>`<button class="nav ${page===n[0]?"active":""}" data-page="${n[0]}"><i>${n[1]}</i>${n[2]}</button>`).join("");
+ const nav=NAV.filter(n=>can(n[3])).map(n=>`<button type="button" class="nav ${page===n[0]?"active":""}" data-page="${n[0]}"><i>${n[1]}</i>${n[2]}</button>`).join("");
  document.body.innerHTML=`<div class="nav-overlay" id="navOverlay"></div><aside class="sidebar" id="sidebar"><div class="brand"><div class="brandmark"><img src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"></div><div><b>Donnerfaust Barrelworks</b><small>Interne Verwaltung</small></div></div><nav>${nav}</nav><div class="sidefoot"><span class="online"></span>${esc(profile.display_name)} · ${esc(role.label)}<br><button id="logout" class="mini" style="margin-top:9px">Abmelden</button></div></aside><main class="main"><header class="top"><div class="topTitle"><button class="hamb" id="hamb" type="button" aria-label="Menü öffnen" aria-expanded="false">☰</button><img class="topbrandlogo" src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"><div><span class="crumb">DONNERFAUST BARRELWORKS</span><h2>${esc(pageTitle())}</h2></div></div><div class="topright"><span class="online"></span><b>${esc(profile.display_name)}</b><span class="avatar">${esc(initials(profile.display_name))}</span></div></header><section class="content">${content}</section></main><div id="modalroot"></div>`;
  const logout=$("#logout");
  if(logout) logout.addEventListener("click",async e=>{e.preventDefault();await auditLog("Abmeldung","session",profile?.user_id,{event:"logout"});await supabaseClient.auth.signOut()});
@@ -479,7 +479,7 @@ function bind(){
    button?.setAttribute("aria-expanded","false");
    button?.setAttribute("aria-label","Menü öffnen");
    void auditLog("Seite geöffnet","navigation",page,{page_title:pageTitle()});
-   await render();
+   try{await render()}catch(err){console.error("Donnerfaust Navigation:",err);document.body.innerHTML=errorBox(err?.message||"Die Seite konnte nicht geladen werden.")}
    return;
   }
   const pageButton=e.target.closest?.("[data-page-action]");
