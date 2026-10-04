@@ -4,4 +4,4 @@
  applyStatus(o.status);
  const refresh=async()=>{try{const r=await sb.rpc("vineyard_public_order",{p_customer_token:t});if(!r.error&&r.data?.order){applyStatus(r.data.order.status)}}catch(_){}};
  setInterval(refresh,10000);
-</script></body></html></body></html>
+</script></body></html>
