@@ -223,7 +223,7 @@ async function invoices(){
 async function orders(){
  const {data:rows=[],error}=await supabaseClient.from("vineyard_orders").select("id,order_number,status,customer_name,customer_email,customer_phone,customer_address,customer_note,employee_id,total,commission_rate,commission_amount,delivery_date,delivery_requested,delivery_fee,created_at,accepted_at,completed_at").order("created_at",{ascending:false});
  if(error)return errorBox(error.message);
- const {data:employees=[],error:ee}=await supabaseClient.rpc("vineyard_invoice_employees");
+ const {data:employees=[],error:ee}=await supabaseClient.rpc("vineyard_order_employees");
  if(ee)return errorBox(ee.message);
  const emap=Object.fromEntries((employees||[]).map(x=>[x.user_id,x.display_name]));
  rows.forEach(x=>x.employee_name=emap[x.employee_id]||"—");
