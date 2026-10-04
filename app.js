@@ -431,7 +431,7 @@ async function employees(){
   supabaseClient.from("vineyard_roles").select("key,label,permissions").order("key")
  ]);
  return intro("TEAM","Mitarbeiter","Konten, Rollen und Rechte werden ausschließlich über den Master verwaltet.",can("employees_edit")?"newemployee":null,can("employees_edit")?"+ Mitarbeiter":null)+
- '<div class="employeegrid">'+emps.map(x=>'<div class="employee"><div class="avatar">'+esc(initials(x.display_name))+'</div><div style="flex:1"><b>'+esc(x.display_name)+"</b><small>"+esc(x.vineyard_roles?.label||x.role_key)+" · "+(x.active?'<span class="good">Aktiv</span>':'<span class="bad">Deaktiviert</span>')+"</small>"+(x.phone?'<small>'+esc(x.phone)+"</small>":"")+'</div>'+(role?.key==="master"?'<button class="mini" data-edit-employee="'+x.user_id+'">Bearbeiten</button> <button class="mini" data-delete-employee="'+x.user_id+'">Löschen</button>':"")+"</div>").join("")+"</div>";
+ '<div class="employeegrid">'+emps.map(x=>'<div class="employee"><div class="avatar">'+esc(initials(x.display_name))+'</div><div style="flex:1"><b>'+esc(x.display_name)+"</b><small>"+esc(x.vineyard_roles?.label||x.role_key)+" · "+(x.active?'<span class="good">Aktiv</span>':'<span class="bad">Deaktiviert</span>')+"</small>"+(x.phone?'<small>'+esc(x.phone)+"</small>":"")+'</div>'+(role?.key==="master"?'<button type="button" class="mini" data-action="edit-employee" data-employee-id="'+x.user_id+'">Bearbeiten</button> <button type="button" class="mini" data-action="delete-employee" data-employee-id="'+x.user_id+'">Löschen</button>':"")+"</div>").join("")+"</div>";
 }
 function errorBox(t){return '<div class="panel"><b>Fehler</b><p class="muted">'+esc(t)+"</p></div>"}
 
@@ -554,6 +554,8 @@ async function action(a){
  if(a==="newcash"){await cashModal();return}
  if(a==="newtrade"){await tradeModal(null,page==="purchase"?"Einkauf":page==="sales"?"Verkauf":null);return}
  if(a==="newemployee"){await employeeModal();return}
+ if(a==="edit-employee"){const id=document.activeElement?.closest?.("[data-employee-id]")?.dataset.employeeId;if(!id)throw Error("Mitarbeiter konnte nicht ermittelt werden.");await employeeModal(id);return}
+ if(a==="delete-employee"){const id=document.activeElement?.closest?.("[data-employee-id]")?.dataset.employeeId;if(!id)throw Error("Mitarbeiter konnte nicht ermittelt werden.");await deleteEmployee(id);return}
  if(a==="newinvoice"){await invoiceModal();return}
  if(a==="copy-order-link"){const link=new URL("./bestellung.html",location.href).href;try{await navigator.clipboard.writeText(link);alert("Kunden-Bestelllink kopiert.")}catch(_){prompt("Kunden-Bestelllink",link)}return}
  if(a==="open-order-form"){window.open(new URL("./bestellung.html",location.href).href,"_blank");return}
