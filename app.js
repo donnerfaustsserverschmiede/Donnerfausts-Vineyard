@@ -492,7 +492,7 @@ function bind(){
   if(actionButton.dataset.busy==="1")return;
   actionButton.dataset.busy="1";
   actionButton.disabled=true;
-  try{await action(actionButton.dataset.action)}
+  try{await action(actionButton.dataset.action,actionButton)}
   catch(err){console.error("Donnerfaust Barrelworks Aktion:",err);alert(err?.message||String(err))}
   finally{actionButton.disabled=false;actionButton.dataset.busy="0"}
  };
@@ -547,15 +547,15 @@ function bind(){
  $$("[data-delete-order]").forEach(b=>b.onclick=()=>deleteOrder(b.dataset.deleteOrder));
 
 }
-async function action(a){
+async function action(a,actionButton){
  if(a==="openinventory"){page="inventory";await render();return}
  if(a==="newitem"){await itemModal();return}
  if(a==="newrecipe"){await recipeModal();return}
  if(a==="newcash"){await cashModal();return}
  if(a==="newtrade"){await tradeModal(null,page==="purchase"?"Einkauf":page==="sales"?"Verkauf":null);return}
  if(a==="newemployee"){await employeeModal();return}
- if(a==="edit-employee"){const id=document.activeElement?.closest?.("[data-employee-id]")?.dataset.employeeId;if(!id)throw Error("Mitarbeiter konnte nicht ermittelt werden.");await employeeModal(id);return}
- if(a==="delete-employee"){const id=document.activeElement?.closest?.("[data-employee-id]")?.dataset.employeeId;if(!id)throw Error("Mitarbeiter konnte nicht ermittelt werden.");await deleteEmployee(id);return}
+ if(a==="edit-employee"){const id=actionButton?.dataset.employeeId;if(!id)throw Error("Mitarbeiter konnte nicht ermittelt werden.");await employeeModal(id);return}
+ if(a==="delete-employee"){const id=actionButton?.dataset.employeeId;if(!id)throw Error("Mitarbeiter konnte nicht ermittelt werden.");await deleteEmployee(id);return}
  if(a==="newinvoice"){await invoiceModal();return}
  if(a==="copy-order-link"){const link=new URL("./bestellung.html",location.href).href;try{await navigator.clipboard.writeText(link);alert("Kunden-Bestelllink kopiert.")}catch(_){prompt("Kunden-Bestelllink",link)}return}
  if(a==="open-order-form"){window.open(new URL("./bestellung.html",location.href).href,"_blank");return}
