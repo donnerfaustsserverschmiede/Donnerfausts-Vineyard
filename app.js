@@ -419,12 +419,15 @@ async function commissions(){
 }
 async function cash(){
  const {data:rows=[],error}=await supabaseClient.from("vineyard_cashbook").select("*").order("created_at",{ascending:false});
- const visibleRows=rows;
  if(error)return errorBox(error.message);
- const balance=rows.reduce((s,x)=>s+(x.kind==="in"?1:-1)*Number(x.amount||0),0);
+ const visibleRows=rows||[];
+ const balance=visibleRows.reduce((s,x)=>s+(x.kind==="in"?1:-1)*Number(x.amount||0),0);
+ const income=visibleRows.filter(x=>x.kind==="in").reduce((s,x)=>s+Number(x.amount||0),0);
+ const expenses=visibleRows.filter(x=>x.kind==="out").reduce((s,x)=>s+Number(x.amount||0),0);
+ const body=visibleRows.map(x=>'<tr><td>'+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</td><td>'+(x.kind==="in"?'<span class="badge good">Einnahme</span>':'<span class="badge bad">Ausgabe</span>')+'</td><td><b>'+money(x.amount)+'</b></td><td>'+esc(x.category||"—")+(x.source_type==="trade"?' <span class="badge warn">Ein-/Verkauf</span>':"")+'</td><td>'+esc(x.description||"")+'</td><td>'+(x.source_type==="trade"?'<span class="muted">Über Ein-/Verkauf</span>':'<button class="mini" data-edit-cash="'+x.id+'">Bearbeiten</button> <button class="mini" data-delete-cash="'+x.id+'">Löschen</button>')+'</td></tr>').join("")||'<tr><td colspan="6">Keine Buchungen.</td></tr>';
  return intro("KASSE","Kassenbuch","Ein- und Auszahlungen mit Benutzerprotokoll.",can("cash_edit")?"newcash":null,can("cash_edit")?"+ Buchung":null)+
- '<div class="stats">'+stat("$","AKTUELLER KASSENSTAND",money(balance))+stat("↗","EINNAHMEN",money(rows.filter(x=>x.kind==="in").reduce((s,x)=>s+Number(x.amount),0)))+stat("↘","AUSGABEN",money(rows.filter(x=>x.kind==="out").reduce((s,x)=>s+Number(x.amount),0)))+stat("▤","BUCHUNGEN",rows.length)+"</div>"+
- '<div class="panel"><div class="tablewrap"><table><thead><tr><th>DATUM</th><th>ART</th><th>BETRAG</th><th>KATEGORIE</th><th>BESCHREIBUNG</th><th></th></tr></thead><tbody>'+visibleRows.map(x=>'<tr><td>'+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</td><td>'+(x.kind==="in"?'<span class="badge good">Einnahme</span>':'<span class="badge bad">Ausgabe</span>')+'</td><td><b>'+money(x.amount)+"</b></td><td>"+esc(x.category)+(x.source_type==="trade"?' <span class="badge warn">Ein-/Verkauf</span>':"")+"</td><td>"+esc(x.description)+"</td><td>"+(x.source_type==="trade"?'<span class="muted">Über Ein-/Verkauf</span>':'<button class=\"mini\" data-edit-cash=\""+x.id+"\">Bearbeiten</button> <button class=\"mini\" data-delete-cash=\""+x.id+"\">Löschen</button>')+"</td></tr>").join("")||'<tr><td colspan="6">Keine Buchungen.</td></tr>'+"</tbody></table></div></div>";
+ '<div class="stats">'+stat("$","AKTUELLER KASSENSTAND",money(balance))+stat("↗","EINNAHMEN",money(income))+stat("↘","AUSGABEN",money(expenses))+stat("▤","BUCHUNGEN",visibleRows.length)+"</div>"+
+ '<div class="panel"><div class="tablewrap"><table><thead><tr><th>DATUM</th><th>ART</th><th>BETRAG</th><th>KATEGORIE</th><th>BESCHREIBUNG</th><th></th></tr></thead><tbody>'+body+'</tbody></table></div></div>';
 }
 async function employees(){
  const [{data:emps=[]},{data:roles=[]}]=await Promise.all([
