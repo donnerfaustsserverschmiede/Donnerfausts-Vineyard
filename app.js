@@ -890,13 +890,46 @@ async function cashModal(id){
  async v=>{const amount=Number(v.amount)||0;if(amount<=0)throw Error("Betrag muss größer als 0 sein.");let r;if(id)r=await supabaseClient.from("vineyard_cashbook").update({kind:v.kind,category:v.category,amount,description:v.description.trim()}).eq("id",id);else r=await supabaseClient.from("vineyard_cashbook").insert({kind:v.kind,category:v.category,amount,description:v.description.trim(),created_by:(await supabaseClient.auth.getUser()).data.user.id});if(r.error)throw r.error;await auditLog(id?"Kassenbuchung geändert":"Kassenbuchung","cashbook",id||null,{kind:v.kind,amount,category:v.category,description:v.description.trim()})})
 }
 async function employeeModal(id){
- const [{data:e},{data:roles}]=await Promise.all([supabaseClient.from("vineyard_profiles").select("*").eq("user_id",id||"00000000-0000-0000-0000-000000000000").maybeSingle(),supabaseClient.from("vineyard_roles").select("key,label,rank_order").order("rank_order",{ascending:true})]);
+ const [profileResult,rolesResult]=await Promise.all([
+  supabaseClient.from("vineyard_profiles").select("*").eq("user_id",id||"00000000-0000-0000-0000-000000000000").maybeSingle(),
+  supabaseClient.from("vineyard_roles").select("key,label,rank_order").order("rank_order",{ascending:true})
+ ]);
+ if(profileResult.error)throw profileResult.error;
+ if(rolesResult.error)throw rolesResult.error;
+ const e=profileResult.data;
+ const roles=rolesResult.data||[];
+ if(!roles.length)throw Error("Keine Mitarbeiterrollen konnten geladen werden.");
+ if(id && !e)throw Error("Mitarbeiterprofil wurde nicht gefunden.");
+ const roleOptions=roles.map(r=>({value:r.key,label:r.label}));
  if(id){
-  modal("Mitarbeiter verwalten",field("Name","display_name","text",e?.display_name||"",true)+selectField("Rolle","role_key",roles.map(r=>({value:r.key,label:r.label})),e?.role_key||"mitarbeiter")+field("Telefon","phone","text",e?.phone||"")+field("Neues Passwort","password","password","")+selectField("Status","active",[{value:"true",label:"Aktiv"},{value:"false",label:"Deaktiviert"}],String(e?.active!==false)),
-  async v=>{const payload={action:"update",user_id:id,display_name:v.display_name,role_key:v.role_key,phone:v.phone,active:v.active==="true"};if(v.password){if(v.password.length<8)throw Error("Das Passwort muss mindestens 8 Zeichen haben.");payload.password=v.password}await adminUsers(payload);await auditLog("Mitarbeiter geändert","employee",id,{role_key:v.role_key,active:v.active==="true",password_changed:Boolean(v.password)})})
+  modal("Mitarbeiter verwalten",
+   field("Name","display_name","text",e.display_name||"",true)+
+   selectField("Rolle","role_key",roleOptions,e.role_key||"mitarbeiter")+
+   field("Telefon","phone","text",e.phone||"")+
+   field("Neues Passwort","password","password","")+
+   selectField("Status","active",[{value:"true",label:"Aktiv"},{value:"false",label:"Deaktiviert"}],String(e.active!==false)),
+   async v=>{
+    const payload={action:"update",user_id:id,display_name:v.display_name,role_key:v.role_key,phone:v.phone,active:v.active==="true"};
+    if(v.password){
+     if(v.password.length<8)throw Error("Das Passwort muss mindestens 8 Zeichen haben.");
+     payload.password=v.password
+    }
+    await adminUsers(payload);
+    await auditLog("Mitarbeiter geändert","employee",id,{role_key:v.role_key,active:v.active==="true",password_changed:Boolean(v.password)})
+   })
  }else{
-  modal("Neuen Mitarbeiter anlegen",field("Name","display_name","text","",true)+field("E-Mail","email","email","",true)+field("Startpasswort","password","password","",true)+selectField("Rolle","role_key",roles.map(r=>({value:r.key,label:r.label})),"mitarbeiter")+field("Telefon","phone"),
-  async v=>{if(v.password.length<8)throw Error("Das Startpasswort muss mindestens 8 Zeichen haben.");const r=await adminUsers({action:"create",display_name:v.display_name,email:v.email,password:v.password,role_key:v.role_key,phone:v.phone});await auditLog("Mitarbeiter angelegt","employee",r.user_id,{email:v.email,role_key:v.role_key,invitation_sent:r.invitation_sent===true});alert("Mitarbeiter wurde angelegt. Eine Einladungs-E-Mail mit Link zu Donnerfaust Barrelworks wurde versendet.")})
+  modal("Neuen Mitarbeiter anlegen",
+   field("Name","display_name","text","",true)+
+   field("E-Mail","email","email","",true)+
+   field("Startpasswort","password","password","",true)+
+   selectField("Rolle","role_key",roleOptions,"mitarbeiter")+
+   field("Telefon","phone"),
+   async v=>{
+    if(v.password.length<8)throw Error("Das Startpasswort muss mindestens 8 Zeichen haben.");
+    const r=await adminUsers({action:"create",display_name:v.display_name,email:v.email,password:v.password,role_key:v.role_key,phone:v.phone});
+    await auditLog("Mitarbeiter angelegt","employee",r.user_id,{email:v.email,role_key:v.role_key,invitation_sent:r.invitation_sent===true});
+    alert("Mitarbeiter wurde angelegt. Das Startpasswort ist sofort gültig.")
+   })
  }
 }
 async function auditLog(action,entity,entityId,details){
