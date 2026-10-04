@@ -581,7 +581,7 @@ function bind(){
  $$("[data-edit-invoice]").forEach(b=>b.onclick=()=>invoiceModal(b.dataset.editInvoice));
  $$("[data-delete-invoice]").forEach(b=>b.onclick=()=>deleteInvoice(b.dataset.deleteInvoice));
  $$("[data-view-order]").forEach(b=>b.onclick=()=>orderModal(b.dataset.viewOrder));
- $("[data-order-status]").forEach(b=>b.onclick=async()=>{if(b.dataset.busy==="1")return;b.dataset.busy="1";b.disabled=true;try{const [id,status]=b.dataset.orderStatus.split("|");await updateOrderStatus(id,status)}catch(err){console.error("Bestellstatus:",err);alert(err?.message||"Die Bestellung konnte nicht aktualisiert werden.");b.dataset.busy="";b.disabled=false}});
+ $$("[data-order-status]").forEach(b=>b.onclick=async()=>{if(b.dataset.busy==="1")return;b.dataset.busy="1";b.disabled=true;try{const [id,status]=b.dataset.orderStatus.split("|");await updateOrderStatus(id,status)}catch(err){console.error("Bestellstatus:",err);alert(err?.message||"Die Bestellung konnte nicht aktualisiert werden.");b.dataset.busy="";b.disabled=false}});
  $$("[data-delete-order]").forEach(b=>b.onclick=()=>deleteOrder(b.dataset.deleteOrder));
 
 }
