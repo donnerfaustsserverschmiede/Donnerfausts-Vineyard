@@ -124,7 +124,6 @@ async function init(){
  if(!session)return login();
  await loadProfile();
  if(!profile){await supabaseClient.auth.signOut();return login("Dein Konto ist für Donnerfaust Barrelworks noch nicht freigeschaltet.");}
- if(profile.must_change_password)return forcePasswordChange();
  render();
  startPresence();
  supabaseClient.auth.onAuthStateChange(async (_e,s)=>{if(!s){if(presenceChannel)await supabaseClient.removeChannel(presenceChannel);presenceChannel=null;stopOrderRealtime();login()}});
