@@ -535,18 +535,18 @@ function bind(){
  $$("[data-delete-item]").forEach(b=>b.onclick=()=>deleteItem(b.dataset.deleteItem));
  $$("[data-edit-recipe]").forEach(b=>b.onclick=()=>recipeModal(b.dataset.editRecipe));
  $$("[data-delete-recipe]").forEach(b=>b.onclick=()=>deleteRecipe(b.dataset.deleteRecipe));
- $("[data-edit-trade]").forEach(b=>b.onclick=()=>tradeModal(b.dataset.editTrade));
- $("[data-delete-trade]").forEach(b=>b.onclick=()=>deleteTrade(b.dataset.deleteTrade));
- $("[data-edit-cash]").forEach(b=>b.onclick=()=>cashModal(b.dataset.editCash));
- $("[data-delete-cash]").forEach(b=>b.onclick=()=>deleteCash(b.dataset.deleteCash));
+ $( "[data-edit-trade]" ).forEach(b=>b.onclick=()=>tradeModal(b.dataset.editTrade));
+ $( "[data-delete-trade]" ).forEach(b=>b.onclick=()=>deleteTrade(b.dataset.deleteTrade));
+ $( "[data-edit-cash]" ).forEach(b=>b.onclick=()=>cashModal(b.dataset.editCash));
+ $( "[data-delete-cash]" ).forEach(b=>b.onclick=()=>deleteCash(b.dataset.deleteCash));
  $$("[data-edit-employee]").forEach(b=>b.onclick=()=>employeeModal(b.dataset.editEmployee));
  $$("[data-delete-employee]").forEach(b=>b.onclick=()=>deleteEmployee(b.dataset.deleteEmployee));
  $$("[data-share-invoice]").forEach(b=>b.onclick=()=>shareInvoice(b.dataset.shareInvoice));
  $$("[data-edit-invoice]").forEach(b=>b.onclick=()=>invoiceModal(b.dataset.editInvoice));
- $("[data-delete-invoice]").forEach(b=>b.onclick=()=>deleteInvoice(b.dataset.deleteInvoice));
- $("[data-view-order]").forEach(b=>b.onclick=()=>orderModal(b.dataset.viewOrder));
- $("[data-order-status]").forEach(b=>b.onclick=async()=>{const [id,status]=b.dataset.orderStatus.split("|");await updateOrderStatus(id,status)});
- $("[data-delete-order]").forEach(b=>b.onclick=()=>deleteOrder(b.dataset.deleteOrder));
+ $( "[data-delete-invoice]" ).forEach(b=>b.onclick=()=>deleteInvoice(b.dataset.deleteInvoice));
+ $( "[data-view-order]" ).forEach(b=>b.onclick=()=>orderModal(b.dataset.viewOrder));
+ $( "[data-order-status]" ).forEach(b=>b.onclick=async()=>{const [id,status]=b.dataset.orderStatus.split("|");await updateOrderStatus(id,status)});
+ $( "[data-delete-order]" ).forEach(b=>b.onclick=()=>deleteOrder(b.dataset.deleteOrder));
 
 }
 async function action(a){
