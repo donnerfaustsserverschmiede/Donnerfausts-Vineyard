@@ -1,7 +1,7 @@
 const SUPABASE_URL="https://qsyijgvikxmwmhaiulne.supabase.co";
 const SUPABASE_KEY="sb_publishable_5qeUg0c0T0IyLh8g0cUj6Q_ZJYgZYJ_";
 if(!window.supabase||typeof window.supabase.createClient!=="function"){
- document.body.innerHTML='<div class="loading"><b>Donnerfaust Barrelworks konnte nicht geladen werden.</b><br><small>Die Supabase-Bibliothek ist nicht verfügbar. Bitte Seite neu laden.</small></div>';
+ document.body.innerHTML='<div class="loading"><b>Donnerfaust Saloon konnte nicht geladen werden.</b><br><small>Die Supabase-Bibliothek ist nicht verfügbar. Bitte Seite neu laden.</small></div>';
  throw new Error("Supabase-Bibliothek konnte nicht geladen werden.");
 }
 const supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
@@ -123,7 +123,7 @@ async function init(){
  const {data:{session}}=sessionResult;
  if(!session)return login();
  await loadProfile();
- if(!profile){await supabaseClient.auth.signOut();return login("Dein Konto ist für Donnerfaust Barrelworks noch nicht freigeschaltet.");}
+ if(!profile){await supabaseClient.auth.signOut();return login("Dein Konto ist für Donnerfaust Saloon noch nicht freigeschaltet.");}
  render();
  startPresence();
  supabaseClient.auth.onAuthStateChange(async (_e,s)=>{if(!s){if(presenceChannel)await supabaseClient.removeChannel(presenceChannel);presenceChannel=null;stopOrderRealtime();login()}});
@@ -136,7 +136,7 @@ async function loadProfile(){
 function login(message=""){
  document.body.innerHTML=`
   <div class="login"><div class="loginbox">
-   <div class="loginbrand"><div class="brandmark"><img src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"></div><h1>Donnerfaust Barrelworks</h1><p>Interne Betriebsverwaltung</p></div>
+   <div class="loginbrand"><div class="brandmark"><img src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"></div><h1>Donnerfaust Saloon</h1><p>Interne Betriebsverwaltung</p></div>
    ${message?`<div class="error">${esc(message)}</div>`:""}
    <form id="loginform">
     <label>E-Mail<input id="email" type="email" autocomplete="username" placeholder="deine E-Mail-Adresse" required></label>
@@ -151,7 +151,7 @@ function login(message=""){
   const {error}=await supabaseClient.auth.signInWithPassword({email:$("#email").value.trim(),password:$("#password").value});
   if(error){b.disabled=false;return login(error.message);}
   await loadProfile();
-  if(!profile){await supabaseClient.auth.signOut();return login("Dieser Benutzer hat noch kein Barrelworks-Profil.");}
+  if(!profile){await supabaseClient.auth.signOut();return login("Dieser Benutzer hat noch kein Saloon-Profil.");}
   await auditLog("Anmeldung","session",profile.user_id,{event:"successful_login"});
   await render();
   startPresence();
@@ -175,7 +175,7 @@ function forcePasswordChange(){
 }
 function shell(content){
  const nav=NAV.filter(n=>can(n[3])).map(n=>`<button type="button" class="nav ${page===n[0]?"active":""}" data-page="${n[0]}"><i>${n[1]}</i>${n[2]}</button>`).join("");
- document.body.innerHTML=`<div class="nav-overlay" id="navOverlay"></div><aside class="sidebar" id="sidebar"><div class="brand"><div class="brandmark"><img src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"></div><div><b>Donnerfaust Barrelworks</b><small>Interne Verwaltung</small></div></div><nav>${nav}</nav><div class="sidefoot"><span class="online"></span>${esc(profile.display_name)} · ${esc(role.label)}<br><button id="logout" class="mini" style="margin-top:9px">Abmelden</button></div></aside><main class="main"><header class="top"><div class="topTitle"><button class="hamb" id="hamb" type="button" aria-label="Menü öffnen" aria-expanded="false">☰</button><img class="topbrandlogo" src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"><div><span class="crumb">DONNERFAUST BARRELWORKS</span><h2>${esc(pageTitle())}</h2></div></div><div class="topright"><span class="online"></span><b>${esc(profile.display_name)}</b><span class="avatar">${esc(initials(profile.display_name))}</span></div></header><section class="content">${content}</section></main><div id="modalroot"></div>`;
+ document.body.innerHTML=`<div class="nav-overlay" id="navOverlay"></div><aside class="sidebar" id="sidebar"><div class="brand"><div class="brandmark"><img src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"></div><div><b>Donnerfaust Saloon</b><small>Interne Verwaltung</small></div></div><nav>${nav}</nav><div class="sidefoot"><span class="online"></span>${esc(profile.display_name)} · ${esc(role.label)}<br><button id="logout" class="mini" style="margin-top:9px">Abmelden</button></div></aside><main class="main"><header class="top"><div class="topTitle"><button class="hamb" id="hamb" type="button" aria-label="Menü öffnen" aria-expanded="false">☰</button><img class="topbrandlogo" src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"><div><span class="crumb">DONNERFAUST SALOON</span><h2>${esc(pageTitle())}</h2></div></div><div class="topright"><span class="online"></span><b>${esc(profile.display_name)}</b><span class="avatar">${esc(initials(profile.display_name))}</span></div></header><section class="content">${content}</section></main><div id="modalroot"></div>`;
  const logout=$("#logout");
  if(logout) logout.addEventListener("click",async e=>{e.preventDefault();await auditLog("Abmeldung","session",profile?.user_id,{event:"logout"});await supabaseClient.auth.signOut()});
 }
@@ -193,7 +193,7 @@ async function dashboard(){
  const openOrders=orderCount.error?0:(orderCount.count||0);
  return `
   <div class="welcome">
-   <div><div class="eyebrow">DONNERFAUST BARRELWORKS</div><h1>Willkommen, ${esc(profile.display_name)}</h1><p>Deine aktuelle Übersicht für den Weinbetrieb.</p></div>
+   <div><div class="eyebrow">DONNERFAUST SALOON</div><h1>Willkommen, ${esc(profile.display_name)}</h1><p>Deine aktuelle Übersicht für den Weinbetrieb.</p></div>
    <div class="welcomegrape"><img src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"></div>
   </div>
   <div class="overviewgrid">
@@ -315,7 +315,7 @@ async function admin(){
   if(a.includes("ein-/verkauf gelöscht")) return name+" hat einen Ein-/Verkauf gelöscht.";
   return name+" hat "+String(x.action||"eine Änderung")+" durchgeführt.";
  };
- return '<div class="intro"><div><div class="eyebrow">ADMINISTRATION</div><h1>Aktivitätslog</h1><p>Hier wird nachvollziehbar festgehalten, was im Barrelworks-System passiert ist – mit Datum, Uhrzeit, Mitarbeiter und Vorgang.</p></div></div>'+
+ return '<div class="intro"><div><div class="eyebrow">ADMINISTRATION</div><h1>Aktivitätslog</h1><p>Hier wird nachvollziehbar festgehalten, was im Saloon-System passiert ist – mit Datum, Uhrzeit, Mitarbeiter und Vorgang.</p></div></div>'+
  '<div class="panel adminlog"><div class="adminloghead"><div><b>Vollständiges Systemprotokoll</b><small>Die neuesten 500 Einträge</small></div><span class="badge good">'+rows.length+' Einträge</span></div>'+
  (rows.map(x=>'<div class="adminlogrow"><div class="adminlogtime">'+esc(formatDate(x))+'</div><div class="adminlogicon">◷</div><div class="adminlogbody"><b>'+esc(message(x))+'</b><small>'+esc(actorName(x))+' · '+esc(x.entity||"System")+'</small></div></div>').join("")||'<p class="muted">Noch keine Aktivitäten protokolliert.</p>')+
  '</div>';
@@ -531,7 +531,7 @@ function bind(){
   actionButton.dataset.busy="1";
   actionButton.disabled=true;
   try{await action(actionButton.dataset.action,actionButton)}
-  catch(err){console.error("Donnerfaust Barrelworks Aktion:",err);alert(err?.message||String(err))}
+  catch(err){console.error("Donnerfaust Saloon Aktion:",err);alert(err?.message||String(err))}
   finally{actionButton.disabled=false;actionButton.dataset.busy="0"}
  };
  if(page==="production"){
@@ -851,7 +851,7 @@ async function publicInvoice(token){
  if(error||!invoice)return document.body.innerHTML='<div class="publicInvoice"><div class="publicInvoiceBox"><div class="brandmark"><img src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"></div><h1>Rechnung nicht verfügbar</h1><p>Der Link ist ungültig oder die Rechnung wurde storniert.</p></div></div>';
  const items=Array.isArray(data.items)?data.items:[];
  const total=items.reduce((s,x)=>s+Number(x.line_total||0),0);
- document.body.innerHTML='<main class="publicInvoice"><div class="publicInvoiceBox"><div class="publicHead"><div><div class="eyebrow">DONNERFAUST BARRELWORKS</div><h1>Rechnung</h1><p>Schreibgeschützter Handelsnachweis</p></div><div class="publicNumber">'+esc(invoice.invoice_number)+'</div></div><div class="publicMeta"><div><small>VORGANG</small><b>'+esc(invoice.invoice_type)+'</b></div><div><small>HANDELSPARTNER</small><b>'+esc(invoice.partner_name)+'</b></div><div><small>DATUM</small><b>'+esc(new Date(invoice.created_at).toLocaleString("de-DE"))+'</b></div><div><small>STATUS</small><b>'+esc(invoice.status)+'</b></div><div><small>MITARBEITER</small><b>'+esc(invoice.employee_name||"—")+'</b></div></div><div class="publicTable"><table><thead><tr><th>Artikel</th><th>Menge</th><th>Einzelpreis</th><th>Gesamt</th></tr></thead><tbody>'+items.map(x=>'<tr><td>'+esc(x.item_name)+'</td><td>'+Number(x.quantity).toLocaleString("de-DE")+' '+esc(x.unit)+'</td><td>'+money(x.unit_price)+'</td><td>'+money(x.line_total)+'</td></tr>').join("")+'</tbody></table></div><div class="publicTotal"><span>Gesamtsumme</span><b>'+money(total)+'</b></div><p class="publicReadonly">Diese Ansicht ist schreibgeschützt. Es besteht kein Zugriff auf die interne Vineyard-Verwaltung.</p></div></main>';
+ document.body.innerHTML='<main class="publicInvoice"><div class="publicInvoiceBox"><div class="publicHead"><div><div class="eyebrow">DONNERFAUST SALOON</div><h1>Rechnung</h1><p>Schreibgeschützter Handelsnachweis</p></div><div class="publicNumber">'+esc(invoice.invoice_number)+'</div></div><div class="publicMeta"><div><small>VORGANG</small><b>'+esc(invoice.invoice_type)+'</b></div><div><small>HANDELSPARTNER</small><b>'+esc(invoice.partner_name)+'</b></div><div><small>DATUM</small><b>'+esc(new Date(invoice.created_at).toLocaleString("de-DE"))+'</b></div><div><small>STATUS</small><b>'+esc(invoice.status)+'</b></div><div><small>MITARBEITER</small><b>'+esc(invoice.employee_name||"—")+'</b></div></div><div class="publicTable"><table><thead><tr><th>Artikel</th><th>Menge</th><th>Einzelpreis</th><th>Gesamt</th></tr></thead><tbody>'+items.map(x=>'<tr><td>'+esc(x.item_name)+'</td><td>'+Number(x.quantity).toLocaleString("de-DE")+' '+esc(x.unit)+'</td><td>'+money(x.unit_price)+'</td><td>'+money(x.line_total)+'</td></tr>').join("")+'</tbody></table></div><div class="publicTotal"><span>Gesamtsumme</span><b>'+money(total)+'</b></div><p class="publicReadonly">Diese Ansicht ist schreibgeschützt. Es besteht kein Zugriff auf die interne Vineyard-Verwaltung.</p></div></main>';
 }
 async function stockModal(id){
  const {data:item}=await supabaseClient.from("vineyard_inventory").select("*").eq("id",id).single();
@@ -980,7 +980,7 @@ async function auditLog(action,entity,entityId,details){
  }catch(_){}
 }
 function showBootError(err){
- console.error("Donnerfaust Barrelworks Startfehler:",err);
- document.body.innerHTML='<div class="login"><div class="loginbox"><div class="loginbrand"><div class="brandmark"><img src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"></div><h1>Donnerfaust Barrelworks</h1><p>Die Anwendung konnte nicht gestartet werden.</p></div><div class="error">Technischer Fehler beim Start.<br><small>'+esc(err?.message||String(err))+'</small></div><button class="btn primary" onclick="location.reload()">Erneut versuchen</button></div></div>';
+ console.error("Donnerfaust Saloon Startfehler:",err);
+ document.body.innerHTML='<div class="login"><div class="loginbox"><div class="loginbrand"><div class="brandmark"><img src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"></div><h1>Donnerfaust Saloon</h1><p>Die Anwendung konnte nicht gestartet werden.</p></div><div class="error">Technischer Fehler beim Start.<br><small>'+esc(err?.message||String(err))+'</small></div><button class="btn primary" onclick="location.reload()">Erneut versuchen</button></div></div>';
 }
 init().catch(showBootError);
