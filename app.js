@@ -221,11 +221,13 @@ async function invoices(){
  '</tbody></table></div></div>';
 }
 async function orders(){
- const {data:rows=[],error}=await supabaseClient.from("vineyard_orders").select("id,order_number,status,customer_name,customer_email,customer_phone,customer_address,customer_note,employee_id,total,commission_rate,commission_amount,delivery_date,delivery_requested,delivery_fee,created_at,accepted_at,completed_at").order("created_at",{ascending:false});
+ const {data:rawRows,error}=await supabaseClient.from("vineyard_orders").select("id,order_number,status,customer_name,customer_email,customer_phone,customer_address,customer_note,employee_id,total,commission_rate,commission_amount,delivery_date,delivery_requested,delivery_fee,created_at,accepted_at,completed_at").order("created_at",{ascending:false});
  if(error)return errorBox(error.message);
- const {data:employees=[],error:ee}=await supabaseClient.rpc("vineyard_order_employees");
+ const rows=Array.isArray(rawRows)?rawRows:[];
+ const {data:rawEmployees,error:ee}=await supabaseClient.rpc("vineyard_order_employees");
  if(ee)return errorBox(ee.message);
- const emap=Object.fromEntries((employees||[]).map(x=>[x.user_id,x.display_name]));
+ const employees=Array.isArray(rawEmployees)?rawEmployees:[];
+ const emap=Object.fromEntries(employees.map(x=>[x.user_id,x.display_name]));
  rows.forEach(x=>x.employee_name=emap[x.employee_id]||"—");
  const open=rows.filter(x=>x.status==="Eingegangen"||x.status==="In Bearbeitung");
  const recent=rows.filter(x=>x.status==="Bestellung abgeschlossen").slice(0,10);
@@ -244,9 +246,9 @@ async function orders(){
  '<div class="orderlinkpanel"><div><div class="eyebrow">KUNDENFORMULAR</div><b>Bestelllink für Kunden</b><p>Produkt, Menge, Lieferdatum und Lieferung werden erfasst. Lieferung berechnet automatisch 10% Aufschlag.</p></div><div class="orderlinkactions"><input class="orderlinkinput" readonly value="'+esc(formLink)+'"><button class="btn gold" data-action="copy-order-link">Link kopieren</button><button class="btn outline" data-action="open-order-form">Formular öffnen</button></div></div>'+
  '<div class="stats">'+stat("🛒","OFFENE BESTELLUNGEN",open.length)+stat("$","OFFENER BESTELLWERT",money(totalOpen))+stat("↗","IN BEARBEITUNG",rows.filter(x=>x.status==="In Bearbeitung").length)+stat("✓","LETZTE BESTELLUNGEN",recent.length)+'</div>'+
  '<div class="orderssection"><div class="sectiontitle"><div><div class="eyebrow">AKTUELL</div><h2>Offene Bestellungen</h2><p>Neue Bestellungen und Bestellungen in Bearbeitung.</p></div></div>'+
- '<div class="ordergrid">'+(open.map(card).join("")||'<div class="panel"><p class="muted">Aktuell liegen keine offenen Bestellungen vor.</p></div>')+'</div></div>'+
+ '<div class="ordergrid">'+(open.map(card).join("")||'<div class="panel"><p class="muted">Keine Bestellungen hinterlegt</p></div>')+'</div></div>'+
  '<div class="orderssection"><div class="sectiontitle"><div><div class="eyebrow">ARCHIV</div><h2>Letzte Bestellungen</h2><p>Abgeschlossene Bestellungen bleiben als Nachweis erhalten.</p></div></div>'+
- '<div class="ordergrid">'+(recent.map(card).join("")||'<div class="panel"><p class="muted">Noch keine abgeschlossenen Bestellungen.</p></div>')+'</div></div>';
+ '<div class="ordergrid">'+(recent.map(card).join("")||'<div class="panel"><p class="muted">Keine Bestellungen hinterlegt</p></div>')+'</div></div>';
 }
 
 async function orderModal(id){
