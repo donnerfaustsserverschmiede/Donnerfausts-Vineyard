@@ -21,6 +21,88 @@ const dateTime=()=>new Date().toLocaleString("de-DE");
 let profile=null, role=null, page="dashboard";
 let presenceChannel=null, onlineCount=0, orderRealtimeChannel=null;
 
+function startOrderRealtime(){
+ try{
+  if(page!=="orders"||orderRealtimeChannel||!supabaseClient?.channel)return;
+  const channel=supabaseClient.channel("donnerfaust-vineyards-orders");
+  channel.on("postgres_changes",{event:"*",schema:"public",table:"vineyard_orders"},()=>{if(page==="orders")render()});
+  channel.subscribe();
+  orderRealtimeChannel=channel;
+ }catch(_){}
+}
+function stopOrderRealtime(){
+ if(orderRealtimeChannel){try{supabaseClient.removeChannel(orderRealtimeChannel)}catch(_){}orderRealtimeChannel=null;}
+}
+function startPresence(){
+  try{
+    if(!profile?.user_id || !supabaseClient?.channel)return;
+    if(presenceChannel){
+      try{supabaseClient.removeChannel(presenceChannel)}catch(_){}
+      presenceChannel=null;
+    }
+    const channel=supabaseClient.channel("donnerfaust-vineyards-online",{config:{presence:{key:String(profile.user_id)}}});
+    const updateOnline=()=>{
+      try{
+        const state=channel.presenceState()||{};
+        const ids=new Set();
+        Object.keys(state).forEach(k=>{
+          (state[k]||[]).forEach(entry=>{
+            const id=String(entry?.user_id||k);
+            if(id)ids.add(id);
+          });
+        });
+        onlineCount=ids.size||1;
+        const el=document.querySelector("#onlineCount");
+        if(el)el.textContent=String(onlineCount);
+      }catch(_){
+        onlineCount=1;
+        const el=document.querySelector("#onlineCount");
+        if(el)el.textContent="1";
+      }
+    };
+    channel
+      .on("presence",{event:"sync"},updateOnline)
+      .on("presence",{event:"join"},updateOnline)
+      .on("presence",{event:"leave"},updateOnline)
+      .subscribe(async status=>{
+        if(status!=="SUBSCRIBED")return;
+        try{
+          await channel.track({user_id:String(profile.user_id),display_name:String(profile.display_name||"")});
+          updateOnline();
+        }catch(_){
+          onlineCount=1;
+          const el=document.querySelector("#onlineCount");
+          if(el)el.textContent="1";
+        }
+      });
+    presenceChannel=channel;
+  }catch(_){
+    onlineCount=1;
+    const el=document.querySelector("#onlineCount");
+    if(el)el.textContent="1";
+  }
+}
+
+const NAV=[
+["dashboard","⌂","Übersicht","dashboard"],
+["orders","🚚","Lieferungen","orders_manage"],
+["inventory","▦","Lager","inventory_view"],
+["purchase","↘","Einkauf","trade_edit"],
+["sales","↗","Verkauf","trade_edit"],
+["production","⚗","Produktion","inventory_view"],
+["invoices","▤","Rechnungen","invoice_view"],
+["cash","$","Kasse","cash_view"],
+["employees","♟","Mitarbeiter","employees_view"],
+["appointments","◷","Termine","dashboard"],
+["commission","%","Provision","invoice_view"],
+["recipes","♜","Rezepte","inventory_view"],
+["admin","⚙","Administration","admin_access"]
+];
+
+function can(p){return !!role?.permissions?.[p]}
+function badge(s){const good=["Bezahlt","OK","Bestellung abgeschlossen"].includes(s);const warn=["Niedrig","Offen","Eingegangen","In Bearbeitung"].includes(s);return '<span class="badge '+(good?"good":warn?"warn":"bad")+'">'+esc(s)+"</span>"}
+
+
 async function init(){
  if(!window.supabase||typeof window.supabase.createClient!=="function")throw Error("Die Supabase-Bibliothek konnte nicht geladen werden.");
  const publicToken=new URLSearchParams(location.search).get("rechnung");
