@@ -434,7 +434,7 @@ async function appointments(){
 async function commissions(){
  const [{data:invoices=[]},{data:orders=[]}]=await Promise.all([
   supabaseClient.from("vineyard_invoices").select("invoice_number,partner_name,status,employee_id,commission_rate,commission_amount,created_at").order("created_at",{ascending:false}),
-  supabaseClient.from("vineyard_orders").select("order_number,customer_name,status,employee_id,commission_rate,commission_amount,created_at,completed_at").order("created_at",{ascending:false})
+  supabaseClient.from("vineyard_orders").select("order_number,customer_name,status,employee_id,commission_rate,commission_amount,created_at,completed_at").eq("status","Lieferung abgeschlossen").order("created_at",{ascending:false})
  ]);
  const rows=[
   ...invoices.filter(x=>Number(x.commission_amount||0)>0).map(x=>({number:x.invoice_number,partner:x.partner_name,status:x.status,employee_id:x.employee_id,rate:x.commission_rate,amount:x.commission_amount,date:x.created_at,type:"Rechnung"})),
