@@ -214,7 +214,7 @@ async function invoices(){
  const open=rows.filter(x=>x.status==="Offen").length;
  const total=rows.length;
  const commission=rows.reduce((s,x)=>s+Number(x.commission_amount||0),0);
- return intro("HANDELSNACHWEISE","Rechnungen","Verkauf, Einkauf, Produktion und Bestellungen als nachvollziehbare Handelsnachweise verwalten.",can("invoice_edit")?"newinvoice":null,can("invoice_edit")?"+ Rechnung erstellen":null)+
+ return intro("HANDELSNACHWEISE","Rechnungen","Verkauf, Einkauf, Produktion und Lieferungen als nachvollziehbare Handelsnachweise verwalten.",can("invoice_edit")?"newinvoice":null,can("invoice_edit")?"+ Rechnung erstellen":null)+
  '<div class="stats">'+stat("▤","OFFENE RECHNUNGEN",open)+stat("$","HANDELSVORGÄNGE",total)+stat("↗","VERKAUF",rows.filter(x=>x.invoice_type==="Verkauf").length)+stat("%","PROVISIONEN",money(commission))+'</div>'+
  '<div class="panel"><div class="tablewrap"><table><thead><tr><th>NUMMER</th><th>ART</th><th>HANDELSPARTNER</th><th>MITARBEITER</th><th>PROVISION</th><th>DATUM</th><th>STATUS</th><th></th></tr></thead><tbody>'+
  (rows.map(x=>'<tr><td><b>'+esc(x.invoice_number)+'</b></td><td>'+esc(x.invoice_type)+'</td><td>'+esc(x.partner_name)+'</td><td>'+esc(x.employee_name)+'</td><td>'+money(x.commission_amount||0)+' ('+Number(x.commission_rate||0).toLocaleString("de-DE")+'%)</td><td>'+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</td><td>'+badge(x.status)+'</td><td><button class="mini gold" data-share-invoice="'+x.id+'">Teilen</button> <button class="mini" data-edit-invoice="'+x.id+'">Bearbeiten</button> <button class="mini" data-delete-invoice="'+x.id+'">Löschen</button></td></tr>').join("")||'<tr><td colspan="8">Noch keine Rechnungen vorhanden.</td></tr>')+
@@ -561,7 +561,6 @@ function bind(){
  $$("[data-edit-invoice]").forEach(b=>b.onclick=()=>invoiceModal(b.dataset.editInvoice));
  $$("[data-delete-invoice]").forEach(b=>b.onclick=()=>deleteInvoice(b.dataset.deleteInvoice));
  $$("[data-view-order]").forEach(b=>b.onclick=()=>orderModal(b.dataset.viewOrder));
- $$("[data-order-status]").forEach(b=>b.onclick=async()=>{if(b.dataset.busy==="1")return;b.dataset.busy="1";b.disabled=true;try{const [id,status]=b.dataset.orderStatus.split("|");await updateOrderStatus(id,status)}catch(err){console.error("Bestellstatus:",err);alert(err?.message||"Die Bestellung konnte nicht aktualisiert werden.");b.dataset.busy="";b.disabled=false}});
  $$("[data-delete-order]").forEach(b=>b.onclick=()=>deleteOrder(b.dataset.deleteOrder));
 
 }
@@ -728,7 +727,7 @@ async function invoiceModal(id){
   {value:"Produktion",label:"🏭 Produktion · Provision 10%"},
   {value:"Verkauf",label:"🛒 Verkauf · Provision 20%"},
   {value:"Einkauf",label:"📦 Einkauf · keine Provision"},
-  {value:"Bestellung",label:"📋 Bestellung/Lieferung · Provision 30%"}
+  {value:"Bestellung",label:"📦 Lieferung · Provision 30%"}
  ];
  let existingItems=[];
  if(id){
