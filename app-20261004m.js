@@ -252,7 +252,6 @@ async function orderModal(id){
  const close=()=>$("#modalroot").innerHTML="";
  $("#x").onclick=$("#closeOrderModal").onclick=close;
 }
-async function updateOrderStatus(id,status){ return; }
 async function deleteOrder(id){
  if(!confirm("Diese Lieferung wirklich löschen? Lagerbestand und Kassenbuchung werden zurückgebucht."))return;
  const {error}=await supabaseClient.rpc("vineyard_delete_delivery",{p_order_id:id});
@@ -575,9 +574,9 @@ async function action(a,actionButton){
  if(a==="newemployee"){await employeeModal();return}
  if(a==="edit-employee"){const id=actionButton?.dataset.employeeId;if(!id)throw Error("Mitarbeiter konnte nicht ermittelt werden.");await employeeModal(id);return}
  if(a==="delete-employee"){const id=actionButton?.dataset.employeeId;if(!id)throw Error("Mitarbeiter konnte nicht ermittelt werden.");await deleteEmployee(id);return}
- if(a==="newinvoice"){await invoiceModal();return}\n if(a==="newdelivery"){await deliveryModal();return}
- if(a==="copy-order-link"){const link=new URL("./bestellung-20261004.html",location.href).href;try{await navigator.clipboard.writeText(link);alert("Kunden-Bestelllink kopiert.")}catch(_){prompt("Kunden-Bestelllink",link)}return}
- if(a==="open-order-form"){window.open(new URL("./bestellung-20261004.html",location.href).href,"_blank");return}
+ if(a==="newinvoice"){await invoiceModal();return}
+ if(a==="newdelivery"){await deliveryModal();return}
+
 }
 
 function modal(title,body,onSubmit){
