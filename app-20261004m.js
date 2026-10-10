@@ -260,24 +260,6 @@ async function deleteOrder(id){
  await auditLog("Lieferung gelöscht","delivery",id,{});
  await render();
 }
-async function updateOrderStatus(id,status){
- const button=document.querySelector('[data-order-status="'+id+'|'+status+'"]');
- if(button)button.disabled=true;
- try{
-  const {error}=await supabaseClient.rpc("vineyard_update_order_status",{p_order_id:id,p_status:status});
-  if(error)throw error;
-  await auditLog(status==="In Bearbeitung"?"Bestellung angenommen":"Bestellung abgeschlossen","order",id,{status});
-  if(status==="Bestellung abgeschlossen")alert("Bestellung abgeschlossen. Lagerbestand und Kasse wurden automatisch angepasst.");
-  await render();
- }catch(err){alert(err.message||String(err))}finally{if(button)button.disabled=false}
-}
-async function deleteOrder(id){
- if(!confirm("Diese Bestellung wirklich löschen?"))return;
- const {error}=await supabaseClient.rpc("vineyard_delete_order",{p_order_id:id});
- if(error)throw error;
- await auditLog("Bestellung gelöscht","order",id,{});
- await render();
-}
 async function admin(){
  if(!role?.permissions?.admin_access)return errorBox("Kein Admin-Zugang.");
  const {data:rows=[],error}=await supabaseClient.from("vineyard_audit_log").select("*").order("created_at",{ascending:false}).limit(500);
