@@ -413,20 +413,26 @@ async function appointments(){
  '<div class="panel placeholder"><div class="placeholdericon">◷</div><h2>Terminverwaltung</h2><p class="muted">Die Terminübersicht ist wieder im Menü erreichbar. Termine können hier als eigener Bereich gepflegt werden.</p><div class="placeholderstate">Noch keine Termine hinterlegt.</div></div>';
 }
 async function commissions(){
- const [{data:invoices=[]},{data:orders=[]}]=await Promise.all([
-  supabaseClient.from("vineyard_invoices").select("invoice_number,partner_name,status,employee_id,commission_rate,commission_amount,created_at").order("created_at",{ascending:false}),
-  supabaseClient.from("vineyard_orders").select("order_number,customer_name,status,employee_id,commission_rate,commission_amount,created_at,completed_at").eq("status","Lieferung abgeschlossen").order("created_at",{ascending:false})
+ const [{data:employees=[],error:ee},{data:orders=[],error:oe},{data:invoices=[],error:ie},{data:payouts=[],error:pe}]=await Promise.all([
+  supabaseClient.from("vineyard_profiles").select("user_id,display_name,role_key,active").eq("active",true),
+  supabaseClient.from("vineyard_orders").select("employee_id,commission_amount").eq("status","Lieferung abgeschlossen"),
+  supabaseClient.from("vineyard_invoices").select("employee_id,commission_amount").gt("commission_amount",0).neq("status","Storniert"),
+  supabaseClient.from("vineyard_commission_payouts").select("employee_id,amount,paid_at")
  ]);
- const rows=[
-  ...invoices.filter(x=>Number(x.commission_amount||0)>0).map(x=>({number:x.invoice_number,partner:x.partner_name,status:x.status,employee_id:x.employee_id,rate:x.commission_rate,amount:x.commission_amount,date:x.created_at,type:"Rechnung"})),
-  ...orders.filter(x=>Number(x.commission_amount||0)>0).map(x=>({number:x.order_number,partner:x.customer_name,status:x.status,employee_id:x.employee_id,rate:x.commission_rate,amount:x.commission_amount,date:x.completed_at||x.created_at,type:"Lieferung"}))
- ].sort((a,b)=>new Date(b.date)-new Date(a.date));
- const total=rows.reduce((s,x)=>s+Number(x.amount||0),0);
- const open=rows.filter(x=>x.status!=="Bezahlt"&&x.status!=="Storniert").reduce((s,x)=>s+Number(x.amount||0),0);
- return intro("PROVISION","Provisionen","Übersicht der aus Lieferungen und Rechnungen gespeicherten Provisionsbeträge.")+
- '<div class="stats">'+stat("%","GESAMT",money(total))+stat("◷","OFFEN",money(open))+stat("▤","VORGÄNGE",rows.length)+stat("↗","SATZ","gespeichert")+'</div>'+
- '<div class="panel"><div class="tablewrap"><table><thead><tr><th>DATUM</th><th>VORGANG</th><th>PARTNER</th><th>SATZ</th><th>PROVISION</th><th>STATUS</th></tr></thead><tbody>'+
- (rows.map(x=>'<tr><td>'+esc(new Date(x.date).toLocaleString("de-DE"))+'</td><td><b>'+esc(x.number)+'</b><small class="tableunit">'+esc(x.type)+'</small></td><td>'+esc(x.partner||"—")+'</td><td>'+Number(x.rate||0).toLocaleString("de-DE")+'%</td><td><b>'+money(x.amount)+'</b></td><td>'+badge(x.status)+'</td></tr>').join("")||'<tr><td colspan="6">Noch keine Provisionen vorhanden.</td></tr>')+
+ if(ee||oe||ie||pe)return errorBox((ee||oe||ie||pe).message);
+ const rankMap={master:12,familienvogt:11,familienrat:10,geschaeftsfuehrer:9,vertrauensmitglied:8,verwaltung:7,lager:6,winzer:5,winzerlehrling:4,kasse:3,kellerhelfer:2,mitarbeiter:1};
+ const labelMap={master:"FAMILIENOBERHAUPT",familienvogt:"FAMILIENVOGT",familienrat:"FAMILIENRAT",geschaeftsfuehrer:"GESCHÄFTSFÜHRER",vertrauensmitglied:"VERTRAUENSMITGLIED",verwaltung:"BETRIEBSLEITER",lager:"KELLERMEISTER",winzer:"WINZER/BRAUER",winzerlehrling:"LEHRLING",kasse:"STUBENBEDIENSTETE",kellerhelfer:"KELLERHELFER",mitarbeiter:"ERNTEHELFER"};
+ const accrued={}; const paid={};
+ orders.forEach(x=>accrued[x.employee_id]=(accrued[x.employee_id]||0)+Number(x.commission_amount||0));
+ invoices.forEach(x=>accrued[x.employee_id]=(accrued[x.employee_id]||0)+Number(x.commission_amount||0));
+ payouts.forEach(x=>paid[x.employee_id]=(paid[x.employee_id]||0)+Number(x.amount||0));
+ const rows=employees.filter(x=>rankMap[x.role_key]).map(x=>({...x,rank:rankMap[x.role_key],roleLabel:labelMap[x.role_key]||x.role_key,accrued:accrued[x.user_id]||0,paid:paid[x.user_id]||0,due:Math.max((accrued[x.user_id]||0)-(paid[x.user_id]||0),0)})).sort((a,b)=>b.rank-a.rank||a.display_name.localeCompare(b.display_name,"de"));
+ const total=rows.reduce((s,x)=>s+x.due,0);
+ const canPay=profile?.role_key==="master"||profile?.role_key==="familienvogt";
+ return intro("PROVISION","Provisionsabrechnung","Alle aktiven Mitarbeiter werden nach Rang sortiert angezeigt. Offene Provisionen können ausschließlich vom Familienoberhaupt oder Familienvogt ausgezahlt werden.",null,null)+
+ '<div class="stats">'+stat("💰","OFFENE PROVISION",money(total))+stat("👥","MITARBEITER",rows.length)+stat("✓","AUSZAHLUNG","FAMILIENVOGT / OBERHAUPT")+stat("↻","SYSTEM","AUTOMATISCH")+'</div>'+
+ '<div class="panel"><div class="tablewrap"><table><thead><tr><th>RANG</th><th>MITARBEITER</th><th>PROVISION ERHALTEN</th><th>OFFEN</th><th>AKTION</th></tr></thead><tbody>'+
+ (rows.map(x=>'<tr><td><b>#'+x.rank+'</b><br><small>'+esc(x.roleLabel)+'</small></td><td><b>'+esc(x.display_name)+'</b></td><td>'+money(x.accrued)+'</td><td><strong>'+money(x.due)+'</strong></td><td>'+(canPay&&x.due>0?'<button class="mini gold" data-pay-commission="'+x.user_id+'">✓ Ausgezahlt</button>':x.due<=0?'<span class="badge good">Ausgeglichen</span>':'<span class="muted">Keine Berechtigung</span>')+'</td></tr>').join("")||'<tr><td colspan="5">Keine aktiven Mitarbeiter vorhanden.</td></tr>')+
  '</tbody></table></div></div>';
 }
 async function cash(){
@@ -561,7 +567,7 @@ function bind(){
  $$("[data-edit-invoice]").forEach(b=>b.onclick=()=>invoiceModal(b.dataset.editInvoice));
  $$("[data-delete-invoice]").forEach(b=>b.onclick=()=>deleteInvoice(b.dataset.deleteInvoice));
  $$("[data-view-order]").forEach(b=>b.onclick=()=>orderModal(b.dataset.viewOrder));
- $$("[data-delete-order]").forEach(b=>b.onclick=()=>deleteOrder(b.dataset.deleteOrder));
+ $("[data-delete-order]").forEach(b=>b.onclick=()=>deleteOrder(b.dataset.deleteOrder)); $("[data-pay-commission]").forEach(b=>b.onclick=async()=>{if(b.dataset.busy==="1")return;if(!confirm("Provision für diesen Mitarbeiter jetzt vollständig auszahlen und den offenen Wert auf 0 setzen?"))return;b.dataset.busy="1";b.disabled=true;try{const r=await supabaseClient.rpc("vineyard_pay_commission",{p_employee_id:b.dataset.payCommission});if(r.error)throw r.error;alert("Provision von "+money(r.data)+" wurde als ausgezahlt verbucht.");await render()}catch(err){alert(err.message||String(err));b.dataset.busy="";b.disabled=false}});
 
 }
 async function action(a,actionButton){
