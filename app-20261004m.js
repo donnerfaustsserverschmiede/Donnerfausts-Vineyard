@@ -95,7 +95,7 @@ function startPresence(){
 
 const NAV=[
 ["dashboard","⌂","Übersicht","dashboard"],
-["orders","🛒","Bestellungen","dashboard"],
+["orders","🚚","Lieferungen","orders_manage"],
 ["inventory","▦","Lager","inventory_view"],
 ["purchase","↘","Einkauf","trade_edit"],
 ["sales","↗","Verkauf","trade_edit"],
@@ -179,7 +179,7 @@ function shell(content){
  const logout=$("#logout");
  if(logout) logout.addEventListener("click",async e=>{e.preventDefault();await auditLog("Abmeldung","session",profile?.user_id,{event:"logout"});await supabaseClient.auth.signOut()});
 }
-function pageTitle(){return ({dashboard:"Übersicht",invoices:"Rechnungen",orders:"Bestellungen",inventory:"Lagerübersicht",purchase:"Einkauf",sales:"Verkauf",recipes:"Rezepte",production:"Produktion",cash:"Kasse",employees:"Mitarbeiter",appointments:"Termine",commission:"Provision",admin:"Administration"})[page]||"Übersicht"}
+function pageTitle(){return ({dashboard:"Übersicht",invoices:"Rechnungen",orders:"Lieferungen",inventory:"Lagerübersicht",purchase:"Einkauf",sales:"Verkauf",recipes:"Rezepte",production:"Produktion",cash:"Kasse",employees:"Mitarbeiter",appointments:"Termine",commission:"Provision",admin:"Administration"})[page]||"Übersicht"}
 function initials(n){return String(n||"DF").split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase()}
 function stat(icon,label,value){return '<div class="stat"><span class="icon">'+icon+'</span><div><small>'+label+"</small><b>"+value+"</b></div></div>"}
 function intro(k,h,p,action,label){return '<div class="intro"><div><div class="eyebrow">'+k+"</div><h1>"+h+"</h1><p>"+p+"</p></div>"+(action?'<button type="button" class="btn gold" data-action="'+action+'">'+label+"</button>":"")+"</div>"}
@@ -187,7 +187,7 @@ function intro(k,h,p,action,label){return '<div class="intro"><div><div class="e
 async function dashboard(){
  const [invoiceCount,orderCount]=await Promise.all([
   can("invoice_view")?supabaseClient.from("vineyard_invoices").select("id",{count:"exact",head:true}).eq("status","Offen"):Promise.resolve({count:0,error:null}),
-  supabaseClient.from("vineyard_orders").select("id",{count:"exact",head:true}).in("status",["Eingegangen","In Bearbeitung"])
+  supabaseClient.from("vineyard_orders").select("id",{count:"exact",head:true}).eq("status","Lieferung abgeschlossen")
  ]);
  const openInvoices=invoiceCount.error?0:(invoiceCount.count||0);
  const openOrders=orderCount.error?0:(orderCount.count||0);
@@ -198,7 +198,7 @@ async function dashboard(){
   </div>
   <div class="overviewgrid">
    <button class="overviewcard" data-page-action="invoices"><div class="overviewicon invoice">▤</div><div class="overviewtext"><small>OFFENE RECHNUNGEN</small><b>${openInvoices}</b><span>Rechnungsmenü öffnen</span></div><span class="arrow">→</span></button>
-   <button class="overviewcard" data-page-action="orders"><div class="overviewicon order">🛒</div><div class="overviewtext"><small>OFFENE BESTELLUNGEN</small><b>${openOrders}</b><span>Bestellungsmenü öffnen</span></div><span class="arrow">→</span></button>
+   <button class="overviewcard" data-page-action="orders"><div class="overviewicon order">🚚</div><div class="overviewtext"><small>LIEFERUNGEN</small><b>${openOrders}</b><span>Lieferungsmenü öffnen</span></div><span class="arrow">→</span></button>
    <div class="overviewcard static"><div class="overviewicon staff">♟</div><div class="overviewtext"><small>MITARBEITER ONLINE</small><b id="onlineCount">${onlineCount||1}</b><span>Aktuell im System angemeldet</span></div><span class="live"><i></i> LIVE</span></div>
   </div>
 `;
@@ -221,7 +221,7 @@ async function invoices(){
  '</tbody></table></div></div>';
 }
 async function orders(){
- const {data:rawRows,error}=await supabaseClient.from("vineyard_orders").select("id,order_number,status,customer_name,customer_email,customer_phone,customer_address,customer_note,employee_id,total,commission_rate,commission_amount,delivery_date,delivery_requested,delivery_fee,created_at,accepted_at,completed_at").order("created_at",{ascending:false});
+ const {data:rawRows,error}=await supabaseClient.from("vineyard_orders").select("id,order_number,status,customer_name,employee_id,total,commission_rate,commission_amount,created_at,completed_at,fulfillment_cashbook_id").eq("status","Lieferung abgeschlossen").order("created_at",{ascending:false});
  if(error)return errorBox(error.message);
  const rows=Array.isArray(rawRows)?rawRows:[];
  const {data:rawEmployees,error:ee}=await supabaseClient.rpc("vineyard_order_employees");
@@ -229,39 +229,36 @@ async function orders(){
  const employees=Array.isArray(rawEmployees)?rawEmployees:[];
  const emap=Object.fromEntries(employees.map(x=>[x.user_id,x.display_name]));
  rows.forEach(x=>x.employee_name=emap[x.employee_id]||"—");
- const open=rows.filter(x=>x.status==="Eingegangen"||x.status==="In Bearbeitung");
- const recent=rows.filter(x=>x.status==="Bestellung abgeschlossen").slice(0,10);
- const totalOpen=open.reduce((n,x)=>n+Number(x.total||0),0);
- const formLink=new URL("./bestellung-20261004.html",location.href).href;
- const dateText=x=>x.delivery_date?new Date(x.delivery_date+"T00:00:00").toLocaleDateString("de-DE"):"—";
- const card=x=>'<div class="ordercard"><div class="ordercardtop"><div><span class="orderNo">'+esc(x.order_number)+'</span>'+badge(x.status)+'</div><b>'+money(x.total)+'</b></div>'+
- '<div class="ordercustomer"><strong>'+esc(x.customer_name)+'</strong><span>Lieferdatum: '+esc(dateText(x))+'</span><span>Lieferung: '+(x.delivery_requested?"Ja · +10%":"Nein")+'</span></div>'+
- '<div class="ordermeta"><span>Erstellt: '+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</span><span>Mitarbeiter: '+esc(x.employee_name)+'</span>'+(x.commission_amount?'<span>Provision: '+money(x.commission_amount)+'</span>':'')+'</div>'+
- '<div class="orderactions"><button class="mini gold" data-view-order="'+x.id+'">Details</button>'+
- (x.status==="Eingegangen"?'<button class="mini gold" data-order-status="'+x.id+'|In Bearbeitung">Bestellung annehmen</button>':"")+
- (x.status==="In Bearbeitung"?'<button class="mini gold" data-order-status="'+x.id+'|Bestellung abgeschlossen">Bestellung abschließen</button>':"")+
- (x.status!=="Bestellung abgeschlossen"?'<button class="mini" data-delete-order="'+x.id+'">Löschen</button>':"")+
- '</div></div>';
- return intro("BESTELLUNGEN","Bestellungsmenü","Kunden bestellen über den öffentlichen Link. Mitarbeiter übernehmen Bestellungen und erhalten dabei 30% Provision. Beim Abschluss werden Lager und Kasse automatisch gebucht.",null,null)+
- '<div class="orderlinkpanel"><div><div class="eyebrow">KUNDENFORMULAR</div><b>Bestelllink für Kunden</b><p>Produkt, Menge, Lieferdatum und Lieferung werden erfasst. Lieferung berechnet automatisch 10% Aufschlag.</p></div><div class="orderlinkactions"><input class="orderlinkinput" readonly value="'+esc(formLink)+'"><button class="btn gold" data-action="copy-order-link">Link kopieren</button><button class="btn outline" data-action="open-order-form">Formular öffnen</button></div></div>'+
- '<div class="stats">'+stat("🛒","OFFENE BESTELLUNGEN",open.length)+stat("$","OFFENER BESTELLWERT",money(totalOpen))+stat("↗","IN BEARBEITUNG",rows.filter(x=>x.status==="In Bearbeitung").length)+stat("✓","LETZTE BESTELLUNGEN",recent.length)+'</div>'+
- '<div class="orderssection"><div class="sectiontitle"><div><div class="eyebrow">AKTUELL</div><h2>Offene Bestellungen</h2><p>Neue Bestellungen und Bestellungen in Bearbeitung.</p></div></div>'+
- '<div class="ordergrid">'+(open.map(card).join("")||'<div class="panel" style="text-align:center;padding:28px"><h2 style="margin:0 0 8px">Keine Bestellung verfügbar</h2><p class="muted" style="margin:0">Aktuell liegt keine offene Bestellung vor. Der Kunden-Bestelllink steht oben bereit und kann direkt kopiert und weitergegeben werden.</p></div>')+'</div></div>'+
- '<div class="orderssection"><div class="sectiontitle"><div><div class="eyebrow">ARCHIV</div><h2>Letzte Bestellungen</h2><p>Abgeschlossene Bestellungen bleiben als Nachweis erhalten.</p></div></div>'+
- '<div class="ordergrid">'+(recent.map(card).join("")||'<div class="panel"><p class="muted">Keine Bestellungen hinterlegt</p></div>')+'</div></div>';
+ const total=rows.reduce((n,x)=>n+Number(x.total||0),0);
+ const commissions=rows.reduce((n,x)=>n+Number(x.commission_amount||0),0);
+ const card=x=>'<div class="ordercard"><div class="ordercardtop"><div><span class="orderNo">'+esc(x.order_number)+'</span><span class="badge good">Lieferung abgeschlossen</span></div><b>'+money(x.total)+'</b></div>'+
+ '<div class="ordercustomer"><strong>Großhändler</strong><span>Lieferant: '+esc(x.employee_name)+'</span><span>Datum: '+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</span></div>'+
+ '<div class="ordermeta"><span>Verkaufspreis: '+money(x.total)+'</span><span>Provision: '+money(x.commission_amount||0)+' ('+Number(x.commission_rate||0).toLocaleString("de-DE")+'%)</span></div>'+
+ '<div class="orderactions"><button class="mini gold" data-view-order="'+x.id+'">Details</button><button class="mini" data-delete-order="'+x.id+'">Löschen</button></div></div>';
+ return intro("LOGISTIK","Lieferungen","Jede Auslieferung an den Großhändler wird hier erfasst. Der Lieferant wird hinterlegt, der tatsächlich erzielte Verkaufspreis wird eingetragen und die Provision automatisch daraus berechnet.",can("orders_manage")?"newdelivery":null,can("orders_manage")?"+ Lieferung erfassen":null)+
+ '<div class="panel orderlinkpanel"><div><div class="eyebrow">ABLÄUFE</div><b>Kein Kunden-Bestellformular</b><p>Der Betrieb nimmt keine Bestellungen entgegen. Produziert wird für den Großhändler; die Weiterverteilung an Bars, Clubs und andere Unternehmen erfolgt durch den Großhändler.</p></div></div>'+
+ '<div class="stats">'+stat("🚚","LIEFERUNGEN",rows.length)+stat("$","UMSATZ",money(total))+stat("%","PROVISIONEN",money(commissions))+stat("▦","DURCHSCHNITT",money(rows.length?total/rows.length:0))+'</div>'+
+ '<div class="orderssection"><div class="sectiontitle"><div><div class="eyebrow">LIEFERUNGSNACHWEIS</div><h2>Alle Lieferungen</h2><p>Lieferant, Menge, Verkaufspreis und automatisch berechnete Provision bleiben nachvollziehbar gespeichert.</p></div></div>'+
+ '<div class="ordergrid">'+(rows.map(card).join("")||'<div class="panel" style="text-align:center;padding:28px"><h2 style="margin:0 0 8px">Noch keine Lieferungen</h2><p class="muted" style="margin:0">Erfasse die erste Auslieferung an den Großhändler über „+ Lieferung erfassen“.</p></div>')+'</div></div>';
 }
-
 async function orderModal(id){
- const {data:order,error}=await supabaseClient.from("vineyard_orders").select("id,order_number,status,customer_name,customer_email,customer_phone,customer_address,customer_note,employee_id,total,commission_rate,commission_amount,delivery_date,delivery_requested,delivery_fee,created_at,accepted_at,completed_at").eq("id",id).single();
+ const {data:order,error}=await supabaseClient.from("vineyard_orders").select("id,order_number,status,customer_name,employee_id,total,commission_rate,commission_amount,created_at,completed_at").eq("id",id).single();
  if(error)throw error;
  const {data:items=[],error:ie}=await supabaseClient.from("vineyard_order_items").select("item_name,unit,quantity,unit_price,line_total").eq("order_id",id).order("created_at");
  if(ie)throw ie;
  const employee=order.employee_id?await supabaseClient.from("vineyard_profiles").select("display_name").eq("user_id",order.employee_id).maybeSingle():{data:null};
- const date=order.delivery_date?new Date(order.delivery_date+"T00:00:00").toLocaleDateString("de-DE"):"—";
  const rows=items.map(x=>'<tr><td>'+esc(x.item_name)+'</td><td>'+Number(x.quantity).toLocaleString("de-DE")+' '+esc(x.unit)+'</td><td>'+money(x.unit_price)+'</td><td>'+money(x.line_total)+'</td></tr>').join("");
- $("#modalroot").innerHTML='<div class="modalback"><div class="modal"><div class="modalhead"><b>Bestellung · '+esc(order.order_number)+'</b><button type="button" id="x">×</button></div><div class="grid2"><div class="panel"><b>Kunde</b><p>'+esc(order.customer_name)+'</p><b>Lieferdatum</b><p>'+esc(date)+'</p><b>Lieferung</b><p>'+(order.delivery_requested?"Ja · +10% Liefergebühr":"Nein")+'</p></div><div class="panel"><b>Status</b><p>'+badge(order.status)+'</p><b>Mitarbeiter</b><p>'+esc(employee.data?.display_name||"Noch nicht zugewiesen")+'</p><b>Provision</b><p>'+money(order.commission_amount||0)+'</p></div></div><div class="tablewrap"><table><thead><tr><th>Produkt</th><th>Menge</th><th>Einzelpreis</th><th>Gesamt</th></tr></thead><tbody>'+rows+'</tbody></table></div><div class="publicTotal"><span>Gesamtsumme</span><b>'+money(order.total)+'</b></div><p class="muted">'+esc(order.customer_note||"")+'</p><div class="actions"><button type="button" class="btn outline" id="closeOrderModal">Schließen</button></div></div></div>';
+ $("#modalroot").innerHTML='<div class="modalback"><div class="modal"><div class="modalhead"><b>Lieferung · '+esc(order.order_number)+'</b><button type="button" id="x">×</button></div><div class="grid2"><div class="panel"><b>Empfänger</b><p>Großhändler</p><b>Lieferant</b><p>'+esc(employee.data?.display_name||"—")+'</p><b>Datum</b><p>'+esc(new Date(order.created_at).toLocaleString("de-DE"))+'</p></div><div class="panel"><b>Verkaufspreis</b><p>'+money(order.total)+'</p><b>Provisionssatz</b><p>'+Number(order.commission_rate||0).toLocaleString("de-DE")+'%</p><b>Provision</b><p>'+money(order.commission_amount||0)+'</p></div></div><div class="tablewrap"><table><thead><tr><th>Produkt</th><th>Menge</th><th>Einzelpreis</th><th>Gesamt</th></tr></thead><tbody>'+rows+'</tbody></table></div><div class="publicTotal"><span>Lieferwert</span><b>'+money(order.total)+'</b></div><div class="actions"><button type="button" class="btn outline" id="closeOrderModal">Schließen</button></div></div></div>';
  const close=()=>$("#modalroot").innerHTML="";
  $("#x").onclick=$("#closeOrderModal").onclick=close;
+}
+async function updateOrderStatus(id,status){ return; }
+async function deleteOrder(id){
+ if(!confirm("Diese Lieferung wirklich löschen? Lagerbestand und Kassenbuchung werden zurückgebucht."))return;
+ const {error}=await supabaseClient.rpc("vineyard_delete_delivery",{p_order_id:id});
+ if(error)throw error;
+ await auditLog("Lieferung gelöscht","delivery",id,{});
+ await render();
 }
 async function updateOrderStatus(id,status){
  const button=document.querySelector('[data-order-status="'+id+'|'+status+'"]');
@@ -296,9 +293,9 @@ async function admin(){
   if(a.includes("ein-/verkauf gebucht")||a.includes("einkauf gebucht")||a.includes("verkauf gebucht")) return name+" hat "+String(d.quantity||"")+" "+String(d.unit||"")+" "+String(d.item_name||"Artikel")+" als "+String(d.trade_type||"Vorgang")+" gebucht: "+money(d.total||0)+".";
   if(a.includes("kassenbuchung")) return name+" hat "+(d.kind==="in"?"eine Einnahme":"eine Ausgabe")+" von "+money(d.amount||0)+" in die Kasse gebucht.";
   if(a==="lagerbestand geändert") return name+" hat den Lagerbestand von "+String(d.item_name||"Artikel")+" um "+Number(d.delta||0).toLocaleString("de-DE")+" verändert.";
-  if(a.includes("bestellung eingegangen")) return "KUNDE hat Bestellung "+String(d.order_number||"")+" über "+money(d.total||0)+" eingereicht.";
-  if(a.includes("bestellung angenommen")) return name+" hat Bestellung "+String(d.order_number||"")+" angenommen.";
-  if(a.includes("bestellung abgeschlossen")) return name+" hat Bestellung "+String(d.order_number||"")+" abgeschlossen.";
+  if(a.includes("lieferung erfasst")) return name+" hat eine Lieferung erfasst: "+String(d.item_name||"Artikel")+" · "+String(d.quantity||"")+" · "+money(d.total||0)+" · Provision "+money(d.commission_amount||0)+".";
+  
+  
   if(a.includes("rechnung erstellt")) return name+" hat eine Rechnung erstellt.";
   if(a.includes("rechnung geändert")) return name+" hat eine Rechnung geändert.";
   if(a.includes("rechnung gelöscht")) return name+" hat eine Rechnung gelöscht.";
@@ -441,11 +438,11 @@ async function commissions(){
  ]);
  const rows=[
   ...invoices.filter(x=>Number(x.commission_amount||0)>0).map(x=>({number:x.invoice_number,partner:x.partner_name,status:x.status,employee_id:x.employee_id,rate:x.commission_rate,amount:x.commission_amount,date:x.created_at,type:"Rechnung"})),
-  ...orders.filter(x=>Number(x.commission_amount||0)>0).map(x=>({number:x.order_number,partner:x.customer_name,status:x.status,employee_id:x.employee_id,rate:x.commission_rate,amount:x.commission_amount,date:x.completed_at||x.created_at,type:"Bestellung"}))
+  ...orders.filter(x=>Number(x.commission_amount||0)>0).map(x=>({number:x.order_number,partner:x.customer_name,status:x.status,employee_id:x.employee_id,rate:x.commission_rate,amount:x.commission_amount,date:x.completed_at||x.created_at,type:"Lieferung"}))
  ].sort((a,b)=>new Date(b.date)-new Date(a.date));
  const total=rows.reduce((s,x)=>s+Number(x.amount||0),0);
  const open=rows.filter(x=>x.status!=="Bezahlt"&&x.status!=="Storniert").reduce((s,x)=>s+Number(x.amount||0),0);
- return intro("PROVISION","Provisionen","Übersicht der aus Bestellungen und Rechnungen gespeicherten Provisionsbeträge.")+
+ return intro("PROVISION","Provisionen","Übersicht der aus Lieferungen und Rechnungen gespeicherten Provisionsbeträge.")+
  '<div class="stats">'+stat("%","GESAMT",money(total))+stat("◷","OFFEN",money(open))+stat("▤","VORGÄNGE",rows.length)+stat("↗","SATZ","gespeichert")+'</div>'+
  '<div class="panel"><div class="tablewrap"><table><thead><tr><th>DATUM</th><th>VORGANG</th><th>PARTNER</th><th>SATZ</th><th>PROVISION</th><th>STATUS</th></tr></thead><tbody>'+
  (rows.map(x=>'<tr><td>'+esc(new Date(x.date).toLocaleString("de-DE"))+'</td><td><b>'+esc(x.number)+'</b><small class="tableunit">'+esc(x.type)+'</small></td><td>'+esc(x.partner||"—")+'</td><td>'+Number(x.rate||0).toLocaleString("de-DE")+'%</td><td><b>'+money(x.amount)+'</b></td><td>'+badge(x.status)+'</td></tr>').join("")||'<tr><td colspan="6">Noch keine Provisionen vorhanden.</td></tr>')+
@@ -596,7 +593,7 @@ async function action(a,actionButton){
  if(a==="newemployee"){await employeeModal();return}
  if(a==="edit-employee"){const id=actionButton?.dataset.employeeId;if(!id)throw Error("Mitarbeiter konnte nicht ermittelt werden.");await employeeModal(id);return}
  if(a==="delete-employee"){const id=actionButton?.dataset.employeeId;if(!id)throw Error("Mitarbeiter konnte nicht ermittelt werden.");await deleteEmployee(id);return}
- if(a==="newinvoice"){await invoiceModal();return}
+ if(a==="newinvoice"){await invoiceModal();return}\n if(a==="newdelivery"){await deliveryModal();return}
  if(a==="copy-order-link"){const link=new URL("./bestellung-20261004.html",location.href).href;try{await navigator.clipboard.writeText(link);alert("Kunden-Bestelllink kopiert.")}catch(_){prompt("Kunden-Bestelllink",link)}return}
  if(a==="open-order-form"){window.open(new URL("./bestellung-20261004.html",location.href).href,"_blank");return}
 }
@@ -922,6 +919,40 @@ async function tradeModal(id,defaultType=null){
    await render();
   }catch(err){alert(err.message||String(err));b.disabled=false}
  };
+}
+async function deliveryModal(){
+ const [{data:employees=[],error:ee},{data:products=[],error:ie}]=await Promise.all([
+  supabaseClient.rpc("vineyard_order_employees"),
+  supabaseClient.from("vineyard_inventory").select("id,item_name,unit,quantity,sale_price").eq("category","Produkte").order("item_name")
+ ]);
+ if(ee)throw ee;
+ if(ie)throw ie;
+ if(!employees.length)throw Error("Keine aktiven Mitarbeiter verfügbar.");
+ if(!products.length)throw Error("Lege zuerst mindestens ein Produkt im Lager an.");
+ const employeeOptions=employees.map(x=>({value:x.user_id,label:x.display_name}));
+ const productOptions=products.map(x=>({value:x.id,label:x.item_name+" · "+x.unit+" · Bestand "+Number(x.quantity).toLocaleString("de-DE")}));
+ modal("Lieferung an Großhändler",
+  '<div class="recipehint"><b>Wichtig:</b> Hier wird der tatsächlich erzielte Verkaufspreis der Lieferung eingetragen. Der Provisionssatz bleibt bei <b>30 %</b> und wird automatisch aus diesem Betrag berechnet.</div>'+
+  selectField("Wer hat geliefert?","employee_id",employeeOptions,profile?.user_id||employees[0].user_id)+
+  selectField("Produkt","inventory_id",productOptions,products[0].id)+
+  field("Menge","quantity","number","1",true)+
+  field("Tatsächlicher Verkaufspreis ($)","total","number","",true)+
+  '<div class="tradeprice"><div><span>AUTOMATISCHE PROVISION</span><b id="deliveryCommission">'+money(0)+'</b><small>30 % vom eingegebenen Verkaufspreis</small></div></div>',
+  async v=>{
+   const quantity=Number(v.quantity),total=Number(v.total);
+   if(!Number.isFinite(quantity)||quantity<=0)throw Error("Die Liefermenge muss größer als 0 sein.");
+   if(!Number.isFinite(total)||total<=0)throw Error("Der Verkaufspreis muss größer als 0 sein.");
+   const product=products.find(x=>String(x.id)===String(v.inventory_id));
+   if(!product)throw Error("Produkt nicht gefunden.");
+   if(quantity>Number(product.quantity))throw Error("Nicht genügend Bestand vorhanden.");
+   const r=await supabaseClient.rpc("vineyard_create_delivery",{p_employee_id:v.employee_id,p_inventory_id:v.inventory_id,p_quantity:quantity,p_total:total});
+   if(r.error)throw r.error;
+   await auditLog("Lieferung erfasst","delivery",r.data?.id||null,{employee_id:v.employee_id,inventory_id:v.inventory_id,quantity,total,commission_rate:30,commission_amount:Math.round(total*0.30*100)/100});
+  });
+ const totalEl=$("[name=total]");
+ const updateCommission=()=>{const total=Number(totalEl?.value)||0;const el=$("#deliveryCommission");if(el)el.textContent=money(total*0.30)};
+ totalEl?.addEventListener("input",updateCommission);
+ updateCommission();
 }
 async function cashModal(id){
  let existing=null;
