@@ -419,12 +419,12 @@ async function cash(){
 async function employees(){
  const rankOrder={winzerlehrling:10,kellerhelfer:20,mitarbeiter:30,kasse:40,winzer:50,lager:60,vertrauensmitglied:70,verwaltung:80,geschaeftsfuehrer:90,familienrat:100,familienvogt:110,master:120};
  const [{data:emps=[]},{data:roles=[]}]=await Promise.all([
-  supabaseClient.from("vineyard_profiles").select("user_id,display_name,role_key,active,phone,vineyard_roles:role_key(label)").order("display_name"),
+  supabaseClient.from("vineyard_profiles").select("user_id,display_name,role_key,active,phone,vineyard_roles:role_key(label)").eq("active",true).order("display_name"),
   supabaseClient.from("vineyard_roles").select("key,label,permissions").order("key")
  ]);
  emps.sort((a,b)=>{const ar=a.role_key==="admin"?10000:(rankOrder[a.role_key]??9990);const br=b.role_key==="admin"?10000:(rankOrder[b.role_key]??9990);return ar-br||String(a.display_name||"").localeCompare(String(b.display_name||""));});
  return intro("TEAM","Mitarbeiter","Mitarbeiter werden mit Namen und Rolle geführt. Die Rechte richten sich nach der jeweiligen Rolle.",can("employees_edit")?"newemployee":null,can("employees_edit")?"+ Mitarbeiter":null)+
- '<div class="employeegrid">'+emps.map(x=>'<div class="employee"><div class="avatar">'+esc(initials(x.display_name))+'</div><div style="flex:1"><b>'+esc(x.display_name)+"</b><small>"+esc(x.vineyard_roles?.label||x.role_key)+" · "+(x.active?'<span class="good">Aktiv</span>':'<span class="bad">Deaktiviert</span>')+"</small>"+(x.phone?'<small>'+esc(x.phone)+"</small>":"")+'</div>'+(can("employees_edit")?'<button type="button" class="mini" data-action="edit-employee" data-employee-id="'+x.user_id+'">Name / Rolle ändern</button>':"")+"</div>").join("")+"</div>";
+ '<div class="employeegrid">'+emps.map(x=>'<div class="employee"><div class="avatar">'+esc(initials(x.display_name))+'</div><div style="flex:1"><b>'+esc(x.display_name)+"</b><small>"+esc(x.vineyard_roles?.label||x.role_key)+" · "+(x.active?'<span class="good">Aktiv</span>':'<span class="bad">Deaktiviert</span>')+"</small>"+(x.phone?'<small>'+esc(x.phone)+"</small>":"")+'</div>'+(can("employees_edit")?'<div class="actions"><button type="button" class="mini" data-action="edit-employee" data-employee-id="'+x.user_id+'">Name / Rolle ändern</button><button type="button" class="mini danger" data-action="delete-employee" data-employee-id="'+x.user_id+'">Löschen</button></div>':"")+"</div>").join("")+"</div>";
 }
 function errorBox(t){return '<div class="panel"><b>Fehler</b><p class="muted">'+esc(t)+"</p></div>"}
 
@@ -546,6 +546,7 @@ async function action(a,actionButton){
  if(a==="newtrade"){await tradeModal(null,page==="purchase"?"Einkauf":page==="sales"?"Verkauf":null);return}
  if(a==="newemployee"){await employeeModal();return}
  if(a==="edit-employee"){const id=actionButton?.dataset.employeeId;if(!id)throw Error("Mitarbeiter konnte nicht ermittelt werden.");await employeeModal(id);return}
+ if(a==="delete-employee"){const id=actionButton?.dataset.employeeId;await deleteEmployee(id);return}
  if(a==="newinvoice"){await invoiceModal();return}
  if(a==="newdelivery"){await deliveryModal();return}
 
@@ -935,6 +936,24 @@ async function employeeModal(id){
    await auditLog(id?"Mitarbeiter geändert":"Mitarbeiter angelegt","employee",result.data?.user_id||id,{role_key:v.role_key,display_name:v.display_name.trim()});
   });
 }
+async function deleteEmployee(id){
+ if(!id)throw Error("Mitarbeiter konnte nicht ermittelt werden.");
+ const employee=await supabaseClient.from("vineyard_profiles").select("user_id,display_name,role_key").eq("user_id",id).maybeSingle();
+ if(employee.error)throw employee.error;
+ if(!employee.data)throw Error("Mitarbeiter wurde nicht gefunden.");
+ if(!confirm('Mitarbeiter "'+employee.data.display_name+'" wirklich löschen? Der Zugang wird sofort gesperrt. Historische Rechnungen und Buchungen bleiben erhalten.'))return;
+ const result=await supabaseClient.rpc("vineyard_manage_employee",{
+  p_action:"delete",
+  p_employee_id:id,
+  p_display_name:null,
+  p_role_key:null,
+  p_password:null
+ });
+ if(result.error)throw result.error;
+ await auditLog("Mitarbeiter gelöscht","employee",id,{display_name:employee.data.display_name,role_key:employee.data.role_key});
+ await render();
+}
+
 async function auditLog(action,entity,entityId,details){
  try{
   if(!profile?.user_id)return;
