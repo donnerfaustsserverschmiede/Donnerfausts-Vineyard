@@ -936,16 +936,21 @@ async function employeeModal(id){
  if(!options.length)throw Error("Deine Rolle darf keine Mitarbeiterrollen vergeben.");
  modal(id?"Mitarbeiter bearbeiten":"Mitarbeiter hinzufügen",
   field("Name","display_name","text",employee?.display_name||"",true)+
-  selectField("Rolle","role_key",options,employee?.role_key||"mitarbeiter"),
+  selectField("Rolle","role_key",options,employee?.role_key||"mitarbeiter")+
+  '<label>Passwort'+
+  '<input name="password" type="password" autocomplete="new-password" minlength="8" '+(id?'':'required')+' placeholder="'+(id?'Leer lassen, wenn das Passwort unverändert bleiben soll.':'Mindestens 8 Zeichen')+'">'+
+  '</label>',
   async v=>{
+   const password=String(v.password||"").trim();
    const result=await supabaseClient.rpc("vineyard_manage_employee",{
     p_action:id?"update":"create",
     p_employee_id:id||null,
     p_display_name:v.display_name.trim(),
-    p_role_key:v.role_key
+    p_role_key:v.role_key,
+    p_password:password||null
    });
    if(result.error)throw result.error;
-   await auditLog(id?"Mitarbeiter geändert":"Mitarbeiter angelegt","employee",result.data?.user_id||id,{role_key:v.role_key,display_name:v.display_name.trim()});
+   await auditLog(id?"Mitarbeiter geändert":"Mitarbeiter angelegt","employee",result.data?.user_id||id,{role_key:v.role_key,display_name:v.display_name.trim(),password_changed:!!password});
   });
 }
 async function deleteEmployee(id){
