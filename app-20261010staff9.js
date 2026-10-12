@@ -19,7 +19,7 @@ const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&
 const money=n=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format(Number(n)||0);
 const dateTime=()=>new Date().toLocaleString("de-DE");
 let profile=null, role=null, page="dashboard";
-let presenceChannel=null, onlineCount=0, orderRealtimeChannel=null;
+let presenceChannel=null, onlineCount=0, onlineNames=[], orderRealtimeChannel=null;
 
 function startOrderRealtime(){
  try{
@@ -51,9 +51,21 @@ function startPresence(){
             if(id)ids.add(id);
           });
         });
-        onlineCount=ids.size||1;
+        onlineNames=[];
+        Object.keys(state).forEach(k=>{
+          (state[k]||[]).forEach(entry=>{
+            const id=String(entry?.user_id||k);
+            const name=String(entry?.display_name||"").trim();
+            if(id && name && !onlineNames.includes(name))onlineNames.push(name);
+          });
+        });
+        if(profile?.display_name && !onlineNames.includes(String(profile.display_name)))onlineNames.unshift(String(profile.display_name));
+        onlineNames.sort((a,b)=>a.localeCompare(b,"de"));
+        onlineCount=onlineNames.length||1;
         const el=document.querySelector("#onlineCount");
         if(el)el.textContent=String(onlineCount);
+        const namesEl=document.querySelector("#onlineNames");
+        if(namesEl)namesEl.textContent=onlineNames.join(" · ")||String(profile?.display_name||"");
       }catch(_){
         onlineCount=1;
         const el=document.querySelector("#onlineCount");
@@ -168,7 +180,7 @@ async function dashboard(){
   <div class="overviewgrid">
    <button class="overviewcard" data-page-action="invoices"><div class="overviewicon invoice">▤</div><div class="overviewtext"><small>OFFENE RECHNUNGEN</small><b>${openInvoices}</b><span>Rechnungsmenü öffnen</span></div><span class="arrow">→</span></button>
    <button class="overviewcard" data-page-action="orders"><div class="overviewicon order">🚚</div><div class="overviewtext"><small>LIEFERUNGEN</small><b>${openOrders}</b><span>Lieferungsmenü öffnen</span></div><span class="arrow">→</span></button>
-   <div class="overviewcard static"><div class="overviewicon staff">♟</div><div class="overviewtext"><small>MITARBEITER ONLINE</small><b id="onlineCount">${onlineCount||1}</b><span>Aktuell im System angemeldet</span></div><span class="live"><i></i> LIVE</span></div>
+   <div class="overviewcard static"><div class="overviewicon staff">♟</div><div class="overviewtext"><small>WER IST GERADE ONLINE?</small><b id="onlineCount">${onlineCount||1}</b><span id="onlineNames">${esc(onlineNames.join(" · ")||profile?.display_name||"")}</span></div><span class="live"><i></i> LIVE</span></div>
   </div>
 `;
 }
