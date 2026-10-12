@@ -4,32 +4,22 @@ if(!window.supabase||typeof window.supabase.createClient!=="function"){
  document.body.innerHTML='<div class="loading"><b>Donnerfaust Saloon konnte nicht geladen werden.</b><br><small>Die Supabase-Bibliothek ist nicht verfügbar. Bitte Seite neu laden.</small></div>';
  throw new Error("Supabase-Bibliothek konnte nicht geladen werden.");
 }
-const supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
+let currentEmployeeId=sessionStorage.getItem("vineyard_employee_id")||"";
+const employeeFetch=(input,init={})=>{
+ const headers=new Headers(input instanceof Request?input.headers:undefined);
+ new Headers(init.headers||{}).forEach((v,k)=>headers.set(k,v));
+ const employeeSession=sessionStorage.getItem("vineyard_employee_session")||"";
+ if(employeeSession)headers.set("x-employee-session",employeeSession);else headers.delete("x-employee-session");
+ headers.delete("x-employee-id");
+ return fetch(input,{...init,headers});
+};
+const supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{global:{fetch:employeeFetch},auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 const money=n=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format(Number(n)||0);
 const dateTime=()=>new Date().toLocaleString("de-DE");
-async function adminUsers(body){
- const {data:{session}}=await supabaseClient.auth.getSession();
- if(!session?.access_token)throw Error("Deine Anmeldung ist abgelaufen. Bitte melde dich neu an.");
- const response=await fetch(SUPABASE_URL+"/functions/v1/vineyard-admin-users",{
-  method:"POST",
-  headers:{
-   "Content-Type":"application/json",
-   "apikey":SUPABASE_KEY,
-   "Authorization":"Bearer "+session.access_token
-  },
-  body:JSON.stringify(body)
- });
- const text=await response.text();
- let data={};
- try{data=text?JSON.parse(text):{}}catch(_){data={error:text||"Unbekannte Serverantwort."}}
- if(!response.ok)throw Error(data?.error||("Serverfehler ("+response.status+")."));
- if(data?.error)throw Error(data.error);
- return data;
-}
 let profile=null, role=null, page="dashboard";
-let presenceChannel=null, onlineCount=0, orderRealtimeChannel=null;
+let presenceChannel=null, onlineCount=0, onlineNames=[], orderRealtimeChannel=null;
 
 function startOrderRealtime(){
  try{
@@ -61,9 +51,21 @@ function startPresence(){
             if(id)ids.add(id);
           });
         });
-        onlineCount=ids.size||1;
+        onlineNames=[];
+        Object.keys(state).forEach(k=>{
+          (state[k]||[]).forEach(entry=>{
+            const id=String(entry?.user_id||k);
+            const name=String(entry?.display_name||"").trim();
+            if(id && name && !onlineNames.includes(name))onlineNames.push(name);
+          });
+        });
+        if(profile?.display_name && !onlineNames.includes(String(profile.display_name)))onlineNames.unshift(String(profile.display_name));
+        onlineNames.sort((a,b)=>a.localeCompare(b,"de"));
+        onlineCount=onlineNames.length||1;
         const el=document.querySelector("#onlineCount");
         if(el)el.textContent=String(onlineCount);
+        const namesEl=document.querySelector("#onlineNames");
+        if(namesEl)namesEl.textContent=onlineNames.join(" · ")||String(profile?.display_name||"");
       }catch(_){
         onlineCount=1;
         const el=document.querySelector("#onlineCount");
@@ -95,7 +97,7 @@ function startPresence(){
 
 const NAV=[
 ["dashboard","⌂","Übersicht","dashboard"],
-["orders","🛒","Bestellungen","dashboard"],
+["orders","🚚","Lieferungen","orders_manage"],
 ["inventory","▦","Lager","inventory_view"],
 ["purchase","↘","Einkauf","trade_edit"],
 ["sales","↗","Verkauf","trade_edit"],
@@ -112,74 +114,53 @@ const NAV=[
 function can(p){return !!role?.permissions?.[p]}
 function badge(s){const good=["Bezahlt","OK","Bestellung abgeschlossen"].includes(s);const warn=["Niedrig","Offen","Eingegangen","In Bearbeitung"].includes(s);return '<span class="badge '+(good?"good":warn?"warn":"bad")+'">'+esc(s)+"</span>"}
 
+
 async function init(){
  if(!window.supabase||typeof window.supabase.createClient!=="function")throw Error("Die Supabase-Bibliothek konnte nicht geladen werden.");
  const publicToken=new URLSearchParams(location.search).get("rechnung");
  if(publicToken)return publicInvoice(publicToken);
- const sessionResult=await Promise.race([
-  supabaseClient.auth.getSession(),
-  new Promise((_,reject)=>setTimeout(()=>reject(Error("Die Anmeldung konnte nicht innerhalb von 10 Sekunden initialisiert werden.")),10000))
- ]);
- const {data:{session}}=sessionResult;
- if(!session)return login();
- await loadProfile();
- if(!profile){await supabaseClient.auth.signOut();return login("Dein Konto ist für Donnerfaust Saloon noch nicht freigeschaltet.");}
- render();
- startPresence();
- supabaseClient.auth.onAuthStateChange(async (_e,s)=>{if(!s){if(presenceChannel)await supabaseClient.removeChannel(presenceChannel);presenceChannel=null;stopOrderRealtime();login()}});
+ await selectEmployee(false);
 }
-async function loadProfile(){
- const {data,error}=await supabaseClient.from("vineyard_profiles").select("user_id,display_name,role_key,active,phone,must_change_password,vineyard_roles:role_key(key,label,permissions)").eq("user_id",(await supabaseClient.auth.getUser()).data.user.id).maybeSingle();
- if(error||!data||!data.active){profile=null;return}
- profile=data;role=data.vineyard_roles;
+async function selectEmployee(forcePicker=true){
+ const {data:employees,error}=await supabaseClient.from("vineyard_profiles").select("user_id,display_name,role_key,active,phone,vineyard_roles:role_key(key,label,permissions,rank_order)").eq("active",true).order("display_name");
+ if(error)throw error;
+ if(!employees?.length)throw Error("Es sind noch keine aktiven Mitarbeiter hinterlegt.");
+ const saved=employees.find(x=>x.user_id===currentEmployeeId);
+ if(!forcePicker&&saved&&sessionStorage.getItem("vineyard_employee_session")){
+  const {data:verified,error:verifyError}=await supabaseClient.rpc("vineyard_current_employee_id");
+  if(!verifyError&&verified===saved.user_id){setCurrentEmployee(saved);await render();startPresence();return;}
+  sessionStorage.removeItem("vineyard_employee_session");sessionStorage.removeItem("vineyard_employee_id");currentEmployeeId="";
+ }
+ document.body.innerHTML=`<div class="login"><div class="loginbox"><div class="loginbrand"><div class="brandmark"><img src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"></div><h1>Donnerfaust Saloon</h1><p>Mitarbeiter auswählen</p></div><p class="muted" style="margin:18px 0">Wähle deinen Namen aus. Anschließend wird das persönliche Passwort dieses Mitarbeiters abgefragt.</p><div class="employeegrid">${employees.map(x=>'<button type="button" class="employee" data-choose-employee="'+esc(x.user_id)+'" style="text-align:left;width:100%;cursor:pointer"><div class="avatar">'+esc(initials(x.display_name))+'</div><div style="flex:1"><b>'+esc(x.display_name)+'</b><small>'+esc(x.vineyard_roles?.label||x.role_key)+'</small></div><span>›</span></button>').join("")}</div></div></div>`;
+ $$("[data-choose-employee]").forEach(button=>button.addEventListener("click",async()=>{
+  const employee=employees.find(x=>x.user_id===button.dataset.chooseEmployee);if(!employee)return;
+  button.disabled=true;
+  try{
+   const {data:hasPassword,error:pe}=await supabaseClient.rpc("vineyard_employee_has_password",{p_employee_id:employee.user_id});
+   if(pe)throw pe;if(!hasPassword)throw Error("Für diesen Mitarbeiter wurde noch kein Passwort eingerichtet.");
+   document.body.innerHTML=`<div class="login"><div class="loginbox"><div class="loginbrand"><div class="brandmark"><img src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"></div><h1>Donnerfaust Saloon</h1><p>${esc(employee.display_name)} · Passwort</p></div><p class="muted" style="margin:18px 0">Bitte gib das persönliche Passwort für diesen Mitarbeiter ein.</p><form id="employeePasswordForm"><label>Passwort<input id="employeePassword" type="password" autocomplete="current-password" minlength="8" required></label><div id="employeePasswordError" class="error" style="display:none"></div><div class="actions"><button type="button" class="btn outline" id="backToEmployees">Zurück</button><button type="submit" class="btn primary">Anmelden</button></div></form></div></div>`;
+   const input=$("#employeePassword"),form=$("#employeePasswordForm"),back=$("#backToEmployees");
+   back.onclick=()=>selectEmployee(true);input.focus();
+   form.onsubmit=async ev=>{
+    ev.preventDefault();const submit=ev.submitter;submit.disabled=true;const eb=$("#employeePasswordError");if(eb){eb.style.display="none";eb.textContent=""}
+    try{
+     const {data:token,error}=await supabaseClient.rpc("vineyard_check_employee_password",{p_employee_id:employee.user_id,p_password:input.value});
+     if(error)throw error;if(!token)throw Error("Das Passwort ist falsch.");
+     sessionStorage.setItem("vineyard_employee_session",String(token));sessionStorage.setItem("vineyard_employee_id",String(employee.user_id));
+     setCurrentEmployee(employee);await render();startPresence();
+    }catch(err){if(eb){eb.textContent=err?.message||String(err);eb.style.display="block"}else alert(err?.message||String(err));submit.disabled=false;input.focus();input.select();}
+   };
+  }catch(err){alert(err?.message||String(err));button.disabled=false}
+ }));
 }
-function login(message=""){
- document.body.innerHTML=`
-  <div class="login"><div class="loginbox">
-   <div class="loginbrand"><div class="brandmark"><img src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"></div><h1>Donnerfaust Saloon</h1><p>Interne Betriebsverwaltung</p></div>
-   ${message?`<div class="error">${esc(message)}</div>`:""}
-   <form id="loginform">
-    <label>E-Mail<input id="email" type="email" autocomplete="username" placeholder="deine E-Mail-Adresse" required></label>
-    <label>Passwort<input id="password" type="password" autocomplete="current-password" required></label>
-    <button class="btn primary">Anmelden</button>
-   </form>
-  </div></div>`;
- $("#loginform").onsubmit=async e=>{
-  e.preventDefault();
-  const b=e.submitter;
-  b.disabled=true;
-  const {error}=await supabaseClient.auth.signInWithPassword({email:$("#email").value.trim(),password:$("#password").value});
-  if(error){b.disabled=false;return login(error.message);}
-  await loadProfile();
-  if(!profile){await supabaseClient.auth.signOut();return login("Dieser Benutzer hat noch kein Saloon-Profil.");}
-  await auditLog("Anmeldung","session",profile.user_id,{event:"successful_login"});
-  await render();
-  startPresence();
- };
-}
-
-function forcePasswordChange(){
- document.body.innerHTML='<div class="login"><div class="loginbox"><div class="loginbrand"><div class="brandmark">🔐</div><h1>Passwort aktualisieren</h1><p>Bei der ersten Anmeldung musst du das vom Master vergebene Startpasswort ändern.</p></div><div class="error" style="background:#fff0cf;color:#765714">Dein Zugang ist aktiv. Bevor du fortfährst, lege dein persönliches Passwort fest.</div><form id="passwordform"><label>Neues Passwort<input id="newpassword" type="password" autocomplete="new-password" minlength="8" required></label><label>Neues Passwort wiederholen<input id="newpassword2" type="password" autocomplete="new-password" minlength="8" required></label><button class="btn primary">Passwort speichern</button></form></div></div>';
- $("#passwordform").onsubmit=async e=>{
-  e.preventDefault();
-  const b=e.submitter,b1=$("#newpassword").value,b2=$("#newpassword2").value;
-  if(b1.length<8)return alert("Das Passwort muss mindestens 8 Zeichen haben.");
-  if(b1!==b2)return alert("Die Passwörter stimmen nicht überein.");
-  b.disabled=true;
-  const r=await adminUsers({action:"change_password",password:b1});
-  if(r.error||r.data?.error){b.disabled=false;return alert(r.data?.error||r.error?.message||"Passwort konnte nicht geändert werden.");}
-  await loadProfile();
-  render();
-  startPresence();
- };
-}
+function setCurrentEmployee(employee){profile=employee;role=employee.vineyard_roles;currentEmployeeId=employee.user_id;sessionStorage.setItem("vineyard_employee_id",currentEmployeeId);}
 function shell(content){
- const nav=NAV.filter(n=>can(n[3])).map(n=>`<button type="button" class="nav ${page===n[0]?"active":""}" data-page="${n[0]}"><i>${n[1]}</i>${n[2]}</button>`).join("");
- document.body.innerHTML=`<div class="nav-overlay" id="navOverlay"></div><aside class="sidebar" id="sidebar"><div class="brand"><div class="brandmark"><img src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"></div><div><b>Donnerfaust Saloon</b><small>Interne Verwaltung</small></div></div><nav>${nav}</nav><div class="sidefoot"><span class="online"></span>${esc(profile.display_name)} · ${esc(role.label)}<br><button id="logout" class="mini" style="margin-top:9px">Abmelden</button></div></aside><main class="main"><header class="top"><div class="topTitle"><button class="hamb" id="hamb" type="button" aria-label="Menü öffnen" aria-expanded="false">☰</button><img class="topbrandlogo" src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"><div><span class="crumb">DONNERFAUST SALOON</span><h2>${esc(pageTitle())}</h2></div></div><div class="topright"><span class="online"></span><b>${esc(profile.display_name)}</b><span class="avatar">${esc(initials(profile.display_name))}</span></div></header><section class="content">${content}</section></main><div id="modalroot"></div>`;
- const logout=$("#logout");
- if(logout) logout.addEventListener("click",async e=>{e.preventDefault();await auditLog("Abmeldung","session",profile?.user_id,{event:"logout"});await supabaseClient.auth.signOut()});
+ const nav=NAV.filter(n=>can(n[3])||role?.key==="admin").map(n=>`<button type="button" class="nav ${page===n[0]?"active":""}" data-page="${n[0]}"><i>${n[1]}</i>${n[2]}</button>`).join("");
+ document.body.innerHTML=`<div class="nav-overlay" id="navOverlay"></div><aside class="sidebar" id="sidebar"><div class="brand"><div class="brandmark"><img src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"></div><div><b>Donnerfaust Saloon</b><small>Interne Verwaltung</small></div></div><nav>${nav}</nav><div class="sidefoot"><span class="online"></span>${esc(profile.display_name)} · ${esc(role.label)}<br><button id="switchEmployee" class="mini" style="margin-top:9px">Mitarbeiter wechseln</button></div></aside><main class="main"><header class="top"><div class="topTitle"><button class="hamb" id="hamb" type="button" aria-label="Menü öffnen" aria-expanded="false">☰</button><img class="topbrandlogo" src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"><div><span class="crumb">DONNERFAUST SALOON</span><h2>${esc(pageTitle())}</h2></div></div><div class="topright"><span class="online"></span><b>${esc(profile.display_name)}</b><span class="avatar">${esc(initials(profile.display_name))}</span></div></header><section class="content">${content}</section></main><div id="modalroot"></div>`;
+ const switchEmployee=$("#switchEmployee");
+ if(switchEmployee) switchEmployee.addEventListener("click",async e=>{e.preventDefault();if(presenceChannel){try{await supabaseClient.removeChannel(presenceChannel)}catch(_){}presenceChannel=null;}stopOrderRealtime();const token=sessionStorage.getItem("vineyard_employee_session")||"";if(token){try{await supabaseClient.rpc("vineyard_revoke_employee_session",{p_token:token})}catch(_){}}sessionStorage.removeItem("vineyard_employee_session");sessionStorage.removeItem("vineyard_employee_id");currentEmployeeId="";profile=null;role=null;await selectEmployee(true)});
 }
-function pageTitle(){return ({dashboard:"Übersicht",invoices:"Rechnungen",orders:"Bestellungen",inventory:"Lagerübersicht",purchase:"Einkauf",sales:"Verkauf",recipes:"Rezepte",production:"Produktion",cash:"Kasse",employees:"Mitarbeiter",appointments:"Termine",commission:"Provision",admin:"Administration"})[page]||"Übersicht"}
+function pageTitle(){return ({dashboard:"Übersicht",invoices:"Rechnungen",orders:"Lieferungen",inventory:"Lagerübersicht",purchase:"Einkauf",sales:"Verkauf",recipes:"Rezepte",production:"Produktion",cash:"Kasse",employees:"Mitarbeiter",appointments:"Termine",commission:"Provision",admin:"Administration"})[page]||"Übersicht"}
 function initials(n){return String(n||"DF").split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase()}
 function stat(icon,label,value){return '<div class="stat"><span class="icon">'+icon+'</span><div><small>'+label+"</small><b>"+value+"</b></div></div>"}
 function intro(k,h,p,action,label){return '<div class="intro"><div><div class="eyebrow">'+k+"</div><h1>"+h+"</h1><p>"+p+"</p></div>"+(action?'<button type="button" class="btn gold" data-action="'+action+'">'+label+"</button>":"")+"</div>"}
@@ -187,7 +168,7 @@ function intro(k,h,p,action,label){return '<div class="intro"><div><div class="e
 async function dashboard(){
  const [invoiceCount,orderCount]=await Promise.all([
   can("invoice_view")?supabaseClient.from("vineyard_invoices").select("id",{count:"exact",head:true}).eq("status","Offen"):Promise.resolve({count:0,error:null}),
-  supabaseClient.from("vineyard_orders").select("id",{count:"exact",head:true}).in("status",["Eingegangen","In Bearbeitung"])
+  supabaseClient.from("vineyard_orders").select("id",{count:"exact",head:true}).eq("status","Lieferung abgeschlossen")
  ]);
  const openInvoices=invoiceCount.error?0:(invoiceCount.count||0);
  const openOrders=orderCount.error?0:(orderCount.count||0);
@@ -198,8 +179,8 @@ async function dashboard(){
   </div>
   <div class="overviewgrid">
    <button class="overviewcard" data-page-action="invoices"><div class="overviewicon invoice">▤</div><div class="overviewtext"><small>OFFENE RECHNUNGEN</small><b>${openInvoices}</b><span>Rechnungsmenü öffnen</span></div><span class="arrow">→</span></button>
-   <button class="overviewcard" data-page-action="orders"><div class="overviewicon order">🛒</div><div class="overviewtext"><small>OFFENE BESTELLUNGEN</small><b>${openOrders}</b><span>Bestellungsmenü öffnen</span></div><span class="arrow">→</span></button>
-   <div class="overviewcard static"><div class="overviewicon staff">♟</div><div class="overviewtext"><small>MITARBEITER ONLINE</small><b id="onlineCount">${onlineCount||1}</b><span>Aktuell im System angemeldet</span></div><span class="live"><i></i> LIVE</span></div>
+   <button class="overviewcard" data-page-action="orders"><div class="overviewicon order">🚚</div><div class="overviewtext"><small>LIEFERUNGEN</small><b>${openOrders}</b><span>Lieferungsmenü öffnen</span></div><span class="arrow">→</span></button>
+   <div class="overviewcard static"><div class="overviewicon staff">♟</div><div class="overviewtext"><small>WER IST GERADE ONLINE?</small><b id="onlineCount">${onlineCount||1}</b><span id="onlineNames">${esc(onlineNames.join(" · ")||profile?.display_name||"")}</span></div><span class="live"><i></i> LIVE</span></div>
   </div>
 `;
 }
@@ -214,14 +195,14 @@ async function invoices(){
  const open=rows.filter(x=>x.status==="Offen").length;
  const total=rows.length;
  const commission=rows.reduce((s,x)=>s+Number(x.commission_amount||0),0);
- return intro("HANDELSNACHWEISE","Rechnungen","Verkauf, Einkauf, Produktion und Bestellungen als nachvollziehbare Handelsnachweise verwalten.",can("invoice_edit")?"newinvoice":null,can("invoice_edit")?"+ Rechnung erstellen":null)+
+ return intro("HANDELSNACHWEISE","Rechnungen","Verkauf, Einkauf, Produktion und Lieferungen als nachvollziehbare Handelsnachweise verwalten.",can("invoice_edit")?"newinvoice":null,can("invoice_edit")?"+ Rechnung erstellen":null)+
  '<div class="stats">'+stat("▤","OFFENE RECHNUNGEN",open)+stat("$","HANDELSVORGÄNGE",total)+stat("↗","VERKAUF",rows.filter(x=>x.invoice_type==="Verkauf").length)+stat("%","PROVISIONEN",money(commission))+'</div>'+
  '<div class="panel"><div class="tablewrap"><table><thead><tr><th>NUMMER</th><th>ART</th><th>HANDELSPARTNER</th><th>MITARBEITER</th><th>PROVISION</th><th>DATUM</th><th>STATUS</th><th></th></tr></thead><tbody>'+
  (rows.map(x=>'<tr><td><b>'+esc(x.invoice_number)+'</b></td><td>'+esc(x.invoice_type)+'</td><td>'+esc(x.partner_name)+'</td><td>'+esc(x.employee_name)+'</td><td>'+money(x.commission_amount||0)+' ('+Number(x.commission_rate||0).toLocaleString("de-DE")+'%)</td><td>'+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</td><td>'+badge(x.status)+'</td><td><button class="mini gold" data-share-invoice="'+x.id+'">Teilen</button> <button class="mini" data-edit-invoice="'+x.id+'">Bearbeiten</button> <button class="mini" data-delete-invoice="'+x.id+'">Löschen</button></td></tr>').join("")||'<tr><td colspan="8">Noch keine Rechnungen vorhanden.</td></tr>')+
  '</tbody></table></div></div>';
 }
 async function orders(){
- const {data:rawRows,error}=await supabaseClient.from("vineyard_orders").select("id,order_number,status,customer_name,customer_email,customer_phone,customer_address,customer_note,employee_id,total,commission_rate,commission_amount,delivery_date,delivery_requested,delivery_fee,created_at,accepted_at,completed_at").order("created_at",{ascending:false});
+ const {data:rawRows,error}=await supabaseClient.from("vineyard_orders").select("id,order_number,status,customer_name,employee_id,total,commission_rate,commission_amount,created_at,completed_at,fulfillment_cashbook_id").eq("status","Lieferung abgeschlossen").order("created_at",{ascending:false});
  if(error)return errorBox(error.message);
  const rows=Array.isArray(rawRows)?rawRows:[];
  const {data:rawEmployees,error:ee}=await supabaseClient.rpc("vineyard_order_employees");
@@ -229,56 +210,34 @@ async function orders(){
  const employees=Array.isArray(rawEmployees)?rawEmployees:[];
  const emap=Object.fromEntries(employees.map(x=>[x.user_id,x.display_name]));
  rows.forEach(x=>x.employee_name=emap[x.employee_id]||"—");
- const open=rows.filter(x=>x.status==="Eingegangen"||x.status==="In Bearbeitung");
- const recent=rows.filter(x=>x.status==="Bestellung abgeschlossen").slice(0,10);
- const totalOpen=open.reduce((n,x)=>n+Number(x.total||0),0);
- const formLink=new URL("./bestellung.html",location.href).href;
- const dateText=x=>x.delivery_date?new Date(x.delivery_date+"T00:00:00").toLocaleDateString("de-DE"):"—";
- const card=x=>'<div class="ordercard"><div class="ordercardtop"><div><span class="orderNo">'+esc(x.order_number)+'</span>'+badge(x.status)+'</div><b>'+money(x.total)+'</b></div>'+
- '<div class="ordercustomer"><strong>'+esc(x.customer_name)+'</strong><span>Lieferdatum: '+esc(dateText(x))+'</span><span>Lieferung: '+(x.delivery_requested?"Ja · +10%":"Nein")+'</span></div>'+
- '<div class="ordermeta"><span>Erstellt: '+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</span><span>Mitarbeiter: '+esc(x.employee_name)+'</span>'+(x.commission_amount?'<span>Provision: '+money(x.commission_amount)+'</span>':'')+'</div>'+
- '<div class="orderactions"><button class="mini gold" data-view-order="'+x.id+'">Details</button>'+
- (x.status==="Eingegangen"?'<button class="mini gold" data-order-status="'+x.id+'|In Bearbeitung">Bestellung annehmen</button>':"")+
- (x.status==="In Bearbeitung"?'<button class="mini gold" data-order-status="'+x.id+'|Bestellung abgeschlossen">Bestellung abschließen</button>':"")+
- (x.status!=="Bestellung abgeschlossen"?'<button class="mini" data-delete-order="'+x.id+'">Löschen</button>':"")+
- '</div></div>';
- return intro("BESTELLUNGEN","Bestellungsmenü","Kunden bestellen über den öffentlichen Link. Mitarbeiter übernehmen Bestellungen und erhalten dabei 30% Provision. Beim Abschluss werden Lager und Kasse automatisch gebucht.",null,null)+
- '<div class="orderlinkpanel"><div><div class="eyebrow">KUNDENFORMULAR</div><b>Bestelllink für Kunden</b><p>Produkt, Menge, Lieferdatum und Lieferung werden erfasst. Lieferung berechnet automatisch 10% Aufschlag.</p></div><div class="orderlinkactions"><input class="orderlinkinput" readonly value="'+esc(formLink)+'"><button class="btn gold" data-action="copy-order-link">Link kopieren</button><button class="btn outline" data-action="open-order-form">Formular öffnen</button></div></div>'+
- '<div class="stats">'+stat("🛒","OFFENE BESTELLUNGEN",open.length)+stat("$","OFFENER BESTELLWERT",money(totalOpen))+stat("↗","IN BEARBEITUNG",rows.filter(x=>x.status==="In Bearbeitung").length)+stat("✓","LETZTE BESTELLUNGEN",recent.length)+'</div>'+
- '<div class="orderssection"><div class="sectiontitle"><div><div class="eyebrow">AKTUELL</div><h2>Offene Bestellungen</h2><p>Neue Bestellungen und Bestellungen in Bearbeitung.</p></div></div>'+
- '<div class="ordergrid">'+(open.map(card).join("")||'<div class="panel" style="text-align:center;padding:28px"><h2 style="margin:0 0 8px">Keine Bestellung verfügbar</h2><p class="muted" style="margin:0">Aktuell liegt keine offene Bestellung vor. Der Kunden-Bestelllink steht oben bereit und kann direkt kopiert und weitergegeben werden.</p></div>')+'</div></div>'+
- '<div class="orderssection"><div class="sectiontitle"><div><div class="eyebrow">ARCHIV</div><h2>Letzte Bestellungen</h2><p>Abgeschlossene Bestellungen bleiben als Nachweis erhalten.</p></div></div>'+
- '<div class="ordergrid">'+(recent.map(card).join("")||'<div class="panel"><p class="muted">Keine Bestellungen hinterlegt</p></div>')+'</div></div>';
+ const total=rows.reduce((n,x)=>n+Number(x.total||0),0);
+ const commissions=rows.reduce((n,x)=>n+Number(x.commission_amount||0),0);
+ const card=x=>'<div class="ordercard"><div class="ordercardtop"><div><span class="orderNo">'+esc(x.order_number)+'</span><span class="badge good">Lieferung abgeschlossen</span></div><b>'+money(x.total)+'</b></div>'+
+ '<div class="ordercustomer"><strong>Großhändler</strong><span>Lieferant: '+esc(x.employee_name)+'</span><span>Datum: '+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</span></div>'+
+ '<div class="ordermeta"><span>Verkaufspreis: '+money(x.total)+'</span><span>Provision: '+money(x.commission_amount||0)+' ('+Number(x.commission_rate||0).toLocaleString("de-DE")+'%)</span></div>'+
+ '<div class="orderactions"><button class="mini gold" data-view-order="'+x.id+'">Details</button><button class="mini" data-delete-order="'+x.id+'">Löschen</button></div></div>';
+ return intro("LOGISTIK","Lieferungen","Jede Auslieferung an den Großhändler wird hier erfasst. Der Lieferant wird hinterlegt, der tatsächlich erzielte Verkaufspreis wird eingetragen und die Provision automatisch daraus berechnet.",can("orders_manage")?"newdelivery":null,can("orders_manage")?"+ Lieferung erfassen":null)+
+ ''+
+ '<div class="stats">'+stat("🚚","LIEFERUNGEN",rows.length)+stat("$","UMSATZ",money(total))+stat("%","PROVISIONEN",money(commissions))+stat("▦","DURCHSCHNITT",money(rows.length?total/rows.length:0))+'</div>'+
+ '<div class="orderssection"><div class="sectiontitle"><div><div class="eyebrow">LIEFERUNGSNACHWEIS</div><h2>Alle Lieferungen</h2><p>Lieferant, Menge, Verkaufspreis und automatisch berechnete Provision bleiben nachvollziehbar gespeichert.</p></div></div>'+
+ '<div class="ordergrid">'+(rows.map(card).join("")||'<div class="panel" style="text-align:center;padding:28px"><h2 style="margin:0 0 8px">Noch keine Lieferungen</h2><p class="muted" style="margin:0">Erfasse die erste Auslieferung an den Großhändler über „+ Lieferung erfassen“.</p></div>')+'</div></div>';
 }
-
 async function orderModal(id){
- const {data:order,error}=await supabaseClient.from("vineyard_orders").select("id,order_number,status,customer_name,customer_email,customer_phone,customer_address,customer_note,employee_id,total,commission_rate,commission_amount,delivery_date,delivery_requested,delivery_fee,created_at,accepted_at,completed_at").eq("id",id).single();
+ const {data:order,error}=await supabaseClient.from("vineyard_orders").select("id,order_number,status,customer_name,employee_id,total,commission_rate,commission_amount,created_at,completed_at").eq("id",id).single();
  if(error)throw error;
  const {data:items=[],error:ie}=await supabaseClient.from("vineyard_order_items").select("item_name,unit,quantity,unit_price,line_total").eq("order_id",id).order("created_at");
  if(ie)throw ie;
  const employee=order.employee_id?await supabaseClient.from("vineyard_profiles").select("display_name").eq("user_id",order.employee_id).maybeSingle():{data:null};
- const date=order.delivery_date?new Date(order.delivery_date+"T00:00:00").toLocaleDateString("de-DE"):"—";
  const rows=items.map(x=>'<tr><td>'+esc(x.item_name)+'</td><td>'+Number(x.quantity).toLocaleString("de-DE")+' '+esc(x.unit)+'</td><td>'+money(x.unit_price)+'</td><td>'+money(x.line_total)+'</td></tr>').join("");
- $("#modalroot").innerHTML='<div class="modalback"><div class="modal"><div class="modalhead"><b>Bestellung · '+esc(order.order_number)+'</b><button type="button" id="x">×</button></div><div class="grid2"><div class="panel"><b>Kunde</b><p>'+esc(order.customer_name)+'</p><b>Lieferdatum</b><p>'+esc(date)+'</p><b>Lieferung</b><p>'+(order.delivery_requested?"Ja · +10% Liefergebühr":"Nein")+'</p></div><div class="panel"><b>Status</b><p>'+badge(order.status)+'</p><b>Mitarbeiter</b><p>'+esc(employee.data?.display_name||"Noch nicht zugewiesen")+'</p><b>Provision</b><p>'+money(order.commission_amount||0)+'</p></div></div><div class="tablewrap"><table><thead><tr><th>Produkt</th><th>Menge</th><th>Einzelpreis</th><th>Gesamt</th></tr></thead><tbody>'+rows+'</tbody></table></div><div class="publicTotal"><span>Gesamtsumme</span><b>'+money(order.total)+'</b></div><p class="muted">'+esc(order.customer_note||"")+'</p><div class="actions"><button type="button" class="btn outline" id="closeOrderModal">Schließen</button></div></div></div>';
+ $("#modalroot").innerHTML='<div class="modalback"><div class="modal"><div class="modalhead"><b>Lieferung · '+esc(order.order_number)+'</b><button type="button" id="x">×</button></div><div class="grid2"><div class="panel"><b>Empfänger</b><p>Großhändler</p><b>Lieferant</b><p>'+esc(employee.data?.display_name||"—")+'</p><b>Datum</b><p>'+esc(new Date(order.created_at).toLocaleString("de-DE"))+'</p></div><div class="panel"><b>Verkaufspreis</b><p>'+money(order.total)+'</p><b>Provisionssatz</b><p>'+Number(order.commission_rate||0).toLocaleString("de-DE")+'%</p><b>Provision</b><p>'+money(order.commission_amount||0)+'</p></div></div><div class="tablewrap"><table><thead><tr><th>Produkt</th><th>Menge</th><th>Einzelpreis</th><th>Gesamt</th></tr></thead><tbody>'+rows+'</tbody></table></div><div class="publicTotal"><span>Lieferwert</span><b>'+money(order.total)+'</b></div><div class="actions"><button type="button" class="btn outline" id="closeOrderModal">Schließen</button></div></div></div>';
  const close=()=>$("#modalroot").innerHTML="";
  $("#x").onclick=$("#closeOrderModal").onclick=close;
 }
-async function updateOrderStatus(id,status){
- const button=document.querySelector('[data-order-status="'+id+'|'+status+'"]');
- if(button)button.disabled=true;
- try{
-  const {error}=await supabaseClient.rpc("vineyard_update_order_status",{p_order_id:id,p_status:status});
-  if(error)throw error;
-  await auditLog(status==="In Bearbeitung"?"Bestellung angenommen":"Bestellung abgeschlossen","order",id,{status});
-  if(status==="Bestellung abgeschlossen")alert("Bestellung abgeschlossen. Lagerbestand und Kasse wurden automatisch angepasst.");
-  await render();
- }catch(err){alert(err.message||String(err))}finally{if(button)button.disabled=false}
-}
 async function deleteOrder(id){
- if(!confirm("Diese Bestellung wirklich löschen?"))return;
- const {error}=await supabaseClient.rpc("vineyard_delete_order",{p_order_id:id});
+ if(!confirm("Diese Lieferung wirklich löschen? Lagerbestand und Kassenbuchung werden zurückgebucht."))return;
+ const {error}=await supabaseClient.rpc("vineyard_delete_delivery",{p_order_id:id});
  if(error)throw error;
- await auditLog("Bestellung gelöscht","order",id,{});
+ await auditLog("Lieferung gelöscht","delivery",id,{});
  await render();
 }
 async function admin(){
@@ -296,9 +255,9 @@ async function admin(){
   if(a.includes("ein-/verkauf gebucht")||a.includes("einkauf gebucht")||a.includes("verkauf gebucht")) return name+" hat "+String(d.quantity||"")+" "+String(d.unit||"")+" "+String(d.item_name||"Artikel")+" als "+String(d.trade_type||"Vorgang")+" gebucht: "+money(d.total||0)+".";
   if(a.includes("kassenbuchung")) return name+" hat "+(d.kind==="in"?"eine Einnahme":"eine Ausgabe")+" von "+money(d.amount||0)+" in die Kasse gebucht.";
   if(a==="lagerbestand geändert") return name+" hat den Lagerbestand von "+String(d.item_name||"Artikel")+" um "+Number(d.delta||0).toLocaleString("de-DE")+" verändert.";
-  if(a.includes("bestellung eingegangen")) return "KUNDE hat Bestellung "+String(d.order_number||"")+" über "+money(d.total||0)+" eingereicht.";
-  if(a.includes("bestellung angenommen")) return name+" hat Bestellung "+String(d.order_number||"")+" angenommen.";
-  if(a.includes("bestellung abgeschlossen")) return name+" hat Bestellung "+String(d.order_number||"")+" abgeschlossen.";
+  if(a.includes("lieferung erfasst")) return name+" hat eine Lieferung erfasst: "+String(d.item_name||"Artikel")+" · "+String(d.quantity||"")+" · "+money(d.total||0)+" · Provision "+money(d.commission_amount||0)+".";
+  
+  
   if(a.includes("rechnung erstellt")) return name+" hat eine Rechnung erstellt.";
   if(a.includes("rechnung geändert")) return name+" hat eine Rechnung geändert.";
   if(a.includes("rechnung gelöscht")) return name+" hat eine Rechnung gelöscht.";
@@ -435,20 +394,26 @@ async function appointments(){
  '<div class="panel placeholder"><div class="placeholdericon">◷</div><h2>Terminverwaltung</h2><p class="muted">Die Terminübersicht ist wieder im Menü erreichbar. Termine können hier als eigener Bereich gepflegt werden.</p><div class="placeholderstate">Noch keine Termine hinterlegt.</div></div>';
 }
 async function commissions(){
- const [{data:invoices=[]},{data:orders=[]}]=await Promise.all([
-  supabaseClient.from("vineyard_invoices").select("invoice_number,partner_name,status,employee_id,commission_rate,commission_amount,created_at").order("created_at",{ascending:false}),
-  supabaseClient.from("vineyard_orders").select("order_number,customer_name,status,employee_id,commission_rate,commission_amount,created_at,completed_at").order("created_at",{ascending:false})
+ const [{data:employees=[],error:ee},{data:orders=[],error:oe},{data:invoices=[],error:ie},{data:payouts=[],error:pe}]=await Promise.all([
+  supabaseClient.from("vineyard_profiles").select("user_id,display_name,role_key,active").eq("active",true),
+  supabaseClient.from("vineyard_orders").select("employee_id,commission_amount").eq("status","Lieferung abgeschlossen"),
+  supabaseClient.from("vineyard_invoices").select("employee_id,commission_amount").gt("commission_amount",0).neq("status","Storniert"),
+  supabaseClient.from("vineyard_commission_payouts").select("employee_id,amount,paid_at")
  ]);
- const rows=[
-  ...invoices.filter(x=>Number(x.commission_amount||0)>0).map(x=>({number:x.invoice_number,partner:x.partner_name,status:x.status,employee_id:x.employee_id,rate:x.commission_rate,amount:x.commission_amount,date:x.created_at,type:"Rechnung"})),
-  ...orders.filter(x=>Number(x.commission_amount||0)>0).map(x=>({number:x.order_number,partner:x.customer_name,status:x.status,employee_id:x.employee_id,rate:x.commission_rate,amount:x.commission_amount,date:x.completed_at||x.created_at,type:"Bestellung"}))
- ].sort((a,b)=>new Date(b.date)-new Date(a.date));
- const total=rows.reduce((s,x)=>s+Number(x.amount||0),0);
- const open=rows.filter(x=>x.status!=="Bezahlt"&&x.status!=="Storniert").reduce((s,x)=>s+Number(x.amount||0),0);
- return intro("PROVISION","Provisionen","Übersicht der aus Bestellungen und Rechnungen gespeicherten Provisionsbeträge.")+
- '<div class="stats">'+stat("%","GESAMT",money(total))+stat("◷","OFFEN",money(open))+stat("▤","VORGÄNGE",rows.length)+stat("↗","SATZ","gespeichert")+'</div>'+
- '<div class="panel"><div class="tablewrap"><table><thead><tr><th>DATUM</th><th>VORGANG</th><th>PARTNER</th><th>SATZ</th><th>PROVISION</th><th>STATUS</th></tr></thead><tbody>'+
- (rows.map(x=>'<tr><td>'+esc(new Date(x.date).toLocaleString("de-DE"))+'</td><td><b>'+esc(x.number)+'</b><small class="tableunit">'+esc(x.type)+'</small></td><td>'+esc(x.partner||"—")+'</td><td>'+Number(x.rate||0).toLocaleString("de-DE")+'%</td><td><b>'+money(x.amount)+'</b></td><td>'+badge(x.status)+'</td></tr>').join("")||'<tr><td colspan="6">Noch keine Provisionen vorhanden.</td></tr>')+
+ if(ee||oe||ie||pe)return errorBox((ee||oe||ie||pe).message);
+ const rankMap={master:12,familienvogt:11,familienrat:10,geschaeftsfuehrer:9,vertrauensmitglied:8,verwaltung:7,lager:6,winzer:5,winzerlehrling:4,kasse:3,kellerhelfer:2,mitarbeiter:1};
+ const labelMap={master:"FAMILIENOBERHAUPT",familienvogt:"FAMILIENVOGT",familienrat:"FAMILIENRAT",geschaeftsfuehrer:"GESCHÄFTSFÜHRER",vertrauensmitglied:"VERTRAUENSMITGLIED",verwaltung:"BETRIEBSLEITER",lager:"KELLERMEISTER",winzer:"WINZER/BRAUER",winzerlehrling:"LEHRLING",kasse:"STUBENBEDIENSTETE",kellerhelfer:"KELLERHELFER",mitarbeiter:"ERNTEHELFER"};
+ const accrued={}; const paid={};
+ orders.forEach(x=>accrued[x.employee_id]=(accrued[x.employee_id]||0)+Number(x.commission_amount||0));
+ invoices.forEach(x=>accrued[x.employee_id]=(accrued[x.employee_id]||0)+Number(x.commission_amount||0));
+ payouts.forEach(x=>paid[x.employee_id]=(paid[x.employee_id]||0)+Number(x.amount||0));
+ const rows=employees.filter(x=>rankMap[x.role_key]).map(x=>({...x,rank:rankMap[x.role_key],roleLabel:labelMap[x.role_key]||x.role_key,accrued:accrued[x.user_id]||0,paid:paid[x.user_id]||0,due:Math.max((accrued[x.user_id]||0)-(paid[x.user_id]||0),0)})).sort((a,b)=>b.rank-a.rank||a.display_name.localeCompare(b.display_name,"de"));
+ const total=rows.reduce((s,x)=>s+x.due,0);
+ const canPay=profile?.role_key==="master"||profile?.role_key==="familienvogt";
+ return intro("PROVISION","Provisionsabrechnung","Alle aktiven Mitarbeiter werden nach Rang sortiert angezeigt. Offene Provisionen können ausschließlich vom Familienoberhaupt oder Familienvogt ausgezahlt werden.",null,null)+
+ '<div class="stats">'+stat("💰","OFFENE PROVISION",money(total))+stat("👥","MITARBEITER",rows.length)+stat("✓","AUSZAHLUNG","FAMILIENVOGT / OBERHAUPT")+stat("↻","SYSTEM","AUTOMATISCH")+'</div>'+
+ '<div class="panel"><div class="tablewrap"><table><thead><tr><th>RANG</th><th>MITARBEITER</th><th>PROVISION ERHALTEN</th><th>OFFEN</th><th>AKTION</th></tr></thead><tbody>'+
+ (rows.map(x=>'<tr><td><b>#'+x.rank+'</b><br><small>'+esc(x.roleLabel)+'</small></td><td><b>'+esc(x.display_name)+'</b></td><td>'+money(x.accrued)+'</td><td><strong>'+money(x.due)+'</strong></td><td>'+(canPay&&x.due>0?'<button class="mini gold" data-pay-commission="'+x.user_id+'">✓ Ausgezahlt</button>':x.due<=0?'<span class="badge good">Ausgeglichen</span>':'<span class="muted">Keine Berechtigung</span>')+'</td></tr>').join("")||'<tr><td colspan="5">Keine aktiven Mitarbeiter vorhanden.</td></tr>')+
  '</tbody></table></div></div>';
 }
 async function cash(){
@@ -464,12 +429,14 @@ async function cash(){
  '<div class="panel"><div class="tablewrap"><table><thead><tr><th>DATUM</th><th>ART</th><th>BETRAG</th><th>KATEGORIE</th><th>BESCHREIBUNG</th><th></th></tr></thead><tbody>'+body+'</tbody></table></div></div>';
 }
 async function employees(){
+ const rankOrder={winzerlehrling:10,kellerhelfer:20,mitarbeiter:30,kasse:40,winzer:50,lager:60,vertrauensmitglied:70,verwaltung:80,geschaeftsfuehrer:90,familienrat:100,familienvogt:110,master:120};
  const [{data:emps=[]},{data:roles=[]}]=await Promise.all([
-  supabaseClient.from("vineyard_profiles").select("user_id,display_name,role_key,active,phone,vineyard_roles:role_key(label)").order("display_name"),
+  supabaseClient.from("vineyard_profiles").select("user_id,display_name,role_key,active,phone,vineyard_roles:role_key(label)").eq("active",true).order("display_name"),
   supabaseClient.from("vineyard_roles").select("key,label,permissions").order("key")
  ]);
- return intro("TEAM","Mitarbeiter","Konten, Rollen und Rechte werden ausschließlich über den Master verwaltet.",can("employees_edit")?"newemployee":null,can("employees_edit")?"+ Mitarbeiter":null)+
- '<div class="employeegrid">'+emps.map(x=>'<div class="employee"><div class="avatar">'+esc(initials(x.display_name))+'</div><div style="flex:1"><b>'+esc(x.display_name)+"</b><small>"+esc(x.vineyard_roles?.label||x.role_key)+" · "+(x.active?'<span class="good">Aktiv</span>':'<span class="bad">Deaktiviert</span>')+"</small>"+(x.phone?'<small>'+esc(x.phone)+"</small>":"")+'</div>'+(can("employees_edit")?'<button type="button" class="mini" data-action="edit-employee" data-employee-id="'+x.user_id+'">Bearbeiten</button> <button type="button" class="mini" data-action="delete-employee" data-employee-id="'+x.user_id+'">Löschen</button>':"")+"</div>").join("")+"</div>";
+ emps.sort((a,b)=>{const ar=a.role_key==="admin"?10000:(rankOrder[a.role_key]??9990);const br=b.role_key==="admin"?10000:(rankOrder[b.role_key]??9990);return ar-br||String(a.display_name||"").localeCompare(String(b.display_name||""));});
+ return intro("TEAM","Mitarbeiter","Mitarbeiter werden mit Namen und Rolle geführt. Die Rechte richten sich nach der jeweiligen Rolle.",can("employees_edit")?"newemployee":null,can("employees_edit")?"+ Mitarbeiter":null)+
+ '<div class="employeegrid">'+emps.map(x=>'<div class="employee"><div class="avatar">'+esc(initials(x.display_name))+'</div><div style="flex:1"><b>'+esc(x.display_name)+"</b><small>"+esc(x.vineyard_roles?.label||x.role_key)+" · "+(x.active?'<span class="good">Aktiv</span>':'<span class="bad">Deaktiviert</span>')+"</small>"+(x.phone?'<small>'+esc(x.phone)+"</small>":"")+'</div>'+(can("employees_edit")?'<div class="actions"><button type="button" class="mini" data-action="edit-employee" data-employee-id="'+x.user_id+'">Name / Rolle ändern</button><button type="button" class="mini danger" data-action="delete-employee" data-employee-id="'+x.user_id+'">Löschen</button></div>':"")+"</div>").join("")+"</div>";
 }
 function errorBox(t){return '<div class="panel"><b>Fehler</b><p class="muted">'+esc(t)+"</p></div>"}
 
@@ -576,13 +543,11 @@ function bind(){
  $$("[data-edit-cash]").forEach(b=>b.onclick=()=>cashModal(b.dataset.editCash));
  $$("[data-delete-cash]").forEach(b=>b.onclick=()=>deleteCash(b.dataset.deleteCash));
  $$("[data-edit-employee]").forEach(b=>b.onclick=()=>employeeModal(b.dataset.editEmployee));
- $$("[data-delete-employee]").forEach(b=>b.onclick=()=>deleteEmployee(b.dataset.deleteEmployee));
  $$("[data-share-invoice]").forEach(b=>b.onclick=()=>shareInvoice(b.dataset.shareInvoice));
  $$("[data-edit-invoice]").forEach(b=>b.onclick=()=>invoiceModal(b.dataset.editInvoice));
  $$("[data-delete-invoice]").forEach(b=>b.onclick=()=>deleteInvoice(b.dataset.deleteInvoice));
  $$("[data-view-order]").forEach(b=>b.onclick=()=>orderModal(b.dataset.viewOrder));
- $$("[data-order-status]").forEach(b=>b.onclick=async()=>{if(b.dataset.busy==="1")return;b.dataset.busy="1";b.disabled=true;try{const [id,status]=b.dataset.orderStatus.split("|");await updateOrderStatus(id,status)}catch(err){console.error("Bestellstatus:",err);alert(err?.message||"Die Bestellung konnte nicht aktualisiert werden.");b.dataset.busy="";b.disabled=false}});
- $$("[data-delete-order]").forEach(b=>b.onclick=()=>deleteOrder(b.dataset.deleteOrder));
+ $$("[data-delete-order]").forEach(b=>b.onclick=()=>deleteOrder(b.dataset.deleteOrder)); $$("[data-pay-commission]").forEach(b=>b.onclick=async()=>{if(b.dataset.busy==="1")return;if(!confirm("Provision für diesen Mitarbeiter jetzt vollständig auszahlen und den offenen Wert auf 0 setzen?"))return;b.dataset.busy="1";b.disabled=true;try{const r=await supabaseClient.rpc("vineyard_pay_commission",{p_employee_id:b.dataset.payCommission});if(r.error)throw r.error;alert("Provision von "+money(r.data)+" wurde als ausgezahlt verbucht.");await render()}catch(err){alert(err.message||String(err));b.dataset.busy="";b.disabled=false}});
 
 }
 async function action(a,actionButton){
@@ -593,10 +558,10 @@ async function action(a,actionButton){
  if(a==="newtrade"){await tradeModal(null,page==="purchase"?"Einkauf":page==="sales"?"Verkauf":null);return}
  if(a==="newemployee"){await employeeModal();return}
  if(a==="edit-employee"){const id=actionButton?.dataset.employeeId;if(!id)throw Error("Mitarbeiter konnte nicht ermittelt werden.");await employeeModal(id);return}
- if(a==="delete-employee"){const id=actionButton?.dataset.employeeId;if(!id)throw Error("Mitarbeiter konnte nicht ermittelt werden.");await deleteEmployee(id);return}
+ if(a==="delete-employee"){const id=actionButton?.dataset.employeeId;await deleteEmployee(id);return}
  if(a==="newinvoice"){await invoiceModal();return}
- if(a==="copy-order-link"){const link=new URL("./bestellung.html",location.href).href;try{await navigator.clipboard.writeText(link);alert("Kunden-Bestelllink kopiert.")}catch(_){prompt("Kunden-Bestelllink",link)}return}
- if(a==="open-order-form"){window.open(new URL("./bestellung.html",location.href).href,"_blank");return}
+ if(a==="newdelivery"){await deliveryModal();return}
+
 }
 
 function modal(title,body,onSubmit){
@@ -634,7 +599,7 @@ async function itemModal(id){
  $("#mf").onsubmit=async e=>{
    e.preventDefault();const b=e.submitter;b.disabled=true;
    try{
-    const v=Object.fromEntries(new FormData(e.target)), user=(await supabaseClient.auth.getUser()).data.user;
+    const v=Object.fromEntries(new FormData(e.target));
     const ingredient=v.category==="Zutaten";
     const purchase_price=ingredient?Number(v.purchase_price):0;
     const sale_price=ingredient?0:Number(v.sale_price);
@@ -748,7 +713,7 @@ async function invoiceModal(id){
   {value:"Produktion",label:"🏭 Produktion · Provision 10%"},
   {value:"Verkauf",label:"🛒 Verkauf · Provision 20%"},
   {value:"Einkauf",label:"📦 Einkauf · keine Provision"},
-  {value:"Bestellung",label:"📋 Bestellung/Lieferung · Provision 30%"}
+  {value:"Bestellung",label:"📦 Lieferung · Provision 30%"}
  ];
  let existingItems=[];
  if(id){
@@ -834,11 +799,6 @@ async function deleteInvoice(id){
  if(!confirm("Diese Rechnung wirklich löschen? Der öffentliche Rechnungslink funktioniert danach nicht mehr."))return;
  const {error}=await supabaseClient.rpc("vineyard_delete_invoice",{p_invoice_id:id});if(error)throw error;await auditLog("Rechnung gelöscht","invoice",id,{});await render();
 }
-async function deleteEmployee(id){
- if(role?.key!=="master")throw Error("Nur der Master darf Mitarbeiter löschen.");
- if(!confirm("Diesen Mitarbeiter und seinen Zugang wirklich dauerhaft löschen?"))return;
- const r=await adminUsers({action:"delete",user_id:id});await auditLog("Mitarbeiter gelöscht","employee",id,{});await render();
-}
 async function shareInvoice(id){
  const {data,error}=await supabaseClient.from("vineyard_invoices").select("invoice_number,share_token").eq("id",id).single();
  if(error)throw error;
@@ -921,63 +881,101 @@ async function tradeModal(id,defaultType=null){
   }catch(err){alert(err.message||String(err));b.disabled=false}
  };
 }
+async function deliveryModal(){
+ const [{data:employees=[],error:ee},{data:products=[],error:ie}]=await Promise.all([
+  supabaseClient.rpc("vineyard_order_employees"),
+  supabaseClient.from("vineyard_inventory").select("id,item_name,unit,quantity,sale_price").eq("category","Produkte").order("item_name")
+ ]);
+ if(ee)throw ee;
+ if(ie)throw ie;
+ if(!employees.length)throw Error("Keine aktiven Mitarbeiter verfügbar.");
+ if(!products.length)throw Error("Lege zuerst mindestens ein Produkt im Lager an.");
+ const employeeOptions=employees.map(x=>({value:x.user_id,label:x.display_name}));
+ const productOptions=products.map(x=>({value:x.id,label:x.item_name+" · "+x.unit+" · Bestand "+Number(x.quantity).toLocaleString("de-DE")}));
+ modal("Lieferung an Großhändler",
+  '<div class="recipehint"><b>Wichtig:</b> Hier wird der tatsächlich erzielte Verkaufspreis der Lieferung eingetragen. Der Provisionssatz bleibt bei <b>30 %</b> und wird automatisch aus diesem Betrag berechnet.</div>'+
+  selectField("Wer hat geliefert?","employee_id",employeeOptions,profile?.user_id||employees[0].user_id)+
+  selectField("Produkt","inventory_id",productOptions,products[0].id)+
+  field("Menge","quantity","number","1",true)+
+  field("Tatsächlicher Verkaufspreis ($)","total","number","",true)+
+  '<div class="tradeprice"><div><span>AUTOMATISCHE PROVISION</span><b id="deliveryCommission">'+money(0)+'</b><small>30 % vom eingegebenen Verkaufspreis</small></div></div>',
+  async v=>{
+   const quantity=Number(v.quantity),total=Number(v.total);
+   if(!Number.isFinite(quantity)||quantity<=0)throw Error("Die Liefermenge muss größer als 0 sein.");
+   if(!Number.isFinite(total)||total<=0)throw Error("Der Verkaufspreis muss größer als 0 sein.");
+   const product=products.find(x=>String(x.id)===String(v.inventory_id));
+   if(!product)throw Error("Produkt nicht gefunden.");
+   if(quantity>Number(product.quantity))throw Error("Nicht genügend Bestand vorhanden.");
+   const r=await supabaseClient.rpc("vineyard_create_delivery",{p_employee_id:v.employee_id,p_inventory_id:v.inventory_id,p_quantity:quantity,p_total:total});
+   if(r.error)throw r.error;
+   await auditLog("Lieferung erfasst","delivery",r.data?.id||null,{employee_id:v.employee_id,inventory_id:v.inventory_id,quantity,total,commission_rate:30,commission_amount:Math.round(total*0.30*100)/100});
+  });
+ const totalEl=$("[name=total]");
+ const updateCommission=()=>{const total=Number(totalEl?.value)||0;const el=$("#deliveryCommission");if(el)el.textContent=money(total*0.30)};
+ totalEl?.addEventListener("input",updateCommission);
+ updateCommission();
+}
 async function cashModal(id){
  let existing=null;
  if(id){const {data,error}=await supabaseClient.from("vineyard_cashbook").select("*").eq("id",id).single();if(error)throw error;existing=data}
  modal(id?"Kassenbuchung bearbeiten":"Kassenbuchung",selectField("Art","kind",[{value:"in",label:"Einnahme (+)"},{value:"out",label:"Ausgabe (-)"}],existing?.kind||"in")+selectField("Kategorie","category",["Weinverkauf","Trauben","Material","Lohn","Betriebskosten","Sonstiges"],existing?.category||"Sonstiges")+field("Betrag ($)","amount","number",existing?.amount??"",true)+field("Beschreibung","description","text",existing?.description||"",true),
- async v=>{const amount=Number(v.amount)||0;if(amount<=0)throw Error("Betrag muss größer als 0 sein.");let r;if(id)r=await supabaseClient.from("vineyard_cashbook").update({kind:v.kind,category:v.category,amount,description:v.description.trim()}).eq("id",id);else r=await supabaseClient.from("vineyard_cashbook").insert({kind:v.kind,category:v.category,amount,description:v.description.trim(),created_by:(await supabaseClient.auth.getUser()).data.user.id});if(r.error)throw r.error;await auditLog(id?"Kassenbuchung geändert":"Kassenbuchung","cashbook",id||null,{kind:v.kind,amount,category:v.category,description:v.description.trim()})})
+ async v=>{const amount=Number(v.amount)||0;if(amount<=0)throw Error("Betrag muss größer als 0 sein.");let r;if(id)r=await supabaseClient.from("vineyard_cashbook").update({kind:v.kind,category:v.category,amount,description:v.description.trim()}).eq("id",id);else r=await supabaseClient.from("vineyard_cashbook").insert({kind:v.kind,category:v.category,amount,description:v.description.trim(),created_by:profile.user_id});if(r.error)throw r.error;await auditLog(id?"Kassenbuchung geändert":"Kassenbuchung","cashbook",id||null,{kind:v.kind,amount,category:v.category,description:v.description.trim()})})
 }
 async function employeeModal(id){
  const [profileResult,rolesResult]=await Promise.all([
-  supabaseClient.from("vineyard_profiles").select("*").eq("user_id",id||"00000000-0000-0000-0000-000000000000").maybeSingle(),
+  id?supabaseClient.from("vineyard_profiles").select("*").eq("user_id",id).maybeSingle():Promise.resolve({data:null,error:null}),
   supabaseClient.from("vineyard_roles").select("key,label,rank_order").order("rank_order",{ascending:true})
  ]);
  if(profileResult.error)throw profileResult.error;
  if(rolesResult.error)throw rolesResult.error;
- const e=profileResult.data;
- const roles=rolesResult.data||[];
+ const employee=profileResult.data,roles=rolesResult.data||[];
+ if(id&&!employee)throw Error("Mitarbeiter wurde nicht gefunden.");
  if(!roles.length)throw Error("Keine Mitarbeiterrollen konnten geladen werden.");
- if(id && !e)throw Error("Mitarbeiterprofil wurde nicht gefunden.");
- const roleOptions=roles.map(r=>({value:r.key,label:r.label}));
- if(id){
-  modal("Mitarbeiter verwalten",
-   field("Name","display_name","text",e.display_name||"",true)+
-   selectField("Rolle","role_key",roleOptions,e.role_key||"mitarbeiter")+
-   field("Telefon","phone","text",e.phone||"")+
-   field("Neues Passwort","password","password","")+
-   selectField("Status","active",[{value:"true",label:"Aktiv"},{value:"false",label:"Deaktiviert"}],String(e.active!==false)),
-   async v=>{
-    const payload={action:"update",user_id:id,display_name:v.display_name,role_key:v.role_key,phone:v.phone,active:v.active==="true"};
-    if(v.password){
-     if(v.password.length<8)throw Error("Das Passwort muss mindestens 8 Zeichen haben.");
-     payload.password=v.password
-    }
-    await adminUsers(payload);
-    await auditLog("Mitarbeiter geändert","employee",id,{role_key:v.role_key,active:v.active==="true",password_changed:Boolean(v.password)})
-   })
- }else{
-  modal("Neuen Mitarbeiter anlegen",
-   field("Name","display_name","text","",true)+
-   field("E-Mail","email","email","",true)+
-   field("Startpasswort","password","password","",true)+
-   selectField("Rolle","role_key",roleOptions,"mitarbeiter")+
-   field("Telefon","phone"),
-   async v=>{
-    if(v.password.length<8)throw Error("Das Startpasswort muss mindestens 8 Zeichen haben.");
-    const r=await adminUsers({action:"create",display_name:v.display_name,email:v.email,password:v.password,role_key:v.role_key,phone:v.phone});
-    await auditLog("Mitarbeiter angelegt","employee",r.user_id,{email:v.email,role_key:v.role_key,invitation_sent:r.invitation_sent===true});
-    alert("Mitarbeiter wurde angelegt. Das Startpasswort ist sofort gültig.")
-   })
- }
+ const options=roles.filter(r=>role?.key==="master"?(r.key!=="admin"):Number(r.rank_order||0)<Number(role?.rank_order||0))
+  .map(r=>({value:r.key,label:r.label}));
+ if(!options.length)throw Error("Deine Rolle darf keine Mitarbeiterrollen vergeben.");
+ modal(id?"Mitarbeiter bearbeiten":"Mitarbeiter hinzufügen",
+  field("Name","display_name","text",employee?.display_name||"",true)+
+  selectField("Rolle","role_key",options,employee?.role_key||"mitarbeiter"),
+  async v=>{
+   const result=await supabaseClient.rpc("vineyard_manage_employee",{
+    p_action:id?"update":"create",
+    p_employee_id:id||null,
+    p_display_name:v.display_name.trim(),
+    p_role_key:v.role_key
+   });
+   if(result.error)throw result.error;
+   await auditLog(id?"Mitarbeiter geändert":"Mitarbeiter angelegt","employee",result.data?.user_id||id,{role_key:v.role_key,display_name:v.display_name.trim()});
+  });
 }
+async function deleteEmployee(id){
+ if(!id)throw Error("Mitarbeiter konnte nicht ermittelt werden.");
+ const employee=await supabaseClient.from("vineyard_profiles").select("user_id,display_name,role_key").eq("user_id",id).maybeSingle();
+ if(employee.error)throw employee.error;
+ if(!employee.data)throw Error("Mitarbeiter wurde nicht gefunden.");
+ if(!confirm('Mitarbeiter "'+employee.data.display_name+'" wirklich löschen? Der Zugang wird sofort gesperrt. Historische Rechnungen und Buchungen bleiben erhalten.'))return;
+ const result=await supabaseClient.rpc("vineyard_manage_employee",{
+  p_action:"delete",
+  p_employee_id:id,
+  p_display_name:null,
+  p_role_key:null,
+  p_password:null
+ });
+ if(result.error)throw result.error;
+ await auditLog("Mitarbeiter gelöscht","employee",id,{display_name:employee.data.display_name,role_key:employee.data.role_key});
+ await render();
+}
+
 async function auditLog(action,entity,entityId,details){
  try{
-  const {data:{user}}=await supabaseClient.auth.getUser();
-  if(!user)return;
+  if(!profile?.user_id)return;
   const d={...(details||{})};
-  if(!d.actor_name)d.actor_name=profile?.display_name||"";
-  await supabaseClient.from("vineyard_audit_log").insert({actor_id:user.id,action,entity,entity_id:entityId?String(entityId):null,details:d});
- }catch(_){}
+  if(!d.actor_name)d.actor_name=profile.display_name||"";
+  const {error}=await supabaseClient.from("vineyard_audit_log").insert({
+   actor_id:profile.user_id,action,entity,entity_id:entityId?String(entityId):null,details:d
+  });
+  if(error)console.warn("Audit-Log konnte nicht gespeichert werden:",error.message);
+ }catch(err){console.warn("Audit-Log:",err)}
 }
 function showBootError(err){
  console.error("Donnerfaust Saloon Startfehler:",err);
