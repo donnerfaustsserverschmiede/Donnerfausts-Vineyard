@@ -121,6 +121,10 @@ function canManageCatalog(){
  const allowed=new Set(["familienoberhaupt","familienvogt","familienrat","geschaeftsfuehrer","geschaftsfuehrer","master"]);
  return isFamilyHead()||[role?.key,role?.label,profile?.role_key].some(value=>allowed.has(normalizedRole(value)));
 }
+function canManageRecipes(){
+ const allowed=new Set(["familienoberhaupt","familienvogt","master"]);
+ return isFamilyHead()||[role?.key,role?.label,profile?.role_key].some(value=>allowed.has(normalizedRole(value)));
+}
 function badge(s){const good=["Bezahlt","OK","Bestellung abgeschlossen"].includes(s);const warn=["Niedrig","Offen","Eingegangen","In Bearbeitung"].includes(s);return '<span class="badge '+(good?"good":warn?"warn":"bad")+'">'+esc(s)+"</span>"}
 
 
@@ -321,7 +325,7 @@ async function recipes(){
  const map=Object.fromEntries(inv.map(x=>[x.id,x]));
  const {data:items=[]}=await supabaseClient.from("vineyard_recipe_items").select("recipe_id,quantity,inventory_id,vineyard_inventory:inventory_id(item_name,unit,category)").order("created_at");
  const byRecipe={};items.forEach(x=>(byRecipe[x.recipe_id]??=[]).push(x));
- return intro("REZEPTE","Rezeptverwaltung","Hier legst du fest, welche im Lager angelegten Zutaten für ein Produkt benötigt werden.",canManageCatalog()?"newrecipe":null,canManageCatalog()?"+ Rezept":null)+
+ return intro("REZEPTE","Rezeptverwaltung","Hier legst du fest, welche im Lager angelegten Zutaten für ein Produkt benötigt werden.",canManageRecipes()?"newrecipe":null,canManageRecipes()?"+ Rezept":null)+
  '<div class="recipehint"><b>Wichtig:</b> Nur Artikel, die vorher im <b>Lager</b> angelegt wurden, können hier ausgewählt werden. Als Zutaten können sowohl <b>Zutaten</b> als auch bereits hergestellte <b>Produkte</b> verwendet werden. Das Rezept-Ergebnis muss als <b>Produkt</b> angelegt sein.</div>'+
  '<div class="recipegrid">'+rows.map(r=>{
    const out=map[r.output_inventory_id];
@@ -329,7 +333,7 @@ async function recipes(){
    return '<div class="recipecard"><div class="eyebrow">REZEPT</div><h3>'+esc(r.name)+'</h3><p class="muted">'+esc(r.description||"Keine Beschreibung")+'</p>'+
    '<div class="recipeoutput"><span>ERGEBNIS</span><b>'+(out?esc(out.item_name):"Nicht mehr im Lager")+'</b><small>'+Number(r.output_quantity).toLocaleString("de-DE")+' '+esc(out?.unit||"")+'</small></div>'+
    '<div class="recipeingredients"><small>ZUTATEN</small>'+its.map(x=>'<div><span>'+esc(x.vineyard_inventory?.item_name||"Unbekannter Lagerartikel")+'</span><b>'+Number(x.quantity).toLocaleString("de-DE")+' '+esc(x.vineyard_inventory?.unit||"")+'</b></div>').join("")+'</div>'+
-   '<div class="recipeactions">'+(canManageCatalog()?'<button class="mini gold" data-edit-recipe="'+r.id+'">Bearbeiten</button> <button class="mini" data-delete-recipe="'+r.id+'">Löschen</button>':"")+'</div></div>';
+   '<div class="recipeactions">'+(canManageRecipes()?'<button class="mini gold" data-edit-recipe="'+r.id+'">Bearbeiten</button> <button class="mini" data-delete-recipe="'+r.id+'">Löschen</button>':"")+'</div></div>';
  }).join("")||'<div class="panel"><p class="muted">Noch keine Rezepte angelegt. Lege zuerst Zutaten und Produkte im Lager an.</p></div>'+'</div>';
 }
 async function production(){
@@ -571,7 +575,7 @@ function bind(){
 async function action(a,actionButton){
  if(a==="openinventory"){page="inventory";await render();return}
  if(a==="newitem"){if(!canManageCatalog())throw Error("Nur Familienoberhaupt, Familienvogt, Familienrat und Geschäftsführer dürfen Lagerartikel anlegen.");await itemModal();return}
- if(a==="newrecipe"){if(!canManageCatalog())throw Error("Nur Familienoberhaupt, Familienvogt, Familienrat und Geschäftsführer dürfen Rezepte verwalten.");await recipeModal();return}
+ if(a==="newrecipe"){if(!canManageRecipes())throw Error("Nur Familienoberhaupt und Familienvogt dürfen Rezepte verwalten.");await recipeModal();return}
  if(a==="newcash"){await cashModal();return}
  if(a==="newtrade"){await tradeModal(null,page==="purchase"?"Einkauf":page==="sales"?"Verkauf":null);return}
  if(a==="newemployee"){await employeeModal();return}
@@ -633,7 +637,7 @@ async function itemModal(id){
  };
 }
 async function recipeModal(id){
-  if(!canManageCatalog())throw Error("Du darfst keine Rezepte erstellen oder bearbeiten.");
+  if(!canManageRecipes())throw Error("Nur Familienoberhaupt und Familienvogt dürfen Rezepte erstellen oder bearbeiten.");
  const [{data:ingredients=[]},{data:products=[]},recipeResult,itemsResult]=await Promise.all([
   supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category").order("item_name"),
   supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category").eq("category","Produkte").order("item_name"),
@@ -712,7 +716,7 @@ async function recipeModal(id){
  };
 }
 async function deleteRecipe(id){
-  if(!canManageCatalog())throw Error("Du darfst keine Rezepte löschen.");
+  if(!canManageRecipes())throw Error("Nur Familienoberhaupt und Familienvogt dürfen Rezepte löschen.");
  if(!confirm("Dieses Rezept wirklich löschen?"))return;
  const r=await supabaseClient.rpc("vineyard_delete_recipe",{p_recipe_id:id});
  if(r.error)return alert(r.error.message);
