@@ -519,7 +519,8 @@ function bind(){
   const recipeData=[];
   const productMap={};
   const updateProduction=async()=>{
-   const id=recipeEl?.value,batches=Number(batchEl?.value)||0;
+   if(!recipeEl||!batchEl){console.error("Produktionsformular unvollständig", {recipeEl:!!recipeEl,batchEl:!!batchEl});return;}
+   const id=recipeEl.value,batches=Number(batchEl.value)||0;
    if(!id)return;
    const [rr,ir]=await Promise.all([
     supabaseClient.from("vineyard_recipes").select("id,name,output_inventory_id,output_quantity").eq("id",id).single(),
@@ -533,14 +534,18 @@ function bind(){
   };
   recipeEl?.addEventListener("change",updateProduction);batchEl?.addEventListener("input",updateProduction);updateProduction();
   book?.addEventListener("click",async()=>{
+   if(!recipeEl||!batchEl){alert("Das Produktionsformular konnte nicht vollständig geladen werden. Bitte lade die Seite neu.");return;}
    book.disabled=true;
    try{
     const batches=Number(batchEl.value);
     if(!Number.isFinite(batches)||batches<=0)throw Error("Die Menge muss größer als 0 sein.");
-    const r=await supabaseClient.rpc("vineyard_produce_recipe",{p_recipe_id:recipeEl.value,p_batches:batches});
+    const selectedRecipeId=recipeEl.value;
+    if(!selectedRecipeId)throw Error("Bitte wähle zuerst ein Rezept aus.");
+    const r=await supabaseClient.rpc("vineyard_produce_recipe",{p_recipe_id:selectedRecipeId,p_batches:batches});
     if(r.error)throw r.error;
-    await auditLog("Produktion gebucht","production",recipeEl.value,{recipe_id:recipeEl.value,batches});
+    await auditLog("Produktion gebucht","production",selectedRecipeId,{recipe_id:selectedRecipeId,batches});
     alert("Produktion wurde gebucht.");
+    await render();
     await render();
    }catch(err){alert(err.message||String(err));book.disabled=false}
   });
