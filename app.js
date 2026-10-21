@@ -515,12 +515,12 @@ function bind(){
   finally{actionButton.disabled=false;actionButton.dataset.busy="0"}
  };
  if(page==="production"){
-  const recipeEl=$("[name=production_recipe]"),batchEl=$("[name=production_batches]"),book=$("#bookProduction"),ingEl=$("#productionIngredients"),outName=$("#productionOutputName"),outQty=$("#productionOutputQty");
+  const recipeEl=$("select[name=production_recipe],#production_recipe"),batchEl=$("input[name=production_batches],#production_batches"),book=$("#bookProduction"),ingEl=$("#productionIngredients"),outName=$("#productionOutputName"),outQty=$("#productionOutputQty");
   const recipeData=[];
   const productMap={};
   const updateProduction=async()=>{
    if(!recipeEl||!batchEl){console.error("Produktionsformular unvollständig", {recipeEl:!!recipeEl,batchEl:!!batchEl});return;}
-   const id=recipeEl.value,batches=Number(batchEl.value)||0;
+   const id=recipeEl?.value,batches=Number(batchEl?.value)||0;
    if(!id)return;
    const [rr,ir]=await Promise.all([
     supabaseClient.from("vineyard_recipes").select("id,name,output_inventory_id,output_quantity").eq("id",id).single(),
