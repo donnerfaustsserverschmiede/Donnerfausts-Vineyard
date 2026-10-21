@@ -111,11 +111,15 @@ const NAV=[
 ["admin","⚙","Administration","admin_access"]
 ];
 
-function can(p){return !!role?.permissions?.[p]}
+function normalizedRole(value){return String(value||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"")}
+function isFamilyHead(){
+ const values=[role?.key,role?.label,profile?.role_key].map(normalizedRole);
+ return values.some(value=>["master","familienoberhaupt","familyhead","familyowner","inhaber","inhaberin"].includes(value));
+}
+function can(p){return isFamilyHead()||!!role?.permissions?.[p]}
 function canManageCatalog(){
- const normalize=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").replace(/[^a-z0-9]/g,"");
- const allowed=new Set(["familienoberhaupt","familienvogt","familienrat","geschaeftsfuehrer","geschaftsfuehrer"]);
- return [role?.key,role?.label,profile?.role_key].some(value=>allowed.has(normalize(value)));
+ const allowed=new Set(["familienoberhaupt","familienvogt","familienrat","geschaeftsfuehrer","geschaftsfuehrer","master"]);
+ return isFamilyHead()||[role?.key,role?.label,profile?.role_key].some(value=>allowed.has(normalizedRole(value)));
 }
 function badge(s){const good=["Bezahlt","OK","Bestellung abgeschlossen"].includes(s);const warn=["Niedrig","Offen","Eingegangen","In Bearbeitung"].includes(s);return '<span class="badge '+(good?"good":warn?"warn":"bad")+'">'+esc(s)+"</span>"}
 
