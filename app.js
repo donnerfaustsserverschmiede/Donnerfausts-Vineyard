@@ -452,7 +452,7 @@ async function render(){
  shell(content);bind();
  if(page==="orders")startOrderRealtime();else stopOrderRealtime();
 }
-function bindInventoryRows(){ $("[data-edit-item]").forEach(b=>b.onclick=()=>itemModal(b.dataset.editItem)); $("[data-delete-item]").forEach(b=>b.onclick=()=>deleteItem(b.dataset.deleteItem)); }
+function bindInventoryRows(){ $$("[data-edit-item]").forEach(b=>b.onclick=()=>itemModal(b.dataset.editItem)); $$("[data-delete-item]").forEach(b=>b.onclick=()=>deleteItem(b.dataset.deleteItem)); }
 function bind(){
  document.onclick=async e=>{
   const hamburger=e.target.closest?.("#hamb");
