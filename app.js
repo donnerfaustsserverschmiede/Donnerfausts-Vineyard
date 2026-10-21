@@ -515,7 +515,7 @@ function bind(){
   finally{actionButton.disabled=false;actionButton.dataset.busy="0"}
  };
  if(page==="production"){
-  const recipeEl=$("#production_recipe"),batchEl=$("[name=production_batches]"),book=$("#bookProduction"),ingEl=$("#productionIngredients"),outName=$("#productionOutputName"),outQty=$("#productionOutputQty");
+  const recipeEl=$("[name=production_recipe]"),batchEl=$("[name=production_batches]"),book=$("#bookProduction"),ingEl=$("#productionIngredients"),outName=$("#productionOutputName"),outQty=$("#productionOutputQty");
   const recipeData=[];
   const productMap={};
   const updateProduction=async()=>{
