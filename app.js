@@ -295,29 +295,19 @@ async function admin(){
 async function inventory(){
  const {data:items=[],error}=await supabaseClient.from("vineyard_inventory").select("*").order("category").order("item_name");
  if(error)return errorBox(error.message);
- const ingredients=items.filter(x=>x.category==="Zutaten");
- const products=items.filter(x=>x.category==="Produkte");
- return intro("LAGER","Lagerverzeichnis","Zutaten und fertige Produkte verwalten. Bestandsbewegungen werden nachvollziehbar protokolliert.",canManageCatalog()?"newitem":null,canManageCatalog()?"+ Lagerartikel":null)+
- '<div class="panel"><input class="fullinput" id="q" placeholder="Zutat oder Produkt suchen …"><div class="inventoryhint"><b>'+ingredients.length+'</b> Zutaten · <b>'+products.length+'</b> Produkte</div></div>'+
- '<div class="inventorysection"><div class="sectiontitle"><div><div class="eyebrow">KATEGORIE 1</div><h2>Zutaten</h2><p>Grundzutaten und Ressourcen, die für die Weinproduktion benötigt werden.</p></div></div><div class="itemgrid" id="ingredients">'+itemCards(ingredients)+'</div></div>'+
- '<div class="inventorysection"><div class="sectiontitle"><div><div class="eyebrow">KATEGORIE 2</div><h2>Produkte</h2><p>Fertig produzierte Weine und andere verkaufsfertige Produkte.</p></div></div><div class="itemgrid" id="products">'+itemCards(products)+'</div></div>';
+ const ingredients=items.filter(x=>x.category==="Zutaten"),products=items.filter(x=>x.category==="Produkte");
+ return '<div class="intro"><div><div class="eyebrow">LAGER</div><h1>Lagerbestand</h1><p>Alle Artikel und Bestandsbewegungen übersichtlich verwalten.</p></div><div class="actions">'+(canManageCatalog()?'<button type="button" class="btn gold" data-action="newitem">+ Lagerartikel</button>':'')+(can("inventory_view")?'<button type="button" class="btn outline" data-action="stockin">＋ Eingang</button><button type="button" class="btn outline" data-action="stockout">− Ausgang</button>':'')+'</div></div>'+
+ '<div class="panel"><input class="fullinput" id="q" placeholder="Artikel suchen …"><div class="inventoryhint"><b>'+ingredients.length+'</b> Zutaten · <b>'+products.length+'</b> Produkte · <b>'+items.length+'</b> Artikel insgesamt</div></div>'+
+ '<div class="panel inventorytablewrap"><table class="inventorytable"><thead><tr><th>Artikel</th><th>Kategorie</th><th>Bestand</th><th>Einheit</th><th>Mindestbestand</th><th>Preis</th><th class="inventoryactionshead">Aktionen</th></tr></thead><tbody id="inventoryRows">'+inventoryRows(items)+'</tbody></table></div>';
 }
-function itemCards(items){
+function inventoryRows(items){
  return items.map(x=>{
   const low=Number(x.quantity)<=Number(x.min_stock);
-  const actions=(can("inventory_view")?`<button class="mini gold" data-stock="${x.id}">Bestand ändern</button>`:"")+(canManageCatalog()?` <button class="mini" data-edit-item="${x.id}">Bearbeiten</button> <button class="mini" data-delete-item="${x.id}">Löschen</button>`:"");
-  const price=x.category==="Zutaten"?"Einkaufspreis: "+money(x.purchase_price):"Verkaufspreis: "+money(x.sale_price);
-  return `
-   <div class="itemcard">
-    <div class="eyebrow">${esc(x.category)} · ${esc(x.unit)}</div>
-    <h3>${esc(x.item_name)}</h3>
-    <div class="qty ${low?"low":""}">${Number(x.quantity).toLocaleString("de-DE")} ${esc(x.unit)}</div>
-    <small class="muted">Mindestbestand: ${Number(x.min_stock).toLocaleString("de-DE")} · ${price}</small>
-    <div style="margin-top:12px">${actions}</div>
-   </div>`;
- }).join("")||'<p class="muted">Noch keine Einträge in dieser Kategorie.</p>';
+  const price=x.category==="Zutaten"?"Einkauf "+money(x.purchase_price):"Verkauf "+money(x.sale_price);
+  const actions=canManageCatalog()?'<button class="mini" data-edit-item="'+x.id+'">Bearbeiten</button> <button class="mini danger" data-delete-item="'+x.id+'">Löschen</button>':'';
+  return '<tr><td><b>'+esc(x.item_name)+'</b></td><td>'+esc(x.category)+'</td><td><span class="qty '+(low?'low':'')+'">'+Number(x.quantity).toLocaleString("de-DE")+'</span></td><td>'+esc(x.unit)+'</td><td>'+Number(x.min_stock).toLocaleString("de-DE")+'</td><td>'+price+'</td><td class="inventoryactions">'+actions+'</td></tr>';
+ }).join("")||'<tr><td colspan="7" class="muted">Noch keine Lagerartikel angelegt.</td></tr>';
 }
-
 async function recipes(){
  const {data:rows=[],error}=await supabaseClient.from("vineyard_recipes").select("*").order("name");
  if(error)return errorBox(error.message);
@@ -462,6 +452,7 @@ async function render(){
  shell(content);bind();
  if(page==="orders")startOrderRealtime();else stopOrderRealtime();
 }
+function bindInventoryRows(){ $("[data-edit-item]").forEach(b=>b.onclick=()=>itemModal(b.dataset.editItem)); $("[data-delete-item]").forEach(b=>b.onclick=()=>deleteItem(b.dataset.deleteItem)); }
 function bind(){
  document.onclick=async e=>{
   const hamburger=e.target.closest?.("#hamb");
@@ -554,10 +545,9 @@ function bind(){
    }catch(err){alert(err.message||String(err));book.disabled=false}
   });
  }
- $("#q")?.addEventListener("input",async e=>{const {data=[]}=await supabaseClient.from("vineyard_inventory").select("*").order("category").order("item_name");const q=e.target.value.toLowerCase();$("#ingredients").innerHTML=itemCards(data.filter(x=>x.category==="Zutaten"&&x.item_name.toLowerCase().includes(q)));$("#products").innerHTML=itemCards(data.filter(x=>x.category==="Produkte"&&x.item_name.toLowerCase().includes(q)))});
+ $("#q")?.addEventListener("input",async e=>{const {data=[]}=await supabaseClient.from("vineyard_inventory").select("*").order("category").order("item_name");const q=e.target.value.toLowerCase();$("#inventoryRows").innerHTML=inventoryRows(data.filter(x=>(x.item_name+" "+x.category+" "+x.unit).toLowerCase().includes(q)));bindInventoryRows()});
  $$("[data-stock]").forEach(b=>b.onclick=()=>stockModal(b.dataset.stock));
- $$("[data-edit-item]").forEach(b=>b.onclick=()=>itemModal(b.dataset.editItem));
- $$("[data-delete-item]").forEach(b=>b.onclick=()=>deleteItem(b.dataset.deleteItem));
+ bindInventoryRows();
  $$("[data-edit-recipe]").forEach(b=>b.onclick=()=>recipeModal(b.dataset.editRecipe));
  $$("[data-delete-recipe]").forEach(b=>b.onclick=()=>deleteRecipe(b.dataset.deleteRecipe));
  $$("[data-edit-trade]").forEach(b=>b.onclick=()=>tradeModal(b.dataset.editTrade));
@@ -575,6 +565,8 @@ function bind(){
 async function action(a,actionButton){
  if(a==="openinventory"){page="inventory";await render();return}
  if(a==="newitem"){if(!canManageCatalog())throw Error("Nur Familienoberhaupt, Familienvogt, Familienrat und Geschäftsführer dürfen Lagerartikel anlegen.");await itemModal();return}
+ if(a==="stockin"){await stockModal(null,"in");return}
+ if(a==="stockout"){await stockModal(null,"out");return}
  if(a==="newrecipe"){if(!canManageRecipes())throw Error("Nur Familienoberhaupt und Familienvogt dürfen Rezepte verwalten.");await recipeModal();return}
  if(a==="newcash"){await cashModal();return}
  if(a==="newtrade"){await tradeModal(null,page==="purchase"?"Einkauf":page==="sales"?"Verkauf":null);return}
@@ -842,12 +834,18 @@ async function publicInvoice(token){
  const total=items.reduce((s,x)=>s+Number(x.line_total||0),0);
  document.body.innerHTML='<main class="publicInvoice"><div class="publicInvoiceBox"><div class="publicHead"><div><div class="eyebrow">DONNERFAUST SALOON</div><h1>Rechnung</h1><p>Schreibgeschützter Handelsnachweis</p></div><div class="publicNumber">'+esc(invoice.invoice_number)+'</div></div><div class="publicMeta"><div><small>VORGANG</small><b>'+esc(invoice.invoice_type)+'</b></div><div><small>HANDELSPARTNER</small><b>'+esc(invoice.partner_name)+'</b></div><div><small>DATUM</small><b>'+esc(new Date(invoice.created_at).toLocaleString("de-DE"))+'</b></div><div><small>STATUS</small><b>'+esc(invoice.status)+'</b></div><div><small>MITARBEITER</small><b>'+esc(invoice.employee_name||"—")+'</b></div></div><div class="publicTable"><table><thead><tr><th>Artikel</th><th>Menge</th><th>Einzelpreis</th><th>Gesamt</th></tr></thead><tbody>'+items.map(x=>'<tr><td>'+esc(x.item_name)+'</td><td>'+Number(x.quantity).toLocaleString("de-DE")+' '+esc(x.unit)+'</td><td>'+money(x.unit_price)+'</td><td>'+money(x.line_total)+'</td></tr>').join("")+'</tbody></table></div><div class="publicTotal"><span>Gesamtsumme</span><b>'+money(total)+'</b></div><p class="publicReadonly">Diese Ansicht ist schreibgeschützt. Es besteht kein Zugriff auf die interne Vineyard-Verwaltung.</p></div></main>';
 }
-async function stockModal(id){
- const {data:item}=await supabaseClient.from("vineyard_inventory").select("*").eq("id",id).single();
- if(!item)throw Error("Lagerartikel nicht gefunden.");
- modal("Bestandsbewegung · "+item.item_name,selectField("Bewegung","mode",[{value:"in",label:"Zugang (+)"},{value:"out",label:"Abgang (-)"}])+field("Menge","amount","number","",true)+field("Grund","reason","text","",true),
- async v=>{const amount=Math.abs(Number(v.amount)||0);if(!amount)throw Error("Menge muss größer als 0 sein.");const delta=v.mode==="in"?amount:-amount;const {error}=await supabaseClient.rpc("vineyard_adjust_inventory",{p_inventory_id:id,p_delta:delta,p_reason:v.reason.trim()});if(error)throw error})
+async function stockModal(id=null,mode=null){
+ const {data:items=[],error}=await supabaseClient.from("vineyard_inventory").select("id,item_name,unit,quantity,category").order("category").order("item_name");
+ if(error)throw error;
+ if(!items.length)throw Error("Es sind noch keine Lagerartikel angelegt.");
+ if(id&&!items.some(x=>String(x.id)===String(id)))throw Error("Lagerartikel nicht gefunden.");
+ const chosen=items.find(x=>String(x.id)===String(id))||items[0];
+ const options=items.map(x=>({value:x.id,label:x.item_name+" · "+x.category+" · Bestand "+Number(x.quantity).toLocaleString("de-DE")+" "+x.unit}));
+ const title=mode==="in"?"Wareneingang":mode==="out"?"Warenausgang":"Bestandsbewegung";
+ modal(title,selectField("Lagerartikel","inventory_id",options,chosen.id)+selectField("Bewegung","mode",[{value:"in",label:"Eingang (+)"},{value:"out",label:"Ausgang (−)"}],mode||"in")+field("Menge","amount","number","",true)+field("Grund / Bemerkung","reason","text","",true),
+ async v=>{const amount=Number(v.amount);if(!Number.isFinite(amount)||amount<=0)throw Error("Die Menge muss größer als 0 sein.");const item=items.find(x=>String(x.id)===String(v.inventory_id));if(!item)throw Error("Bitte einen gültigen Lagerartikel wählen.");if(v.mode==="out"&&amount>Number(item.quantity))throw Error("Der Ausgang ist größer als der aktuelle Bestand ("+Number(item.quantity).toLocaleString("de-DE")+" "+item.unit+").");const delta=v.mode==="in"?amount:-amount;const {error}=await supabaseClient.rpc("vineyard_adjust_inventory",{p_inventory_id:v.inventory_id,p_delta:delta,p_reason:v.reason.trim()});if(error)throw error;await auditLog(v.mode==="in"?"Lagerzugang gebucht":"Lagerausgang gebucht","inventory",v.inventory_id,{item_name:item.item_name,quantity:amount,unit:item.unit,reason:v.reason.trim()});});
 }
+
 async function tradeModal(id,defaultType=null){
  const [{data:items=[],error:ie},{data:existing,error:te}]=await Promise.all([
   supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category,purchase_price,sale_price,quantity").order("category").order("item_name"),
