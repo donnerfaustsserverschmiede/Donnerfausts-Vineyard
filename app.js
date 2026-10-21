@@ -676,7 +676,7 @@ async function recipeModal(id){
   try{
    const output_inventory_id=e.target.output_inventory_id.value;
    const product=products.find(x=>x.id===output_inventory_id);
-   const payload=$(".recipeformrow").map(row=>({
+   const payload=$$(".recipeformrow").map(row=>({
     inventory_id:row.querySelector(".recipeingredient").value,
     quantity:Number(row.querySelector(".recipequantity").value)
    })).filter(x=>x.inventory_id);
