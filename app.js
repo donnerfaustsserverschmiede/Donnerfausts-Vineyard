@@ -318,7 +318,7 @@ async function recipes(){
  const {data:items=[]}=await supabaseClient.from("vineyard_recipe_items").select("recipe_id,quantity,inventory_id,vineyard_inventory:inventory_id(item_name,unit,category)").order("created_at");
  const byRecipe={};items.forEach(x=>(byRecipe[x.recipe_id]??=[]).push(x));
  return intro("REZEPTE","Rezeptverwaltung","Hier legst du fest, welche im Lager angelegten Zutaten für ein Produkt benötigt werden.",canManageCatalog()?"newrecipe":null,canManageCatalog()?"+ Rezept":null)+
- '<div class="recipehint"><b>Wichtig:</b> Nur Artikel, die vorher im <b>Lager</b> angelegt wurden, können hier ausgewählt werden. Zutaten müssen als <b>Zutaten</b> und das Rezept-Ergebnis als <b>Produkte</b> angelegt sein.</div>'+
+ '<div class="recipehint"><b>Wichtig:</b> Nur Artikel, die vorher im <b>Lager</b> angelegt wurden, können hier ausgewählt werden. Als Zutaten können sowohl <b>Zutaten</b> als auch bereits hergestellte <b>Produkte</b> verwendet werden. Das Rezept-Ergebnis muss als <b>Produkt</b> angelegt sein.</div>'+
  '<div class="recipegrid">'+rows.map(r=>{
    const out=map[r.output_inventory_id];
    const its=byRecipe[r.id]||[];
@@ -335,7 +335,7 @@ async function production(){
  ]);
  if(recipeError||invError)return errorBox((recipeError||invError).message);
  const products=Object.fromEntries(inv.filter(x=>x.category==="Produkte").map(x=>[x.id,x]));
- const ingredients=Object.fromEntries(inv.filter(x=>x.category==="Zutaten").map(x=>[x.id,x]));
+ const ingredients=Object.fromEntries(inv.map(x=>[x.id,x]));
  const recipeIds=recipes.map(x=>x.id);
  let items=[];
  if(recipeIds.length){
@@ -622,7 +622,7 @@ async function itemModal(id){
 async function recipeModal(id){
   if(!canManageCatalog())throw Error("Du darfst keine Rezepte erstellen oder bearbeiten.");
  const [{data:ingredients=[]},{data:products=[]},recipeResult,itemsResult]=await Promise.all([
-  supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category").eq("category","Zutaten").order("item_name"),
+  supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category").order("item_name"),
   supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category").eq("category","Produkte").order("item_name"),
   id?supabaseClient.from("vineyard_recipes").select("*").eq("id",id).single():Promise.resolve({data:null}),
   id?supabaseClient.from("vineyard_recipe_items").select("inventory_id,quantity").eq("recipe_id",id).order("created_at"):Promise.resolve({data:[]})
