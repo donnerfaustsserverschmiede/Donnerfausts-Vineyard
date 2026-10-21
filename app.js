@@ -112,6 +112,11 @@ const NAV=[
 ];
 
 function can(p){return !!role?.permissions?.[p]}
+function canManageCatalog(){
+ const normalize=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").replace(/[^a-z0-9]/g,"");
+ const allowed=new Set(["familienoberhaupt","familienvogt","familienrat","geschaeftsfuehrer","geschaftsfuehrer"]);
+ return [role?.key,role?.label,profile?.role_key].some(value=>allowed.has(normalize(value)));
+}
 function badge(s){const good=["Bezahlt","OK","Bestellung abgeschlossen"].includes(s);const warn=["Niedrig","Offen","Eingegangen","In Bearbeitung"].includes(s);return '<span class="badge '+(good?"good":warn?"warn":"bad")+'">'+esc(s)+"</span>"}
 
 
@@ -284,7 +289,7 @@ async function inventory(){
  if(error)return errorBox(error.message);
  const ingredients=items.filter(x=>x.category==="Zutaten");
  const products=items.filter(x=>x.category==="Produkte");
- return intro("LAGER","Lagerverzeichnis","Zutaten und fertige Produkte verwalten. Bestandsbewegungen werden nachvollziehbar protokolliert.",can("inventory_edit")?"newitem":null,can("inventory_edit")?"+ Lagerartikel":null)+
+ return intro("LAGER","Lagerverzeichnis","Zutaten und fertige Produkte verwalten. Bestandsbewegungen werden nachvollziehbar protokolliert.",canManageCatalog()?"newitem":null,canManageCatalog()?"+ Lagerartikel":null)+
  '<div class="panel"><input class="fullinput" id="q" placeholder="Zutat oder Produkt suchen …"><div class="inventoryhint"><b>'+ingredients.length+'</b> Zutaten · <b>'+products.length+'</b> Produkte</div></div>'+
  '<div class="inventorysection"><div class="sectiontitle"><div><div class="eyebrow">KATEGORIE 1</div><h2>Zutaten</h2><p>Grundzutaten und Ressourcen, die für die Weinproduktion benötigt werden.</p></div></div><div class="itemgrid" id="ingredients">'+itemCards(ingredients)+'</div></div>'+
  '<div class="inventorysection"><div class="sectiontitle"><div><div class="eyebrow">KATEGORIE 2</div><h2>Produkte</h2><p>Fertig produzierte Weine und andere verkaufsfertige Produkte.</p></div></div><div class="itemgrid" id="products">'+itemCards(products)+'</div></div>';
@@ -292,7 +297,7 @@ async function inventory(){
 function itemCards(items){
  return items.map(x=>{
   const low=Number(x.quantity)<=Number(x.min_stock);
-  const actions=can("inventory_edit")?`<button class="mini gold" data-stock="${x.id}">Bestand ändern</button> <button class="mini" data-edit-item="${x.id}">Bearbeiten</button> <button class="mini" data-delete-item="${x.id}">Löschen</button>`:"";
+  const actions=(can("inventory_view")?`<button class="mini gold" data-stock="${x.id}">Bestand ändern</button>`:"")+(canManageCatalog()?` <button class="mini" data-edit-item="${x.id}">Bearbeiten</button> <button class="mini" data-delete-item="${x.id}">Löschen</button>`:"");
   const price=x.category==="Zutaten"?"Einkaufspreis: "+money(x.purchase_price):"Verkaufspreis: "+money(x.sale_price);
   return `
    <div class="itemcard">
@@ -312,7 +317,7 @@ async function recipes(){
  const map=Object.fromEntries(inv.map(x=>[x.id,x]));
  const {data:items=[]}=await supabaseClient.from("vineyard_recipe_items").select("recipe_id,quantity,inventory_id,vineyard_inventory:inventory_id(item_name,unit,category)").order("created_at");
  const byRecipe={};items.forEach(x=>(byRecipe[x.recipe_id]??=[]).push(x));
- return intro("REZEPTE","Rezeptverwaltung","Hier legst du fest, welche im Lager angelegten Zutaten für ein Produkt benötigt werden.",can("inventory_edit")?"newrecipe":null,can("inventory_edit")?"+ Rezept":null)+
+ return intro("REZEPTE","Rezeptverwaltung","Hier legst du fest, welche im Lager angelegten Zutaten für ein Produkt benötigt werden.",canManageCatalog()?"newrecipe":null,canManageCatalog()?"+ Rezept":null)+
  '<div class="recipehint"><b>Wichtig:</b> Nur Artikel, die vorher im <b>Lager</b> angelegt wurden, können hier ausgewählt werden. Zutaten müssen als <b>Zutaten</b> und das Rezept-Ergebnis als <b>Produkte</b> angelegt sein.</div>'+
  '<div class="recipegrid">'+rows.map(r=>{
    const out=map[r.output_inventory_id];
@@ -320,7 +325,7 @@ async function recipes(){
    return '<div class="recipecard"><div class="eyebrow">REZEPT</div><h3>'+esc(r.name)+'</h3><p class="muted">'+esc(r.description||"Keine Beschreibung")+'</p>'+
    '<div class="recipeoutput"><span>ERGEBNIS</span><b>'+(out?esc(out.item_name):"Nicht mehr im Lager")+'</b><small>'+Number(r.output_quantity).toLocaleString("de-DE")+' '+esc(out?.unit||"")+'</small></div>'+
    '<div class="recipeingredients"><small>ZUTATEN</small>'+its.map(x=>'<div><span>'+esc(x.vineyard_inventory?.item_name||"Unbekannter Lagerartikel")+'</span><b>'+Number(x.quantity).toLocaleString("de-DE")+' '+esc(x.vineyard_inventory?.unit||"")+'</b></div>').join("")+'</div>'+
-   '<div class="recipeactions">'+(can("inventory_edit")?'<button class="mini gold" data-edit-recipe="'+r.id+'">Bearbeiten</button> <button class="mini" data-delete-recipe="'+r.id+'">Löschen</button>':"")+'</div></div>';
+   '<div class="recipeactions">'+(canManageCatalog()?'<button class="mini gold" data-edit-recipe="'+r.id+'">Bearbeiten</button> <button class="mini" data-delete-recipe="'+r.id+'">Löschen</button>':"")+'</div></div>';
  }).join("")||'<div class="panel"><p class="muted">Noch keine Rezepte angelegt. Lege zuerst Zutaten und Produkte im Lager an.</p></div>'+'</div>';
 }
 async function production(){
@@ -552,8 +557,8 @@ function bind(){
 }
 async function action(a,actionButton){
  if(a==="openinventory"){page="inventory";await render();return}
- if(a==="newitem"){await itemModal();return}
- if(a==="newrecipe"){await recipeModal();return}
+ if(a==="newitem"){if(!canManageCatalog())throw Error("Nur Familienoberhaupt, Familienvogt, Familienrat und Geschäftsführer dürfen Lagerartikel anlegen.");await itemModal();return}
+ if(a==="newrecipe"){if(!canManageCatalog())throw Error("Nur Familienoberhaupt, Familienvogt, Familienrat und Geschäftsführer dürfen Rezepte verwalten.");await recipeModal();return}
  if(a==="newcash"){await cashModal();return}
  if(a==="newtrade"){await tradeModal(null,page==="purchase"?"Einkauf":page==="sales"?"Verkauf":null);return}
  if(a==="newemployee"){await employeeModal();return}
@@ -573,6 +578,7 @@ function field(label,name,type="text",value="",required=false){return '<label>'+
 function selectField(label,name,opts,value=""){return '<label>'+label+'<select name="'+name+'">'+opts.map(o=>'<option value="'+esc(o.value??o)+'" '+(String(value)===String(o.value??o)?"selected":"")+'>'+esc(o.label??o)+"</option>").join("")+"</select></label>"}
 
 async function itemModal(id){
+  if(!canManageCatalog())throw Error("Du darfst keine Lagerartikel anlegen oder Stammdaten bearbeiten.");
  let item=null;
  if(id){const {data,error}=await supabaseClient.from("vineyard_inventory").select("*").eq("id",id).single();if(error)throw error;item=data}
  const cat=item?.category||"Zutaten";
@@ -614,6 +620,7 @@ async function itemModal(id){
  };
 }
 async function recipeModal(id){
+  if(!canManageCatalog())throw Error("Du darfst keine Rezepte erstellen oder bearbeiten.");
  const [{data:ingredients=[]},{data:products=[]},recipeResult,itemsResult]=await Promise.all([
   supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category").eq("category","Zutaten").order("item_name"),
   supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category").eq("category","Produkte").order("item_name"),
@@ -692,6 +699,7 @@ async function recipeModal(id){
  };
 }
 async function deleteRecipe(id){
+  if(!canManageCatalog())throw Error("Du darfst keine Rezepte löschen.");
  if(!confirm("Dieses Rezept wirklich löschen?"))return;
  const r=await supabaseClient.rpc("vineyard_delete_recipe",{p_recipe_id:id});
  if(r.error)return alert(r.error.message);
@@ -781,6 +789,7 @@ async function invoiceModal(id){
  };
 }
 async function deleteItem(id){
+  if(!canManageCatalog())throw Error("Du darfst keine Lagerartikel löschen.");
  if(!confirm("Diesen Lagerartikel wirklich löschen? Zugehörige Rezepte werden dabei entfernt; historische Rechnungspositionen bleiben erhalten."))return;
  const {error}=await supabaseClient.rpc("vineyard_delete_inventory",{p_inventory_id:id});if(error)throw error;await auditLog("Lagerartikel gelöscht","inventory",id,{});await render();
 }
