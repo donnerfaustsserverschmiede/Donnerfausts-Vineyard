@@ -98,6 +98,7 @@ function startPresence(){
 const NAV=[
 ["dashboard","⌂","Übersicht","dashboard"],
 ["orders","🚚","Lieferungen","orders_manage"],
+["customers","♙","Kunden","orders_manage"],
 ["inventory","▦","Lager","inventory_view"],
 ["purchase","↘","Einkauf","trade_edit"],
 ["sales","↗","Verkauf","trade_edit"],
@@ -213,7 +214,7 @@ async function invoices(){
  '</tbody></table></div></div>';
 }
 async function orders(){
- const {data:rawRows,error}=await supabaseClient.from("vineyard_orders").select("id,order_number,status,customer_name,employee_id,total,commission_rate,commission_amount,created_at,completed_at,fulfillment_cashbook_id").eq("status","Lieferung abgeschlossen").order("created_at",{ascending:false});
+ const {data:rawRows,error}=await supabaseClient.from("vineyard_orders").select("id,order_number,status,customer_name,customer_id,customer_discount_percent,subtotal_before_discount,employee_id,total,commission_rate,commission_amount,created_at,completed_at,fulfillment_cashbook_id").eq("status","Lieferung abgeschlossen").order("created_at",{ascending:false});
  if(error)return errorBox(error.message);
  const rows=Array.isArray(rawRows)?rawRows:[];
  const {data:rawEmployees,error:ee}=await supabaseClient.rpc("vineyard_order_employees");
@@ -224,7 +225,7 @@ async function orders(){
  const total=rows.reduce((n,x)=>n+Number(x.total||0),0);
  const commissions=rows.reduce((n,x)=>n+Number(x.commission_amount||0),0);
  const card=x=>'<div class="ordercard"><div class="ordercardtop"><div><span class="orderNo">'+esc(x.order_number)+'</span><span class="badge good">Lieferung abgeschlossen</span></div><b>'+money(x.total)+'</b></div>'+
- '<div class="ordercustomer"><strong>Großhändler</strong><span>Lieferant: '+esc(x.employee_name)+'</span><span>Datum: '+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</span></div>'+
+ '<div class="ordercustomer"><strong>'+esc(x.customer_name||"Großhändler")+(Number(x.customer_discount_percent||0)>0?" · −"+Number(x.customer_discount_percent).toLocaleString("de-DE")+" %":"")+'</strong><span>Lieferant: '+esc(x.employee_name)+'</span><span>Datum: '+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</span></div>'+
  '<div class="ordermeta"><span>Verkaufspreis: '+money(x.total)+'</span><span>Provision: '+money(x.commission_amount||0)+' ('+Number(x.commission_rate||0).toLocaleString("de-DE")+'%)</span></div>'+
  '<div class="orderactions"><button class="mini gold" data-view-order="'+x.id+'">Details</button><button class="mini" data-delete-order="'+x.id+'">Löschen</button></div></div>';
  return intro("LOGISTIK","Lieferungen","Jede Auslieferung an den Großhändler wird hier erfasst. Der Lieferant wird hinterlegt, der tatsächlich erzielte Verkaufspreis wird eingetragen und die Provision automatisch daraus berechnet.",can("orders_manage")?"newdelivery":null,can("orders_manage")?"+ Lieferung erfassen":null)+
@@ -447,7 +448,7 @@ function errorBox(t){return '<div class="panel"><b>Fehler</b><p class="muted">'+
 
 async function render(){
  if(page==="recipes"||page==="production")page="dashboard";
- let content=page==="dashboard"?await dashboard():page==="invoices"?await invoices():page==="orders"?await orders():page==="inventory"?await inventory():page==="recipes"?await recipes():page==="production"?await production():page==="purchase"?await trades("Einkauf"):page==="sales"?await trades("Verkauf"):page==="trades"?await trades("all"):page==="cash"?await cash():page==="employees"?await employees():page==="appointments"?await appointments():page==="commission"?await commissions():page==="admin"?await admin():await dashboard();
+ let content=page==="dashboard"?await dashboard():page==="invoices"?await invoices():page==="orders"?await orders():page==="customers"?await customers():page==="inventory"?await inventory():page==="recipes"?await recipes():page==="production"?await production():page==="purchase"?await trades("Einkauf"):page==="sales"?await trades("Verkauf"):page==="trades"?await trades("all"):page==="cash"?await cash():page==="employees"?await employees():page==="appointments"?await appointments():page==="commission"?await commissions():page==="admin"?await admin():await dashboard();
  shell(content);bind();
  if(page==="orders")startOrderRealtime();else stopOrderRealtime();
 }
@@ -574,6 +575,9 @@ async function action(a,actionButton){
  if(a==="delete-employee"){const id=actionButton?.dataset.employeeId;await deleteEmployee(id);return}
  if(a==="newinvoice"){await invoiceModal();return}
  if(a==="newdelivery"){await deliveryModal();return}
+ if(a==="newcustomer"){await customerModal();return}
+ if(a==="edit-customer"){await customerModal(actionButton?.dataset.customerId);return}
+ if(a==="toggle-customer"){await toggleCustomer(actionButton?.dataset.customerId,actionButton?.dataset.active==="true");return}
 
 }
 
@@ -907,39 +911,82 @@ async function tradeModal(id,defaultType=null){
   }catch(err){alert(err.message||String(err));b.disabled=false}
  };
 }
+async function customers(){
+ const {data:rows=[],error}=await supabaseClient.from("vineyard_customers").select("*").order("name");
+ if(error)return errorBox(error.message);
+ const active=rows.filter(x=>x.active).length;
+ return intro("STAMMKUNDEN","Kunden","Kunden verwalten und feste Rabatte für Lieferungen hinterlegen.",can("orders_manage")?"newcustomer":null,can("orders_manage")?"+ Kunde hinzufügen":null)+
+ '<div class="stats">'+stat("♙","KUNDEN",rows.length)+stat("✓","AKTIV",active)+stat("%","RABATTE",rows.filter(x=>x.active&&Number(x.discount_percent)>0).length)+'</div>'+
+ '<div class="panel"><div class="tablewrap"><table><thead><tr><th>Kunde</th><th>Rabatt</th><th>Status</th><th>Notiz</th><th>Aktionen</th></tr></thead><tbody>'+
+ (rows.map(x=>'<tr><td><b>'+esc(x.name)+'</b></td><td>'+Number(x.discount_percent).toLocaleString("de-DE")+' %</td><td>'+badge(x.active?"Aktiv":"Inaktiv")+'</td><td>'+esc(x.notes||"—")+'</td><td><button class="mini" data-action="edit-customer" data-customer-id="'+x.id+'">Bearbeiten</button> <button class="mini" data-action="toggle-customer" data-customer-id="'+x.id+'" data-active="'+x.active+'">'+(x.active?"Deaktivieren":"Aktivieren")+'</button></td></tr>').join("")||'<tr><td colspan="5">Noch keine Kunden angelegt.</td></tr>')+
+ '</tbody></table></div></div>';
+}
+async function customerModal(id){
+ let customer=null;
+ if(id){const r=await supabaseClient.from("vineyard_customers").select("*").eq("id",id).single();if(r.error)throw r.error;customer=r.data}
+ modal(id?"Kunden bearbeiten":"Kunden anlegen",
+ field("Kundenname","name","text",customer?.name||"",true)+
+ field("Kundenrabatt (%)","discount_percent","number",customer?.discount_percent??0,true)+
+ field("Notiz","notes","text",customer?.notes||""),
+ async v=>{const discount=Number(v.discount_percent);if(!v.name.trim())throw Error("Bitte einen Kundennamen eingeben.");if(!Number.isFinite(discount)||discount<0||discount>100)throw Error("Der Rabatt muss zwischen 0 und 100 Prozent liegen.");const payload={name:v.name.trim(),discount_percent:discount,notes:(v.notes||"").trim(),updated_at:new Date().toISOString()};const r=id?await supabaseClient.from("vineyard_customers").update(payload).eq("id",id):await supabaseClient.from("vineyard_customers").insert(payload);if(r.error)throw r.error;await auditLog(id?"Kunde geändert":"Kunde angelegt","customer",id||null,{name:payload.name,discount_percent:discount})});
+}
+async function toggleCustomer(id,active){
+ const r=await supabaseClient.from("vineyard_customers").update({active:!active,updated_at:new Date().toISOString()}).eq("id",id);
+ if(r.error)throw r.error;
+ await auditLog(!active?"Kunde aktiviert":"Kunde deaktiviert","customer",id,{active:!active});
+ await render();
+}
 async function deliveryModal(){
- const [{data:employees=[],error:ee},{data:products=[],error:ie}]=await Promise.all([
+ const [{data:employees=[],error:ee},{data:products=[],error:ie},{data:customersList=[],error:ce}]=await Promise.all([
   supabaseClient.rpc("vineyard_order_employees"),
-  supabaseClient.from("vineyard_inventory").select("id,item_name,unit,quantity,sale_price").eq("category","Produkte").order("item_name")
+  supabaseClient.from("vineyard_inventory").select("id,item_name,unit,quantity,sale_price").eq("category","Produkte").order("item_name"),
+  supabaseClient.from("vineyard_customers").select("id,name,discount_percent").eq("active",true).order("name")
  ]);
- if(ee)throw ee;
- if(ie)throw ie;
+ if(ee)throw ee;if(ie)throw ie;if(ce)throw ce;
  if(!employees.length)throw Error("Keine aktiven Mitarbeiter verfügbar.");
  if(!products.length)throw Error("Lege zuerst mindestens ein Produkt im Lager an.");
  const employeeOptions=employees.map(x=>({value:x.user_id,label:x.display_name}));
- const productOptions=products.map(x=>({value:x.id,label:x.item_name+" · "+x.unit+" · Bestand "+Number(x.quantity).toLocaleString("de-DE")}));
+ const productOptions=products.map(x=>({value:x.id,label:x.item_name}));
+ const customerOptions=[{value:"",label:"Kein Kunde / Standardpreis"},...customersList.map(x=>({value:x.id,label:x.name+" (−"+Number(x.discount_percent).toLocaleString("de-DE")+" %)"}))];
  modal("Lieferung an Großhändler",
-  '<div class="recipehint"><b>Wichtig:</b> Hier wird der tatsächlich erzielte Verkaufspreis der Lieferung eingetragen. Der Provisionssatz bleibt bei <b>30 %</b> und wird automatisch aus diesem Betrag berechnet.</div>'+
-  selectField("Wer hat geliefert?","employee_id",employeeOptions,profile?.user_id||employees[0].user_id)+
-  selectField("Produkt","inventory_id",productOptions,products[0].id)+
-  field("Menge","quantity","number","1",true)+
-  field("Tatsächlicher Verkaufspreis ($)","total","number","",true)+
-  '<div class="tradeprice"><div><span>AUTOMATISCHE PROVISION</span><b id="deliveryCommission">'+money(0)+'</b><small>30 % vom eingegebenen Verkaufspreis</small></div></div>',
-  async v=>{
-   const quantity=Number(v.quantity),total=Number(v.total);
-   if(!Number.isFinite(quantity)||quantity<=0)throw Error("Die Liefermenge muss größer als 0 sein.");
-   if(!Number.isFinite(total)||total<=0)throw Error("Der Verkaufspreis muss größer als 0 sein.");
-   const product=products.find(x=>String(x.id)===String(v.inventory_id));
-   if(!product)throw Error("Produkt nicht gefunden.");
-   if(quantity>Number(product.quantity))throw Error("Nicht genügend Bestand vorhanden.");
-   const r=await supabaseClient.rpc("vineyard_create_delivery",{p_employee_id:v.employee_id,p_inventory_id:v.inventory_id,p_quantity:quantity,p_total:total});
-   if(r.error)throw r.error;
-   await auditLog("Lieferung erfasst","delivery",r.data?.id||null,{employee_id:v.employee_id,inventory_id:v.inventory_id,quantity,total,commission_rate:30,commission_amount:Math.round(total*0.30*100)/100});
-  });
- const totalEl=$("[name=total]");
- const updateCommission=()=>{const total=Number(totalEl?.value)||0;const el=$("#deliveryCommission");if(el)el.textContent=money(total*0.30)};
- totalEl?.addEventListener("input",updateCommission);
- updateCommission();
+ '<div class="recipehint"><b>Hinweis:</b> Wähle einen Kunden aus, um dessen Rabatt automatisch vom regulären Produktpreis abzuziehen. Die Provision wird wie bisher in der Provisionstabelle geführt.</div>'+
+ selectField("Wer hat geliefert?","employee_id",employeeOptions,profile?.user_id||employees[0].user_id)+
+ selectField("Kunde","customer_id",customerOptions,"")+
+ selectField("Produkt","inventory_id",productOptions,products[0].id)+
+ field("Menge","quantity","number","1",true)+
+ field("Preis vor Rabatt ($)","subtotal","number","",true)+
+ '<div class="tradeprice"><div><span>KUNDENRABATT</span><b id="deliveryDiscount">0 % · '+money(0)+'</b><small id="deliverySubtotal">Endbetrag: '+money(0)+'</small></div></div>'+
+ field("Endbetrag nach Rabatt ($)","total","number","",true),
+ async v=>{
+  const quantity=Number(v.quantity),subtotal=Number(v.subtotal),total=Number(v.total);
+  if(!Number.isFinite(quantity)||quantity<=0)throw Error("Die Liefermenge muss größer als 0 sein.");
+  if(!Number.isFinite(subtotal)||subtotal<=0)throw Error("Der Preis vor Rabatt muss größer als 0 sein.");
+  if(!Number.isFinite(total)||total<=0)throw Error("Der Endbetrag muss größer als 0 sein.");
+  const product=products.find(x=>String(x.id)===String(v.inventory_id));if(!product)throw Error("Produkt nicht gefunden.");
+  if(quantity>Number(product.quantity))throw Error("Nicht genügend Bestand vorhanden.");
+  const customer=customersList.find(x=>String(x.id)===String(v.customer_id));
+  const expected=Math.round(subtotal*(1-Number(customer?.discount_percent||0)/100)*100)/100;
+  if(Math.abs(expected-total)>0.011)throw Error("Der Endbetrag passt nicht zum Kundenrabatt. Bitte Betrag prüfen.");
+  const r=await supabaseClient.rpc("vineyard_create_delivery",{p_employee_id:v.employee_id,p_inventory_id:v.inventory_id,p_quantity:quantity,p_total:total,p_customer_id:v.customer_id||null,p_subtotal:subtotal,p_discount_percent:Number(customer?.discount_percent||0)});
+  if(r.error)throw r.error;
+  await auditLog("Lieferung erfasst","delivery",r.data?.id||null,{employee_id:v.employee_id,inventory_id:v.inventory_id,quantity,total,subtotal,customer_id:v.customer_id||null,customer_name:customer?.name||"Standardkunde",discount_percent:Number(customer?.discount_percent||0)});
+ });
+ const customerEl=$("[name=customer_id]"),productEl=$("[name=inventory_id]"),qtyEl=$("[name=quantity]"),subEl=$("[name=subtotal]"),totalEl=$("[name=total]");
+ const updatePrice=()=>{
+  const product=products.find(x=>String(x.id)===String(productEl?.value));
+  const customer=customersList.find(x=>String(x.id)===String(customerEl?.value));
+  const qty=Number(qtyEl?.value)||0,discount=Number(customer?.discount_percent||0);
+  const subtotal=Number(subEl?.value)||0;
+  if(product&&(!subEl.value||subEl.dataset.autofill==="1")){subEl.value=(Number(product.sale_price||0)*qty).toFixed(2);subEl.dataset.autofill="1"}
+  const base=Number(subEl?.value)||0,final=Math.round(base*(1-discount/100)*100)/100;
+  if(totalEl)totalEl.value=final.toFixed(2);
+  const d=$("#deliveryDiscount");if(d)d.textContent=discount.toLocaleString("de-DE")+" % · −"+money(base-final);
+  const s=$("#deliverySubtotal");if(s)s.textContent="Endbetrag: "+money(final);
+ };
+ subEl?.addEventListener("input",()=>{subEl.dataset.autofill="0";updatePrice()});
+ productEl?.addEventListener("change",()=>{subEl.dataset.autofill="1";updatePrice()});
+ customerEl?.addEventListener("change",updatePrice);qtyEl?.addEventListener("input",updatePrice);
+ updatePrice();
 }
 async function cashModal(id){
  let existing=null;
