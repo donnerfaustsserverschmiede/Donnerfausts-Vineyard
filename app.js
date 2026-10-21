@@ -658,6 +658,7 @@ async function recipeModal(id){
 
  $("#modalroot").innerHTML='<div class="modalback"><div class="modal recipeModal"><div class="modalhead"><b>'+(id?"Rezept bearbeiten":"Neues Rezept")+'</b><button id="x">×</button></div><form id="recipeform">'+
  selectField("Produkt","output_inventory_id",products.map(x=>({value:x.id,label:x.item_name+" · "+x.unit})),recipe?.output_inventory_id||products[0].id)+
+ field("Produzierte Menge pro Produktion","output_quantity","number",recipe?.output_quantity??1,true)+
  '<div class="recipeformhead"><b>Zutaten</b><button type="button" class="mini gold" id="addingredient">+ Zutat</button></div><div id="recipeitemsform"></div>'+
  '<div class="actions"><button type="button" class="btn outline" id="cancel">Abbrechen</button><button class="btn primary">Speichern</button></div></form></div></div>';
 
@@ -688,6 +689,7 @@ async function recipeModal(id){
   const b=e.submitter;b.disabled=true;
   try{
    const output_inventory_id=e.target.output_inventory_id.value;
+   const output_quantity=Number(e.target.output_quantity.value);
    const product=products.find(x=>x.id===output_inventory_id);
    const payload=$$(".recipeformrow").map(row=>({
     inventory_id:row.querySelector(".recipeingredient").value,
@@ -695,6 +697,7 @@ async function recipeModal(id){
    })).filter(x=>x.inventory_id);
 
    if(!product)throw Error("Bitte ein Produkt auswählen.");
+   if(!Number.isFinite(output_quantity)||output_quantity<=0)throw Error("Die produzierte Menge muss größer als 0 sein.");
    if(!payload.length)throw Error("Ein Rezept benötigt mindestens eine Zutat.");
    if(payload.some(x=>!Number.isFinite(x.quantity)||x.quantity<=0))throw Error("Alle Zutatenmengen müssen größer als 0 sein.");
    if(new Set(payload.map(x=>x.inventory_id)).size!==payload.length)throw Error("Eine Zutat darf pro Rezept nur einmal vorkommen.");
@@ -704,7 +707,7 @@ async function recipeModal(id){
     p_name:product.item_name,
     p_description:"",
     p_output_inventory_id:output_inventory_id,
-    p_output_quantity:1,
+    p_output_quantity:output_quantity,
     p_items:payload
    });
    if(r.error)throw r.error;
