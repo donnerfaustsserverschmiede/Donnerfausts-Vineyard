@@ -349,8 +349,12 @@ async function production(){
  }
  const byRecipe={};
  items.forEach(x=>(byRecipe[x.recipe_id]??=[]).push(x));
+ const {data:lastProductionRows=[]}=await supabaseClient.from("vineyard_inventory_movements").select("inventory_id,delta,reason,created_at").gt("delta",0).like("reason","Produktion:%").order("created_at",{ascending:false}).limit(1);
+ const lastProduction=lastProductionRows[0];
+ const lastProduct=lastProduction?inv.find(x=>x.id===lastProduction.inventory_id):null;
+ const lastProductionPanel='<div class="productioningredientswrap" style="margin-top:18px"><div class="eyebrow">PRODUKTIONSVERLAUF</div><h3>Letzte Produktion</h3>'+(lastProduction&&lastProduct?'<div class="productioningredient"><div><b>'+esc(lastProduct.item_name)+'</b><small>'+esc(new Date(lastProduction.created_at).toLocaleString("de-DE"))+'</small></div><strong>+'+Number(lastProduction.delta).toLocaleString("de-DE",{maximumFractionDigits:6})+' '+esc(lastProduct.unit||"")+'</strong></div>':'<p class="muted">Noch keine Produktion gebucht.</p>')+'</div>';
  if(!recipes.length)return intro("PRODUKTION","Produktion","Wähle ein gespeichertes Rezept und buche die Herstellung. Die Lagerbestände werden automatisch angepasst.",null,null)+
-  '<div class="panel"><b>Noch keine Rezepte vorhanden.</b><p class="muted">Lege zuerst im Lager Zutaten und Produkte an und erstelle anschließend unter Rezepte ein Rezept.</p></div>';
+  '<div class="panel"><b>Noch keine Rezepte vorhanden.</b><p class="muted">Lege zuerst im Lager Zutaten und Produkte an und erstelle anschließend unter Rezepte ein Rezept.</p></div>'+lastProductionPanel;
 
  const first=recipes[0];
  const recipeOptions=recipes.map(x=>({value:x.id,label:x.name}));
@@ -375,7 +379,7 @@ async function production(){
  (!can("inventory_edit")?'<p class="muted">Du hast keine Berechtigung, Produktionen zu buchen.</p>':"")+
  '</div>'+
  '<div class="productioningredientswrap"><div class="eyebrow">BENÖTIGTE ZUTATEN</div><h3>Automatisch berechnet</h3><div id="productionIngredients">'+rowsFor(first.id,1)+'</div></div>'+
- '</div>';
+ '</div>'+lastProductionPanel;
 }
 
 async function trades(filter="all"){
