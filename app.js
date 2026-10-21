@@ -838,15 +838,34 @@ async function publicInvoice(token){
  document.body.innerHTML='<main class="publicInvoice"><div class="publicInvoiceBox"><div class="publicHead"><div><div class="eyebrow">DONNERFAUST SALOON</div><h1>Rechnung</h1><p>Schreibgeschützter Handelsnachweis</p></div><div class="publicNumber">'+esc(invoice.invoice_number)+'</div></div><div class="publicMeta"><div><small>VORGANG</small><b>'+esc(invoice.invoice_type)+'</b></div><div><small>HANDELSPARTNER</small><b>'+esc(invoice.partner_name)+'</b></div><div><small>DATUM</small><b>'+esc(new Date(invoice.created_at).toLocaleString("de-DE"))+'</b></div><div><small>STATUS</small><b>'+esc(invoice.status)+'</b></div><div><small>MITARBEITER</small><b>'+esc(invoice.employee_name||"—")+'</b></div></div><div class="publicTable"><table><thead><tr><th>Artikel</th><th>Menge</th><th>Einzelpreis</th><th>Gesamt</th></tr></thead><tbody>'+items.map(x=>'<tr><td>'+esc(x.item_name)+'</td><td>'+Number(x.quantity).toLocaleString("de-DE")+' '+esc(x.unit)+'</td><td>'+money(x.unit_price)+'</td><td>'+money(x.line_total)+'</td></tr>').join("")+'</tbody></table></div><div class="publicTotal"><span>Gesamtsumme</span><b>'+money(total)+'</b></div><p class="publicReadonly">Diese Ansicht ist schreibgeschützt. Es besteht kein Zugriff auf die interne Vineyard-Verwaltung.</p></div></main>';
 }
 async function stockModal(id=null,mode=null){
- const {data:items=[],error}=await supabaseClient.from("vineyard_inventory").select("id,item_name,unit,quantity,category").order("category").order("item_name");
+ const [{data:items=[],error},{data:employees=[],error:employeeError}]=await Promise.all([
+  supabaseClient.from("vineyard_inventory").select("id,item_name,unit,quantity,category").order("category").order("item_name"),
+  supabaseClient.rpc("vineyard_order_employees")
+ ]);
  if(error)throw error;
+ if(employeeError)throw employeeError;
  if(!items.length)throw Error("Es sind noch keine Lagerartikel angelegt.");
+ if(!employees.length)throw Error("Es sind keine aktiven Mitarbeiter verfügbar.");
  if(id&&!items.some(x=>String(x.id)===String(id)))throw Error("Lagerartikel nicht gefunden.");
  const chosen=items.find(x=>String(x.id)===String(id))||items[0];
- const options=items.map(x=>({value:x.id,label:x.item_name}));
+ const options=items.map(x=>({value:x.id,label:x.item_name+" · Bestand "+Number(x.quantity).toLocaleString("de-DE")+" "+x.unit}));
+ const employeeOptions=employees.map(x=>({value:x.user_id,label:x.display_name}));
  const title=mode==="in"?"Wareneingang":mode==="out"?"Warenausgang":"Bestandsbewegung";
- modal(title,selectField("Lagerartikel","inventory_id",options,chosen.id)+selectField("Bewegung","mode",[{value:"in",label:"Eingang (+)"},{value:"out",label:"Ausgang (−)"}],mode||"in")+field("Menge","amount","number","",true)+field("Grund / Bemerkung","reason","text","",true),
- async v=>{const amount=Number(v.amount);if(!Number.isFinite(amount)||amount<=0)throw Error("Die Menge muss größer als 0 sein.");const item=items.find(x=>String(x.id)===String(v.inventory_id));if(!item)throw Error("Bitte einen gültigen Lagerartikel wählen.");if(v.mode==="out"&&amount>Number(item.quantity))throw Error("Der Ausgang ist größer als der aktuelle Bestand ("+Number(item.quantity).toLocaleString("de-DE")+" "+item.unit+").");const delta=v.mode==="in"?amount:-amount;const {error}=await supabaseClient.rpc("vineyard_adjust_inventory",{p_inventory_id:v.inventory_id,p_delta:delta,p_reason:v.reason.trim()});if(error)throw error;await auditLog(v.mode==="in"?"Lagerzugang gebucht":"Lagerausgang gebucht","inventory",v.inventory_id,{item_name:item.item_name,quantity:amount,unit:item.unit,reason:v.reason.trim()});});
+ modal(title,selectField("Lagerartikel","inventory_id",options,chosen.id)+selectField("Mitarbeiter","employee_id",employeeOptions,profile?.user_id||employees[0].user_id)+selectField("Bewegung","mode",[{value:"in",label:"Eingang (+)"},{value:"out",label:"Ausgang (−)"}],mode||"in")+field("Menge","amount","number","",true)+field("Grund / Bemerkung","reason","text","",true),
+ async v=>{
+  const amount=Number(v.amount);
+  if(!Number.isFinite(amount)||amount<=0)throw Error("Die Menge muss größer als 0 sein.");
+  const item=items.find(x=>String(x.id)===String(v.inventory_id));
+  if(!item)throw Error("Bitte einen gültigen Lagerartikel wählen.");
+  const employee=employees.find(x=>String(x.user_id)===String(v.employee_id));
+  if(!employee)throw Error("Bitte einen gültigen Mitarbeiter auswählen.");
+  if(v.mode==="out"&&amount>Number(item.quantity))throw Error("Der Ausgang ist größer als der aktuelle Bestand ("+Number(item.quantity).toLocaleString("de-DE")+" "+item.unit+").");
+  const reason="Mitarbeiter: "+employee.display_name+" · "+(v.reason||"Keine Bemerkung").trim();
+  const delta=v.mode==="in"?amount:-amount;
+  const {error}=await supabaseClient.rpc("vineyard_adjust_inventory",{p_inventory_id:v.inventory_id,p_delta:delta,p_reason:reason});
+  if(error)throw error;
+  await auditLog(v.mode==="in"?"Lagerzugang gebucht":"Lagerausgang gebucht","inventory",v.inventory_id,{item_name:item.item_name,quantity:amount,unit:item.unit,employee_id:employee.user_id,employee_name:employee.display_name,reason:(v.reason||"").trim()});
+ });
 }
 
 async function tradeModal(id,defaultType=null){
