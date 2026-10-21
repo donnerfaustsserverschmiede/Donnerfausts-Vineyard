@@ -839,7 +839,7 @@ async function stockModal(id=null,mode=null){
  if(!items.length)throw Error("Es sind noch keine Lagerartikel angelegt.");
  if(id&&!items.some(x=>String(x.id)===String(id)))throw Error("Lagerartikel nicht gefunden.");
  const chosen=items.find(x=>String(x.id)===String(id))||items[0];
- const options=items.map(x=>({value:x.id,label:x.item_name+" · "+x.category+" · Bestand "+Number(x.quantity).toLocaleString("de-DE")+" "+x.unit}));
+ const options=items.map(x=>({value:x.id,label:x.item_name}));
  const title=mode==="in"?"Wareneingang":mode==="out"?"Warenausgang":"Bestandsbewegung";
  modal(title,selectField("Lagerartikel","inventory_id",options,chosen.id)+selectField("Bewegung","mode",[{value:"in",label:"Eingang (+)"},{value:"out",label:"Ausgang (−)"}],mode||"in")+field("Menge","amount","number","",true)+field("Grund / Bemerkung","reason","text","",true),
  async v=>{const amount=Number(v.amount);if(!Number.isFinite(amount)||amount<=0)throw Error("Die Menge muss größer als 0 sein.");const item=items.find(x=>String(x.id)===String(v.inventory_id));if(!item)throw Error("Bitte einen gültigen Lagerartikel wählen.");if(v.mode==="out"&&amount>Number(item.quantity))throw Error("Der Ausgang ist größer als der aktuelle Bestand ("+Number(item.quantity).toLocaleString("de-DE")+" "+item.unit+").");const delta=v.mode==="in"?amount:-amount;const {error}=await supabaseClient.rpc("vineyard_adjust_inventory",{p_inventory_id:v.inventory_id,p_delta:delta,p_reason:v.reason.trim()});if(error)throw error;await auditLog(v.mode==="in"?"Lagerzugang gebucht":"Lagerausgang gebucht","inventory",v.inventory_id,{item_name:item.item_name,quantity:amount,unit:item.unit,reason:v.reason.trim()});});
