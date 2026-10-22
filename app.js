@@ -232,9 +232,11 @@ async function orders(){
  const {data:rawRows,error}=await supabaseClient.from("vineyard_orders").select("id,order_number,status,customer_name,customer_email,customer_phone,customer_address,customer_note,employee_id,total,commission_rate,commission_amount,delivery_date,delivery_requested,delivery_fee,created_at,accepted_at,completed_at").order("created_at",{ascending:false});
  if(error)return errorBox(error.message);
  const rows=Array.isArray(rawRows)?rawRows:[];
- const {data:rawEmployees,error:ee}=await supabaseClient.rpc("vineyard_order_employees");
- if(ee)return errorBox(ee.message);
+ const [{data:rawEmployees,error:ee},{data:customerRows,error:ce}]=await Promise.all([supabaseClient.rpc("vineyard_order_employees"),supabaseClient.from("vineyard_customers").select("id,name,discount_percent").eq("active",true).order("name")]);
+ if(ee)return errorBox(ee.message);if(ce)return errorBox(ce.message);
  const employees=Array.isArray(rawEmployees)?rawEmployees:[];
+ const customersList=Array.isArray(customerRows)?customerRows:[];
+ const customerOptions=[{value:"",label:"Privatkunde (0 % Rabatt)"},...customersList.map(k=>({value:k.id,label:k.name+" (−"+Number(k.discount_percent||0).toLocaleString("de-DE")+" %)"}))];
  const emap=Object.fromEntries(employees.map(x=>[x.user_id,x.display_name]));
  rows.forEach(x=>x.employee_name=emap[x.employee_id]||"—");
  const open=rows.filter(x=>x.status==="Eingegangen"||x.status==="In Bearbeitung");
@@ -245,6 +247,7 @@ async function orders(){
  const card=x=>'<div class="ordercard"><div class="ordercardtop"><div><span class="orderNo">'+esc(x.order_number)+'</span>'+badge(x.status)+'</div><b>'+money(x.total)+'</b></div>'+
  '<div class="ordercustomer"><strong>'+esc(x.customer_name)+'</strong><span>Lieferdatum: '+esc(dateText(x))+'</span><span>Lieferung: '+(x.delivery_requested?"Ja · +10%":"Nein")+'</span></div>'+
  '<div class="ordermeta"><span>Erstellt: '+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</span><span>Mitarbeiter: '+esc(x.employee_name)+'</span>'+(x.commission_amount?'<span>Provision: '+money(x.commission_amount)+'</span>':'')+'</div>'+
+ ((x.status==="In Bearbeitung"||x.status==="Eingegangen")?'<div class="order-customer-select"><label style="display:block;margin:10px 0 5px;font-weight:700">KUNDE</label><select data-order-customer="'+x.id+'">'+customerOptions.map(o=>'<option value="'+esc(o.value)+'" '+(String(x.customer_id||"")===String(o.value)?"selected":"")+'>'+esc(o.label)+'</option>').join("")+'</select><small>Rabatt wird vom Warenwert abgezogen; Liefergebühr bleibt unverändert.</small><button class="mini gold" data-save-order-customer="'+x.id+'">Kundenwahl speichern</button></div>':"")+
  '<div class="orderactions"><button class="mini gold" data-view-order="'+x.id+'">Details</button>'+
  (x.status==="Eingegangen"?'<button class="mini gold" data-order-status="'+x.id+'|In Bearbeitung">Bestellung annehmen</button>':"")+
  (x.status==="In Bearbeitung"?'<button class="mini gold" data-order-status="'+x.id+'|Bestellung abgeschlossen">Bestellung abschließen</button>':"")+
@@ -597,6 +600,7 @@ function bind(){
  $$("[data-edit-invoice]").forEach(b=>b.onclick=()=>invoiceModal(b.dataset.editInvoice));
  $$("[data-delete-invoice]").forEach(b=>b.onclick=()=>deleteInvoice(b.dataset.deleteInvoice));
  $$("[data-view-order]").forEach(b=>b.onclick=()=>orderModal(b.dataset.viewOrder));
+  $$("[data-save-order-customer]").forEach(b=>b.onclick=async()=>{if(b.dataset.busy==="1")return;const id=b.dataset.saveOrderCustomer,select=document.querySelector('[data-order-customer="'+id+'"]');if(!select)return;b.dataset.busy="1";b.disabled=true;try{const {error}=await supabaseClient.rpc("vineyard_assign_order_customer",{p_order_id:id,p_customer_id:select.value||null});if(error)throw error;alert("Kunde zugeordnet; Rabatt und Bestellwert wurden aktualisiert.");await render()}catch(err){alert(err.message||String(err))}finally{b.dataset.busy="0";if(b.isConnected)b.disabled=false}});
  $$("[data-order-status]").forEach(b=>b.onclick=async()=>{if(b.dataset.busy==="1")return;b.dataset.busy="1";b.disabled=true;try{const parts=b.dataset.orderStatus.split("|");if(parts.length!==2||!parts[0]||!parts[1])throw Error("Ungültige Bestellaktion.");await updateOrderStatus(parts[0],parts[1]);}catch(err){console.error("Bestellung aktualisieren:",err);alert(err?.message||String(err));}finally{b.dataset.busy="0";if(b.isConnected)b.disabled=false;}});
  $$("[data-delete-order]").forEach(b=>b.onclick=()=>deleteOrder(b.dataset.deleteOrder)); $$("[data-pay-commission]").forEach(b=>b.onclick=async()=>{if(b.dataset.busy==="1")return;if(!confirm("Provision für diesen Mitarbeiter jetzt vollständig auszahlen und den offenen Wert auf 0 setzen?"))return;b.dataset.busy="1";b.disabled=true;try{const r=await supabaseClient.rpc("vineyard_pay_commission",{p_employee_id:b.dataset.payCommission});if(r.error)throw r.error;alert("Provision von "+money(r.data)+" wurde als ausgezahlt verbucht.");await render()}catch(err){alert(err.message||String(err));b.dataset.busy="";b.disabled=false}});
 
