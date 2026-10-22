@@ -180,7 +180,7 @@ function intro(k,h,p,action,label){return '<div class="intro"><div><div class="e
 async function dashboard(){
  const [invoiceCount,orderCount]=await Promise.all([
   can("invoice_view")?supabaseClient.from("vineyard_invoices").select("id",{count:"exact",head:true}).eq("status","Offen"):Promise.resolve({count:0,error:null}),
-  supabaseClient.from("vineyard_orders").select("id",{count:"exact",head:true}).eq("status","Lieferung abgeschlossen")
+  supabaseClient.from("vineyard_orders").select("id",{count:"exact",head:true}).in("status",["Eingegangen","In Bearbeitung"])
  ]);
  const openInvoices=invoiceCount.error?0:(invoiceCount.count||0);
  const openOrders=orderCount.error?0:(orderCount.count||0);
@@ -191,7 +191,7 @@ async function dashboard(){
   </div>
   <div class="overviewgrid">
    <button class="overviewcard" data-page-action="invoices"><div class="overviewicon invoice">▤</div><div class="overviewtext"><small>OFFENE RECHNUNGEN</small><b>${openInvoices}</b><span>Rechnungsmenü öffnen</span></div><span class="arrow">→</span></button>
-   <button class="overviewcard" data-page-action="orders"><div class="overviewicon order">🚚</div><div class="overviewtext"><small>LIEFERUNGEN</small><b>${openOrders}</b><span>Lieferungsmenü öffnen</span></div><span class="arrow">→</span></button>
+   <button class="overviewcard" data-page-action="orders"><div class="overviewicon order">🛒</div><div class="overviewtext"><small>OFFENE BESTELLUNGEN</small><b>${openOrders}</b><span>Bestellungsmenü öffnen</span></div><span class="arrow">→</span></button>
    <div class="overviewcard static"><div class="overviewicon staff">♟</div><div class="overviewtext"><small>WER IST GERADE ONLINE?</small><b id="onlineCount">${onlineCount||1}</b><span id="onlineNames">${esc(onlineNames.join(" · ")||profile?.display_name||"")}</span></div><span class="live"><i></i> LIVE</span></div>
   </div>
 `;
