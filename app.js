@@ -97,7 +97,7 @@ function startPresence(){
 
 const NAV=[
 ["dashboard","⌂","Übersicht","dashboard"],
-["orders","🛒","Bestellungen","orders_manage"],
+["orders","🛒","BESTELLUNGEN","orders_manage"],
 
 ["inventory","▦","Lager","inventory_view"],
 ["purchase","↘","Einkauf","trade_edit"],
