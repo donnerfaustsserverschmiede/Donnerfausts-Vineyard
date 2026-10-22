@@ -97,8 +97,8 @@ function startPresence(){
 
 const NAV=[
 ["dashboard","⌂","Übersicht","dashboard"],
-["orders","🚚","Lieferungen","orders_manage"],
-["customers","♙","Kunden","orders_manage"],
+["orders","🛒","Bestellungen","orders_manage"],
+
 ["inventory","▦","Lager","inventory_view"],
 ["purchase","↘","Einkauf","trade_edit"],
 ["sales","↗","Verkauf","trade_edit"],
@@ -172,7 +172,7 @@ function shell(content){
  const switchEmployee=$("#switchEmployee");
  if(switchEmployee) switchEmployee.addEventListener("click",async e=>{e.preventDefault();if(presenceChannel){try{await supabaseClient.removeChannel(presenceChannel)}catch(_){}presenceChannel=null;}stopOrderRealtime();const token=sessionStorage.getItem("vineyard_employee_session")||"";if(token){try{await supabaseClient.rpc("vineyard_revoke_employee_session",{p_token:token})}catch(_){}}sessionStorage.removeItem("vineyard_employee_session");sessionStorage.removeItem("vineyard_employee_id");currentEmployeeId="";profile=null;role=null;await selectEmployee(true)});
 }
-function pageTitle(){return ({dashboard:"Übersicht",invoices:"Rechnungen",orders:"Lieferungen",inventory:"Lagerübersicht",purchase:"Einkauf",sales:"Verkauf",cash:"Kasse",employees:"Mitarbeiter",appointments:"Termine",commission:"Provision",admin:"Administration"})[page]||"Übersicht"}
+function pageTitle(){return ({dashboard:"Übersicht",invoices:"Rechnungen",orders:"Bestellungen",inventory:"Lagerübersicht",purchase:"Einkauf",sales:"Verkauf",cash:"Kasse",employees:"Mitarbeiter",appointments:"Termine",commission:"Provision",admin:"Administration"})[page]||"Übersicht"}
 function initials(n){return String(n||"DF").split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase()}
 function stat(icon,label,value){return '<div class="stat"><span class="icon">'+icon+'</span><div><small>'+label+"</small><b>"+value+"</b></div></div>"}
 function intro(k,h,p,action,label){return '<div class="intro"><div><div class="eyebrow">'+k+"</div><h1>"+h+"</h1><p>"+p+"</p></div>"+(action?'<button type="button" class="btn gold" data-action="'+action+'">'+label+"</button>":"")+"</div>"}
@@ -214,7 +214,7 @@ async function invoices(){
  '</tbody></table></div></div>';
 }
 async function orders(){
- const {data:rawRows,error}=await supabaseClient.from("vineyard_orders").select("id,order_number,status,customer_name,customer_id,customer_discount_percent,subtotal_before_discount,employee_id,total,commission_rate,commission_amount,created_at,completed_at,fulfillment_cashbook_id").eq("status","Lieferung abgeschlossen").order("created_at",{ascending:false});
+ const {data:rawRows,error}=await supabaseClient.from("vineyard_orders").select("id,order_number,status,customer_name,customer_email,customer_phone,customer_address,customer_note,employee_id,total,commission_rate,commission_amount,delivery_date,delivery_requested,delivery_fee,created_at,accepted_at,completed_at").order("created_at",{ascending:false});
  if(error)return errorBox(error.message);
  const rows=Array.isArray(rawRows)?rawRows:[];
  const {data:rawEmployees,error:ee}=await supabaseClient.rpc("vineyard_order_employees");
@@ -222,34 +222,56 @@ async function orders(){
  const employees=Array.isArray(rawEmployees)?rawEmployees:[];
  const emap=Object.fromEntries(employees.map(x=>[x.user_id,x.display_name]));
  rows.forEach(x=>x.employee_name=emap[x.employee_id]||"—");
- const total=rows.reduce((n,x)=>n+Number(x.total||0),0);
- const commissions=rows.reduce((n,x)=>n+Number(x.commission_amount||0),0);
- const card=x=>'<div class="ordercard"><div class="ordercardtop"><div><span class="orderNo">'+esc(x.order_number)+'</span><span class="badge good">Lieferung abgeschlossen</span></div><b>'+money(x.total)+'</b></div>'+
- '<div class="ordercustomer"><strong>'+esc(x.customer_name||"Großhändler")+(Number(x.customer_discount_percent||0)>0?" · −"+Number(x.customer_discount_percent).toLocaleString("de-DE")+" %":"")+'</strong><span>Lieferant: '+esc(x.employee_name)+'</span><span>Datum: '+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</span></div>'+
- '<div class="ordermeta"><span>Verkaufspreis: '+money(x.total)+'</span><span>Provision: '+money(x.commission_amount||0)+' ('+Number(x.commission_rate||0).toLocaleString("de-DE")+'%)</span></div>'+
- '<div class="orderactions"><button class="mini gold" data-view-order="'+x.id+'">Details</button><button class="mini" data-delete-order="'+x.id+'">Löschen</button></div></div>';
- return intro("LOGISTIK","Lieferungen","Jede Auslieferung an den Großhändler wird hier erfasst. Der Lieferant wird hinterlegt, der tatsächlich erzielte Verkaufspreis wird eingetragen und die Provision automatisch daraus berechnet.",can("orders_manage")?"newdelivery":null,can("orders_manage")?"+ Lieferung erfassen":null)+
- ''+
- '<div class="stats">'+stat("🚚","LIEFERUNGEN",rows.length)+stat("$","UMSATZ",money(total))+stat("%","PROVISIONEN",money(commissions))+stat("▦","DURCHSCHNITT",money(rows.length?total/rows.length:0))+'</div>'+
- '<div class="orderssection"><div class="sectiontitle"><div><div class="eyebrow">LIEFERUNGSNACHWEIS</div><h2>Alle Lieferungen</h2><p>Lieferant, Menge, Verkaufspreis und automatisch berechnete Provision bleiben nachvollziehbar gespeichert.</p></div></div>'+
- '<div class="ordergrid">'+(rows.map(card).join("")||'<div class="panel" style="text-align:center;padding:28px"><h2 style="margin:0 0 8px">Noch keine Lieferungen</h2><p class="muted" style="margin:0">Erfasse die erste Auslieferung an den Großhändler über „+ Lieferung erfassen“.</p></div>')+'</div></div>';
+ const open=rows.filter(x=>x.status==="Eingegangen"||x.status==="In Bearbeitung");
+ const recent=rows.filter(x=>x.status==="Bestellung abgeschlossen").slice(0,10);
+ const totalOpen=open.reduce((n,x)=>n+Number(x.total||0),0);
+ const formLink=new URL("./bestellung.html",location.href).href;
+ const dateText=x=>x.delivery_date?new Date(x.delivery_date+"T00:00:00").toLocaleDateString("de-DE"):"—";
+ const card=x=>'<div class="ordercard"><div class="ordercardtop"><div><span class="orderNo">'+esc(x.order_number)+'</span>'+badge(x.status)+'</div><b>'+money(x.total)+'</b></div>'+
+ '<div class="ordercustomer"><strong>'+esc(x.customer_name)+'</strong><span>Lieferdatum: '+esc(dateText(x))+'</span><span>Lieferung: '+(x.delivery_requested?"Ja · +10%":"Nein")+'</span></div>'+
+ '<div class="ordermeta"><span>Erstellt: '+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</span><span>Mitarbeiter: '+esc(x.employee_name)+'</span>'+(x.commission_amount?'<span>Provision: '+money(x.commission_amount)+'</span>':'')+'</div>'+
+ '<div class="orderactions"><button class="mini gold" data-view-order="'+x.id+'">Details</button>'+
+ (x.status==="Eingegangen"?'<button class="mini gold" data-order-status="'+x.id+'|In Bearbeitung">Bestellung annehmen</button>':"")+
+ (x.status==="In Bearbeitung"?'<button class="mini gold" data-order-status="'+x.id+'|Bestellung abgeschlossen">Bestellung abschließen</button>':"")+
+ (x.status!=="Bestellung abgeschlossen"?'<button class="mini" data-delete-order="'+x.id+'">Löschen</button>':"")+
+ '</div></div>';
+ return intro("BESTELLUNGEN","Bestellungsmenü","Kunden bestellen über den öffentlichen Link. Mitarbeiter übernehmen Bestellungen und erhalten dabei 30% Provision. Beim Abschluss werden Lager und Kasse automatisch gebucht.",null,null)+
+ '<div class="orderlinkpanel"><div><div class="eyebrow">KUNDENFORMULAR</div><b>Bestelllink für Kunden</b><p>Produkt, Menge, Lieferdatum und Lieferung werden erfasst. Lieferung berechnet automatisch 10% Aufschlag.</p></div><div class="orderlinkactions"><input class="orderlinkinput" readonly value="'+esc(formLink)+'"><button class="btn gold" data-action="copy-order-link">Link kopieren</button><button class="btn outline" data-action="open-order-form">Formular öffnen</button></div></div>'+
+ '<div class="stats">'+stat("🛒","OFFENE BESTELLUNGEN",open.length)+stat("$","OFFENER BESTELLWERT",money(totalOpen))+stat("↗","IN BEARBEITUNG",rows.filter(x=>x.status==="In Bearbeitung").length)+stat("✓","LETZTE BESTELLUNGEN",recent.length)+'</div>'+
+ '<div class="orderssection"><div class="sectiontitle"><div><div class="eyebrow">AKTUELL</div><h2>Offene Bestellungen</h2><p>Neue Bestellungen und Bestellungen in Bearbeitung.</p></div></div>'+
+ '<div class="ordergrid">'+(open.map(card).join("")||'<div class="panel" style="text-align:center;padding:28px"><h2 style="margin:0 0 8px">Keine Bestellung verfügbar</h2><p class="muted" style="margin:0">Aktuell liegt keine offene Bestellung vor. Der Kunden-Bestelllink steht oben bereit und kann direkt kopiert und weitergegeben werden.</p></div>')+'</div></div>'+
+ '<div class="orderssection"><div class="sectiontitle"><div><div class="eyebrow">ARCHIV</div><h2>Letzte Bestellungen</h2><p>Abgeschlossene Bestellungen bleiben als Nachweis erhalten.</p></div></div>'+
+ '<div class="ordergrid">'+(recent.map(card).join("")||'<div class="panel"><p class="muted">Keine Bestellungen hinterlegt</p></div>')+'</div></div>';
 }
+
 async function orderModal(id){
- const {data:order,error}=await supabaseClient.from("vineyard_orders").select("id,order_number,status,customer_name,employee_id,total,commission_rate,commission_amount,created_at,completed_at").eq("id",id).single();
+ const {data:order,error}=await supabaseClient.from("vineyard_orders").select("id,order_number,status,customer_name,customer_email,customer_phone,customer_address,customer_note,employee_id,total,commission_rate,commission_amount,delivery_date,delivery_requested,delivery_fee,created_at,accepted_at,completed_at").eq("id",id).single();
  if(error)throw error;
  const {data:items=[],error:ie}=await supabaseClient.from("vineyard_order_items").select("item_name,unit,quantity,unit_price,line_total").eq("order_id",id).order("created_at");
  if(ie)throw ie;
  const employee=order.employee_id?await supabaseClient.from("vineyard_profiles").select("display_name").eq("user_id",order.employee_id).maybeSingle():{data:null};
+ const date=order.delivery_date?new Date(order.delivery_date+"T00:00:00").toLocaleDateString("de-DE"):"—";
  const rows=items.map(x=>'<tr><td>'+esc(x.item_name)+'</td><td>'+Number(x.quantity).toLocaleString("de-DE")+' '+esc(x.unit)+'</td><td>'+money(x.unit_price)+'</td><td>'+money(x.line_total)+'</td></tr>').join("");
- $("#modalroot").innerHTML='<div class="modalback"><div class="modal"><div class="modalhead"><b>Lieferung · '+esc(order.order_number)+'</b><button type="button" id="x">×</button></div><div class="grid2"><div class="panel"><b>Empfänger</b><p>Großhändler</p><b>Lieferant</b><p>'+esc(employee.data?.display_name||"—")+'</p><b>Datum</b><p>'+esc(new Date(order.created_at).toLocaleString("de-DE"))+'</p></div><div class="panel"><b>Verkaufspreis</b><p>'+money(order.total)+'</p><b>Provisionssatz</b><p>'+Number(order.commission_rate||0).toLocaleString("de-DE")+'%</p><b>Provision</b><p>'+money(order.commission_amount||0)+'</p></div></div><div class="tablewrap"><table><thead><tr><th>Produkt</th><th>Menge</th><th>Einzelpreis</th><th>Gesamt</th></tr></thead><tbody>'+rows+'</tbody></table></div><div class="publicTotal"><span>Lieferwert</span><b>'+money(order.total)+'</b></div><div class="actions"><button type="button" class="btn outline" id="closeOrderModal">Schließen</button></div></div></div>';
+ $("#modalroot").innerHTML='<div class="modalback"><div class="modal"><div class="modalhead"><b>Bestellung · '+esc(order.order_number)+'</b><button type="button" id="x">×</button></div><div class="grid2"><div class="panel"><b>Kunde</b><p>'+esc(order.customer_name)+'</p><b>Lieferdatum</b><p>'+esc(date)+'</p><b>Lieferung</b><p>'+(order.delivery_requested?"Ja · +10% Liefergebühr":"Nein")+'</p></div><div class="panel"><b>Status</b><p>'+badge(order.status)+'</p><b>Mitarbeiter</b><p>'+esc(employee.data?.display_name||"Noch nicht zugewiesen")+'</p><b>Provision</b><p>'+money(order.commission_amount||0)+'</p></div></div><div class="tablewrap"><table><thead><tr><th>Produkt</th><th>Menge</th><th>Einzelpreis</th><th>Gesamt</th></tr></thead><tbody>'+rows+'</tbody></table></div><div class="publicTotal"><span>Gesamtsumme</span><b>'+money(order.total)+'</b></div><p class="muted">'+esc(order.customer_note||"")+'</p><div class="actions"><button type="button" class="btn outline" id="closeOrderModal">Schließen</button></div></div></div>';
  const close=()=>$("#modalroot").innerHTML="";
  $("#x").onclick=$("#closeOrderModal").onclick=close;
 }
+async function updateOrderStatus(id,status){
+ const button=document.querySelector('[data-order-status="'+id+'|'+status+'"]');
+ if(button)button.disabled=true;
+ try{
+  const {error}=await supabaseClient.rpc("vineyard_update_order_status",{p_order_id:id,p_status:status});
+  if(error)throw error;
+  await auditLog(status==="In Bearbeitung"?"Bestellung angenommen":"Bestellung abgeschlossen","order",id,{status});
+  if(status==="Bestellung abgeschlossen")alert("Bestellung abgeschlossen. Lagerbestand und Kasse wurden automatisch angepasst.");
+  await render();
+ }catch(err){alert(err.message||String(err))}finally{if(button)button.disabled=false}
+}
 async function deleteOrder(id){
- if(!confirm("Diese Lieferung wirklich löschen? Lagerbestand und Kassenbuchung werden zurückgebucht."))return;
- const {error}=await supabaseClient.rpc("vineyard_delete_delivery",{p_order_id:id});
+ if(!confirm("Diese Bestellung wirklich löschen?"))return;
+ const {error}=await supabaseClient.rpc("vineyard_delete_order",{p_order_id:id});
  if(error)throw error;
- await auditLog("Lieferung gelöscht","delivery",id,{});
+ await auditLog("Bestellung gelöscht","order",id,{});
  await render();
 }
 async function admin(){
@@ -448,7 +470,7 @@ function errorBox(t){return '<div class="panel"><b>Fehler</b><p class="muted">'+
 
 async function render(){
  if(page==="recipes"||page==="production")page="dashboard";
- let content=page==="dashboard"?await dashboard():page==="invoices"?await invoices():page==="orders"?await orders():page==="customers"?await customers():page==="inventory"?await inventory():page==="recipes"?await recipes():page==="production"?await production():page==="purchase"?await trades("Einkauf"):page==="sales"?await trades("Verkauf"):page==="trades"?await trades("all"):page==="cash"?await cash():page==="employees"?await employees():page==="appointments"?await appointments():page==="commission"?await commissions():page==="admin"?await admin():await dashboard();
+ let content=page==="dashboard"?await dashboard():page==="invoices"?await invoices():page==="orders"?await orders():page==="inventory"?await inventory():page==="recipes"?await recipes():page==="production"?await production():page==="purchase"?await trades("Einkauf"):page==="sales"?await trades("Verkauf"):page==="trades"?await trades("all"):page==="cash"?await cash():page==="employees"?await employees():page==="appointments"?await appointments():page==="commission"?await commissions():page==="admin"?await admin():await dashboard();
  shell(content);bind();
  if(page==="orders")startOrderRealtime();else stopOrderRealtime();
 }
@@ -574,10 +596,12 @@ async function action(a,actionButton){
  if(a==="edit-employee"){const id=actionButton?.dataset.employeeId;if(!id)throw Error("Mitarbeiter konnte nicht ermittelt werden.");await employeeModal(id);return}
  if(a==="delete-employee"){const id=actionButton?.dataset.employeeId;await deleteEmployee(id);return}
  if(a==="newinvoice"){await invoiceModal();return}
- if(a==="newdelivery"){await deliveryModal();return}
- if(a==="newcustomer"){await customerModal();return}
- if(a==="edit-customer"){await customerModal(actionButton?.dataset.customerId);return}
- if(a==="toggle-customer"){await toggleCustomer(actionButton?.dataset.customerId,actionButton?.dataset.active==="true");return}
+ if(a==="copy-order-link"){const link=new URL("./bestellung.html",location.href).href;try{await navigator.clipboard.writeText(link);alert("Kunden-Bestelllink kopiert.")}catch(_){prompt("Kunden-Bestelllink",link)}return}
+ if(a==="open-order-form"){window.open(new URL("./bestellung.html",location.href).href,"_blank");return}
+ 
+ 
+ 
+ 
 
 }
 
