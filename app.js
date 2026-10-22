@@ -770,7 +770,7 @@ async function invoiceModal(id){
  $("#modalroot").innerHTML='<div class="modalback"><div class="modal"><div class="modalhead"><b>Rechnung wird vorbereitet</b></div><p class="muted">Lagerartikel und Mitarbeiter werden geladen…</p></div></div>';
  const [{data:inventory=[],error},{data:existingInvoice},{data:employees=[],error:ee},{data:customerRows=[],error:ce}]=await Promise.all([
   supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category,purchase_price,sale_price").order("category").order("item_name"),
-  id?supabaseClient.from("vineyard_invoices").select("id,invoice_type,partner_name,status,employee_id,commission_rate,commission_amount").eq("id",id).single():Promise.resolve({data:null}),
+  id?supabaseClient.from("vineyard_invoices").select("id,invoice_type,partner_name,status,employee_id,commission_rate,commission_amount,customer_id").eq("id",id).single():Promise.resolve({data:null}),
   supabaseClient.rpc("vineyard_order_employees"),
   supabaseClient.from("vineyard_customers").select("id,name,discount_percent,active").eq("active",true).order("name")
  ]);
@@ -848,6 +848,8 @@ async function invoiceModal(id){
    if(rate&&!employeeEl.value)throw Error("Für Produktion, Verkauf und Bestellung/Lieferung muss ein Mitarbeiter ausgewählt werden.");
    const r=await supabaseClient.rpc("vineyard_save_invoice",{p_invoice_id:id||null,p_type:typeEl.value,p_partner_name:partner,p_status:statusEl.value,p_employee_id:employeeEl.value||null,p_items:rows});
    if(r.error)throw r.error;
+   const savedInvoiceId=id||r.data?.id;
+   if(savedInvoiceId){const {error:customerSaveError}=await supabaseClient.from("vineyard_invoices").update({customer_id:customerEl.value||null}).eq("id",savedInvoiceId);if(customerSaveError)throw customerSaveError;}
    await auditLog(id?"Rechnung geändert":"Rechnung erstellt","invoice",id||null,{invoice_type:typeEl.value,partner_name:partner,status:statusEl.value,items:rows});
    close();await render();
   }catch(err){alert(err.message||String(err))}finally{b.disabled=false}
@@ -977,6 +979,7 @@ async function tradeModal(id,defaultType=null){
    const args=id?{p_trade_id:id,p_trade_type:typeEl.value,p_inventory_id:itemEl.value,p_quantity:quantity}:{p_trade_type:typeEl.value,p_inventory_id:itemEl.value,p_quantity:quantity};
    const {error}=await supabaseClient.rpc(rpc,args);
    if(error)throw error;
+   if(typeEl.value==="Verkauf"){const {error:customerSaveError}=await supabaseClient.from("vineyard_trades").update({customer_id:$("#tradeform [name=customer_id]").value||null}).eq("id",id||"");if(customerSaveError)throw customerSaveError;}
    await auditLog(id?"Ein-/Verkauf geändert":"Ein-/Verkauf gebucht","trade",id||null,{trade_type:typeEl.value,inventory_id:itemEl.value,quantity});
    close();
    await render();
