@@ -1007,9 +1007,9 @@ async function deliveryModal(){
  if(!products.length)throw Error("Lege zuerst mindestens ein Produkt im Lager an.");
  const employeeOptions=employees.map(x=>({value:x.user_id,label:x.display_name}));
  const productOptions=products.map(x=>({value:x.id,label:x.item_name}));
- const customerOptions=[{value:"",label:"Kein Kunde / Standardpreis"},...customersList.map(x=>({value:x.id,label:x.name+" (−"+Number(x.discount_percent).toLocaleString("de-DE")+" %)"}))];
+ const customerOptions=[{value:"",label:"Privatkunde"},...customersList.map(x=>({value:x.id,label:x.name+" (−"+Number(x.discount_percent).toLocaleString("de-DE")+" %)"}))];
  modal("Lieferung an Großhändler",
- '<div class="recipehint"><b>Hinweis:</b> Wähle einen Kunden aus, um dessen Rabatt automatisch vom regulären Produktpreis abzuziehen. Die Provision wird wie bisher in der Provisionstabelle geführt.</div>'+
+ '<div class="recipehint"><b>Hinweis:</b> Standardmäßig ist „Privatkunde“ ausgewählt. Wähle einen angelegten Kunden aus, um dessen Rabatt automatisch vom regulären Produktpreis abzuziehen. Die Provision wird wie bisher in der Provisionstabelle geführt.</div>'+
  selectField("Wer hat geliefert?","employee_id",employeeOptions,profile?.user_id||employees[0].user_id)+
  selectField("Kunde","customer_id",customerOptions,"")+
  selectField("Produkt","inventory_id",productOptions,products[0].id)+
