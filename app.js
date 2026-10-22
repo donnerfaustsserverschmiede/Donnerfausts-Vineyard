@@ -977,9 +977,9 @@ async function tradeModal(id,defaultType=null){
    if(!Number.isFinite(quantity)||quantity<=0)throw Error("Die Menge muss größer als 0 sein.");
    const rpc=id?"vineyard_update_trade":"vineyard_create_trade";
    const args=id?{p_trade_id:id,p_trade_type:typeEl.value,p_inventory_id:itemEl.value,p_quantity:quantity}:{p_trade_type:typeEl.value,p_inventory_id:itemEl.value,p_quantity:quantity};
-   const {error}=await supabaseClient.rpc(rpc,args);
+   const {data:tradeSaved,error}=await supabaseClient.rpc(rpc,args);
    if(error)throw error;
-   if(typeEl.value==="Verkauf"){const {error:customerSaveError}=await supabaseClient.from("vineyard_trades").update({customer_id:$("#tradeform [name=customer_id]").value||null}).eq("id",id||"");if(customerSaveError)throw customerSaveError;}
+   if(typeEl.value==="Verkauf"){const tradeId=id||tradeSaved?.id;if(tradeId){const {error:customerSaveError}=await supabaseClient.from("vineyard_trades").update({customer_id:$("#tradeform [name=customer_id]").value||null}).eq("id",tradeId);if(customerSaveError)throw customerSaveError;}}
    await auditLog(id?"Ein-/Verkauf geändert":"Ein-/Verkauf gebucht","trade",id||null,{trade_type:typeEl.value,inventory_id:itemEl.value,quantity});
    close();
    await render();
