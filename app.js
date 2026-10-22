@@ -19,8 +19,22 @@ const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&
 const money=n=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format(Number(n)||0);
 const dateTime=()=>new Date().toLocaleString("de-DE");
 let profile=null, role=null, page="dashboard";
-let presenceChannel=null, onlineCount=0, onlineNames=[], orderRealtimeChannel=null;
+let presenceChannel=null, onlineCount=0, onlineNames=[], orderRealtimeChannel=null, inventoryRealtimeChannel=null;
 
+function startInventoryRealtime(){
+ try{
+  if(inventoryRealtimeChannel||!supabaseClient?.channel)return;
+  const channel=supabaseClient.channel("donnerfaust-vineyards-inventory-live");
+  channel.on("postgres_changes",{event:"*",schema:"public",table:"vineyard_inventory"},()=>{
+   if(["inventory","dashboard","cash","commission","trades","purchase","sales"].includes(page))void render();
+  });
+  channel.on("postgres_changes",{event:"*",schema:"public",table:"vineyard_cashbook"},()=>{
+   if(["dashboard","cash","commission"].includes(page))void render();
+  });
+  channel.subscribe();
+  inventoryRealtimeChannel=channel;
+ }catch(err){console.warn("Lager-Liveaktualisierung konnte nicht gestartet werden:",err)}
+}
 function startOrderRealtime(){
  try{
   if(page!=="orders"||orderRealtimeChannel||!supabaseClient?.channel)return;
@@ -472,6 +486,7 @@ async function render(){
  if(page==="recipes"||page==="production")page="dashboard";
  let content=page==="dashboard"?await dashboard():page==="invoices"?await invoices():page==="orders"?await orders():page==="inventory"?await inventory():page==="recipes"?await recipes():page==="production"?await production():page==="purchase"?await trades("Einkauf"):page==="sales"?await trades("Verkauf"):page==="trades"?await trades("all"):page==="cash"?await cash():page==="employees"?await employees():page==="appointments"?await appointments():page==="commission"?await commissions():page==="admin"?await admin():await dashboard();
  shell(content);bind();
+ startInventoryRealtime();
  if(page==="orders")startOrderRealtime();else stopOrderRealtime();
 }
 function bindInventoryRows(){ $$("[data-edit-item]").forEach(b=>b.onclick=()=>itemModal(b.dataset.editItem)); $$("[data-delete-item]").forEach(b=>b.onclick=()=>deleteItem(b.dataset.deleteItem)); }
