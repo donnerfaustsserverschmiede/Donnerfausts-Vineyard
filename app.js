@@ -112,6 +112,7 @@ function startPresence(){
 const NAV=[
 ["dashboard","⌂","Übersicht","dashboard"],
 ["orders","🛒","BESTELLUNGEN","orders_manage"],
+["customers","♙","Kunden","orders_manage"],
 
 ["inventory","▦","Lager","inventory_view"],
 ["purchase","↘","Einkauf","trade_edit"],
@@ -186,7 +187,7 @@ function shell(content){
  const switchEmployee=$("#switchEmployee");
  if(switchEmployee) switchEmployee.addEventListener("click",async e=>{e.preventDefault();if(presenceChannel){try{await supabaseClient.removeChannel(presenceChannel)}catch(_){}presenceChannel=null;}stopOrderRealtime();const token=sessionStorage.getItem("vineyard_employee_session")||"";if(token){try{await supabaseClient.rpc("vineyard_revoke_employee_session",{p_token:token})}catch(_){}}sessionStorage.removeItem("vineyard_employee_session");sessionStorage.removeItem("vineyard_employee_id");currentEmployeeId="";profile=null;role=null;await selectEmployee(true)});
 }
-function pageTitle(){return ({dashboard:"Übersicht",invoices:"Rechnungen",orders:"Bestellungen",inventory:"Lagerübersicht",purchase:"Einkauf",sales:"Verkauf",cash:"Kasse",employees:"Mitarbeiter",appointments:"Termine",commission:"Provision",admin:"Administration"})[page]||"Übersicht"}
+function pageTitle(){return ({dashboard:"Übersicht",customers:"Kunden",invoices:"Rechnungen",orders:"Bestellungen",inventory:"Lagerübersicht",purchase:"Einkauf",sales:"Verkauf",cash:"Kasse",employees:"Mitarbeiter",appointments:"Termine",commission:"Provision",admin:"Administration"})[page]||"Übersicht"}
 function initials(n){return String(n||"DF").split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase()}
 function stat(icon,label,value){return '<div class="stat"><span class="icon">'+icon+'</span><div><small>'+label+"</small><b>"+value+"</b></div></div>"}
 function intro(k,h,p,action,label){return '<div class="intro"><div><div class="eyebrow">'+k+"</div><h1>"+h+"</h1><p>"+p+"</p></div>"+(action?'<button type="button" class="btn gold" data-action="'+action+'">'+label+"</button>":"")+"</div>"}
@@ -484,7 +485,7 @@ function errorBox(t){return '<div class="panel"><b>Fehler</b><p class="muted">'+
 
 async function render(){
  if(page==="recipes"||page==="production")page="dashboard";
- let content=page==="dashboard"?await dashboard():page==="invoices"?await invoices():page==="orders"?await orders():page==="inventory"?await inventory():page==="recipes"?await recipes():page==="production"?await production():page==="purchase"?await trades("Einkauf"):page==="sales"?await trades("Verkauf"):page==="trades"?await trades("all"):page==="cash"?await cash():page==="employees"?await employees():page==="appointments"?await appointments():page==="commission"?await commissions():page==="admin"?await admin():await dashboard();
+ let content=page==="dashboard"?await dashboard():page==="invoices"?await invoices():page==="orders"?await orders():page==="customers"?await customers():page==="inventory"?await inventory():page==="recipes"?await recipes():page==="production"?await production():page==="purchase"?await trades("Einkauf"):page==="sales"?await trades("Verkauf"):page==="trades"?await trades("all"):page==="cash"?await cash():page==="employees"?await employees():page==="appointments"?await appointments():page==="commission"?await commissions():page==="admin"?await admin():await dashboard();
  shell(content);bind();
  startInventoryRealtime();
  if(page==="orders")startOrderRealtime();else stopOrderRealtime();
