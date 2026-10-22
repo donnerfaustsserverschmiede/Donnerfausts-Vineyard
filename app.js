@@ -768,13 +768,15 @@ async function deleteRecipe(id){
 }
 async function invoiceModal(id){
  $("#modalroot").innerHTML='<div class="modalback"><div class="modal"><div class="modalhead"><b>Rechnung wird vorbereitet</b></div><p class="muted">Lagerartikel und Mitarbeiter werden geladen…</p></div></div>';
- const [{data:inventory=[],error},{data:existingInvoice},{data:employees=[],error:ee}]=await Promise.all([
+ const [{data:inventory=[],error},{data:existingInvoice},{data:employees=[],error:ee},{data:customerRows=[],error:ce}]=await Promise.all([
   supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category,purchase_price,sale_price").order("category").order("item_name"),
   id?supabaseClient.from("vineyard_invoices").select("id,invoice_type,partner_name,status,employee_id,commission_rate,commission_amount").eq("id",id).single():Promise.resolve({data:null}),
-  supabaseClient.rpc("vineyard_order_employees")
+  supabaseClient.rpc("vineyard_order_employees"),
+  supabaseClient.from("vineyard_customers").select("id,name,discount_percent,active").eq("active",true).order("name")
  ]);
  if(error)throw error;
  if(ee)throw ee;
+ if(ce)throw ce;
  if(id&&!existingInvoice)throw Error("Rechnung nicht gefunden.");
  if(!inventory.length)throw Error("Lege zuerst Artikel im Lager an. Nur dort hinterlegte Artikel können auf Rechnungen ausgewählt werden.");
  const typeOptions=[
@@ -796,6 +798,7 @@ async function invoiceModal(id){
  selectField("Handelsvorgang","invoice_type",typeOptions,existingInvoice?.invoice_type||"Verkauf")+
  selectField("Mitarbeiter / Provision","employee_id",employees.map(x=>({value:x.user_id,label:x.display_name})),defaultEmployee)+
  selectField("Status","status",[{value:"Offen",label:"Offen"},{value:"Bezahlt",label:"Bezahlt"},{value:"Storniert",label:"Storniert"}],existingInvoice?.status||"Offen")+
+ selectField("KUNDE","customer_id",[{value:"",label:"Privatkunde"},...customerRows.map(k=>({value:k.id,label:k.name+" (−"+Number(k.discount_percent||0).toLocaleString("de-DE")+" %)"}))],existingInvoice?.customer_id||"")+ 
  field("Handelspartner","partner_name","text",existingInvoice?.partner_name||"",true)+
  '<div class="recipeformhead"><b>Gehandelte Positionen</b><button type="button" class="mini gold" id="addinvoiceitem">+ Position</button></div><div id="invoiceitemsform"></div>'+
  '<div class="invoiceTotal" id="invoiceTotal"></div><div class="invoiceCommission" id="invoiceCommission"></div>'+
@@ -805,6 +808,8 @@ async function invoiceModal(id){
  const typeEl=$("#invoiceform [name=invoice_type]");
  const employeeEl=$("#invoiceform [name=employee_id]");
  const statusEl=$("#invoiceform [name=status]");
+ const customerEl=$("#invoiceform [name=customer_id]");
+ customerEl.onchange=()=>{const k=customerRows.find(x=>x.id===customerEl.value);if(k)$("#invoiceform [name=partner_name]").value=k.name;else $("#invoiceform [name=partner_name]").value="Privatkunde"};
  const commissionRate=type=>type==="Produktion"?10:type==="Verkauf"?20:type==="Bestellung"?30:0;
  const draw=()=>{
   $("#invoiceitemsform").innerHTML=rows.map((r,n)=>'<div class="invoiceformrow"><select data-ii="'+n+'" class="invoiceitem">'+inventory.map(x=>'<option value="'+esc(x.id)+'" '+(x.id===r.inventory_id?"selected":"")+'>'+esc(x.item_name)+' · '+esc(x.unit)+'</option>').join("")+'</select><input data-iq="'+n+'" class="invoicequantity" type="number" min="0.0001" step="any" value="'+esc(r.quantity)+'" required><input data-ip="'+n+'" class="invoiceprice" type="number" min="0" step="0.01" value="'+esc(r.unit_price)+'" required><button type="button" class="mini" data-remove-ii="'+n+'">×</button></div>').join("");
@@ -914,12 +919,14 @@ async function stockModal(id=null,mode=null){
 }
 
 async function tradeModal(id,defaultType=null){
- const [{data:items=[],error:ie},{data:existing,error:te}]=await Promise.all([
+ const [{data:items=[],error:ie},{data:existing,error:te},{data:customerRows=[],error:ce}]=await Promise.all([
   supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category,purchase_price,sale_price,quantity").order("category").order("item_name"),
-  id?supabaseClient.from("vineyard_trades").select("*").eq("id",id).single():Promise.resolve({data:null,error:null})
+  id?supabaseClient.from("vineyard_trades").select("*").eq("id",id).single():Promise.resolve({data:null,error:null}),
+  supabaseClient.from("vineyard_customers").select("id,name,discount_percent,active").eq("active",true).order("name")
  ]);
  if(ie)throw ie;
  if(te)throw te;
+ if(ce)throw ce;
  if(id&&!existing)throw Error("Handelsvorgang nicht gefunden.");
  const type=existing?.trade_type||defaultType||"Einkauf";
  const initialItems=items.filter(x=>x.category===(type==="Einkauf"?"Zutaten":"Produkte"));
@@ -932,6 +939,7 @@ async function tradeModal(id,defaultType=null){
  const selected=existing?.inventory_id||initialItems[0].id;
  $("#modalroot").innerHTML='<div class="modalback"><div class="modal tradeModal"><div class="modalhead"><b>'+(id?"Ein-/Verkauf bearbeiten":"Ein- und Verkauf")+'</b><button id="x">×</button></div><form id="tradeform">'+
  selectField("Ein- oder Verkauf","trade_type",[{value:"Einkauf",label:"Einkauf"},{value:"Verkauf",label:"Verkauf"}],type)+
+ (type==="Verkauf"?selectField("KUNDE","customer_id",[{value:"",label:"Privatkunde"},...customerRows.map(k=>({value:k.id,label:k.name+" (−"+Number(k.discount_percent||0).toLocaleString("de-DE")+" %)"}))],existing?.customer_id||""):"")+
  '<label>Was wurde ein/verkauft?<select id="trade_inventory" name="inventory_id">'+optionHtml(type,selected)+'</select></label>'+
  field("Menge","quantity","number",existing?.quantity??1,true)+
  '<div class="tradeprice"><div><span>PREIS</span><b id="tradeTotal">'+money(existing?.total||0)+'</b><small id="tradeUnitPrice"></small></div><div class="tradeformula" id="tradeFormula"></div></div>'+
