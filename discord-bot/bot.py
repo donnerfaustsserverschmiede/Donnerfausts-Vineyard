@@ -264,12 +264,32 @@ async def on_resumed() -> None:
     log.info("Discord-Verbindung wiederhergestellt.")
 
 
+async def health_check(request: aiohttp.web.Request) -> aiohttp.web.Response:
+    return aiohttp.web.Response(text="Hausbutler Steven is running", status=200)
+
+
 async def main() -> None:
     missing = required_settings()
     if missing:
         raise RuntimeError("Fehlende Render-Umgebungsvariablen: " + ", ".join(missing))
-    async with bot:
-        await bot.start(DISCORD_TOKEN)
+
+    # Render currently hosts this process as a free Web Service. Expose a tiny
+    # health endpoint so Render detects an open port while the Discord bot runs.
+    app = aiohttp.web.Application()
+    app.router.add_get("/", health_check)
+    app.router.add_get("/health", health_check)
+    runner = aiohttp.web.AppRunner(app)
+    await runner.setup()
+    port = int(os.getenv("PORT", "10000"))
+    site = aiohttp.web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    log.info("Health endpoint aktiv auf Port %s.", port)
+
+    try:
+        async with bot:
+            await bot.start(DISCORD_TOKEN)
+    finally:
+        await runner.cleanup()
 
 
 if __name__ == "__main__":
