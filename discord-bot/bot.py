@@ -160,7 +160,7 @@ def format_order_message(order: dict[str, Any], items: list[dict[str, Any]], emp
         name = str(item.get("item_name") or "Produkt").strip()
         quantity = item.get("quantity", "?")
         unit = str(item.get("unit") or "").strip()
-        qty_text = str(quantity).rstrip("0").rstrip(".") if isinstance(quantity, float) else str(quantity)
+        qty_text = format(quantity, "g") if isinstance(quantity, (int, float)) else str(quantity)
         item_lines.append(f"• {name} × {qty_text}{(' ' + unit) if unit else ''}")
     if not item_lines:
         item_lines = ["• Keine Produktpositionen gefunden"]
