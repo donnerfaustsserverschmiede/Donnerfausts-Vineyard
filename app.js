@@ -891,7 +891,7 @@ async function invoiceModal(id){
   if(ie)throw ie;
   existingItems=its||[];
  }
- const sellableInventory=inventory.filter(x=>x.category!=="Produkte"||x.is_available===true||existingItems.some(e=>String(e.inventory_id)===String(x.id)));
+ const sellableInventory=inventory.filter(x=>x.category!=="Produkte"||x.is_available!==false||existingItems.some(e=>String(e.inventory_id)===String(x.id)));
  const initialInvoiceType=existingInvoice?.invoice_type||"Verkauf";
  const initialInventory=(initialInvoiceType==="Verkauf"||initialInvoiceType==="Bestellung"?sellableInventory:inventory)[0]||inventory[0];
  const rows=existingItems.length?existingItems.map(x=>({inventory_id:x.inventory_id,quantity:x.quantity,unit_price:x.unit_price})):[{inventory_id:initialInventory.id,quantity:1,unit_price:0}];
@@ -938,8 +938,8 @@ async function invoiceModal(id){
   $$(".invoiceformrow [data-remove-ii]").forEach(b=>b.onclick=()=>{rows.splice(Number(b.dataset.removeIi),1);if(!rows.length)rows.push({inventory_id:inventory[0].id,quantity:1,unit_price:defaultPrice(inventory[0],typeEl.value)});draw()});
   refresh();
  };
- $("#addinvoiceitem").onclick=()=>{const item=inventory[0];rows.push({inventory_id:item.id,quantity:1,unit_price:defaultPrice(item,typeEl.value)});draw()};
- typeEl.onchange=()=>{rows.forEach(r=>{const item=inventory.find(x=>x.id===r.inventory_id);r.unit_price=defaultPrice(item,typeEl.value)});draw()};
+ $("#addinvoiceitem").onclick=()=>{const source=(typeEl.value==="Verkauf"||typeEl.value==="Bestellung")?sellableInventory:inventory;const item=source[0];if(!item){alert("Für diesen Vorgang sind aktuell keine verfügbaren Artikel vorhanden.");return}rows.push({inventory_id:item.id,quantity:1,unit_price:defaultPrice(item,typeEl.value)});draw()};
+ typeEl.onchange=()=>{const source=(typeEl.value==="Verkauf"||typeEl.value==="Bestellung")?sellableInventory:inventory;rows.forEach(r=>{if((typeEl.value==="Verkauf"||typeEl.value==="Bestellung")&&!source.some(x=>String(x.id)===String(r.inventory_id))){r.inventory_id=source[0]?.id||""}const item=inventory.find(x=>String(x.id)===String(r.inventory_id));r.unit_price=defaultPrice(item,typeEl.value)});draw()};
  rows[0].unit_price=defaultPrice(inventory[0],existingInvoice?.invoice_type||"Verkauf");draw();
  $("#invoiceform").onsubmit=async e=>{
   e.preventDefault();const b=e.submitter;b.disabled=true;
