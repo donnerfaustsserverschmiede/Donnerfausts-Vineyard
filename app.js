@@ -338,15 +338,16 @@ async function inventory(){
  const ingredients=items.filter(x=>x.category==="Zutaten"),products=items.filter(x=>x.category==="Produkte");
  return '<div class="intro"><div><div class="eyebrow">LAGER</div><h1>Lagerbestand</h1><p>Alle Artikel und Bestandsbewegungen übersichtlich verwalten.</p></div><div class="actions">'+(canManageCatalog()?'<button type="button" class="btn gold" data-action="newitem">+ Lagerartikel</button>':'')+(can("inventory_view")?'<button type="button" class="btn outline" data-action="stockin">＋ Eingang</button><button type="button" class="btn outline" data-action="stockout">− Ausgang</button>':'')+'</div></div>'+
  '<div class="panel"><input class="fullinput" id="q" placeholder="Artikel suchen …"><div class="inventoryhint"><b>'+ingredients.length+'</b> Zutaten · <b>'+products.length+'</b> Produkte · <b>'+items.length+'</b> Artikel insgesamt</div></div>'+
- '<div class="panel inventorytablewrap"><table class="inventorytable"><thead><tr><th>Artikel</th><th>Kategorie</th><th>Bestand</th><th>Einheit</th><th>Mindestbestand</th><th>Preis</th><th class="inventoryactionshead">Aktionen</th></tr></thead><tbody id="inventoryRows">'+inventoryRows(items)+'</tbody></table></div>';
+ '<div class="panel inventorytablewrap"><table class="inventorytable"><thead><tr><th>Artikel</th><th>Kategorie</th><th>Bestand</th><th>Einheit</th><th>Mindestbestand</th><th>Preis</th><th>Verfügbarkeit</th><th class="inventoryactionshead">Aktionen</th></tr></thead><tbody id="inventoryRows">'+inventoryRows(items)+'</tbody></table></div>';
 }
 function inventoryRows(items){
  return items.map(x=>{
   const low=Number(x.quantity)<=Number(x.min_stock);
   const price=x.category==="Zutaten"?"Einkauf "+money(x.purchase_price):"Verkauf "+money(x.sale_price);
   const actions=canManageCatalog()?'<button class="mini" data-edit-item="'+x.id+'">Bearbeiten</button> <button class="mini danger" data-delete-item="'+x.id+'">Löschen</button>':'';
-  return '<tr><td><b>'+esc(x.item_name)+'</b></td><td>'+esc(x.category)+'</td><td><span class="qty '+(low?'low':'')+'">'+Number(x.quantity).toLocaleString("de-DE")+'</span></td><td>'+esc(x.unit)+'</td><td>'+Number(x.min_stock).toLocaleString("de-DE")+'</td><td>'+price+'</td><td class="inventoryactions">'+actions+'</td></tr>';
- }).join("")||'<tr><td colspan="7" class="muted">Noch keine Lagerartikel angelegt.</td></tr>';
+  const availability=x.category==="Produkte"?(canManageCatalog()?'<button type="button" class="availability-toggle '+(x.is_available?"is-available":"")+'" data-toggle-availability="'+x.id+'" data-available="'+String(!!x.is_available)+'" aria-pressed="'+String(!!x.is_available)+'"><span></span>'+(x.is_available?"Verfügbar":"Nicht verfügbar")+'</button>':(x.is_available?'<span class="badge good">Verfügbar</span>':'<span class="badge bad">Nicht verfügbar</span>')):'<span class="muted">—</span>';
+  return '<tr><td><b>'+esc(x.item_name)+'</b></td><td>'+esc(x.category)+'</td><td><span class="qty '+(low?'low':'')+'">'+Number(x.quantity).toLocaleString("de-DE")+'</span></td><td>'+esc(x.unit)+'</td><td>'+Number(x.min_stock).toLocaleString("de-DE")+'</td><td>'+price+'</td><td>'+availability+'</td><td class="inventoryactions">'+actions+'</td></tr>';
+ }).join("")||'<tr><td colspan="8" class="muted">Noch keine Lagerartikel angelegt.</td></tr>';
 }
 async function recipes(){
  const {data:rows=[],error}=await supabaseClient.from("vineyard_recipes").select("*").order("name");
@@ -559,7 +560,8 @@ async function render(){
  startInventoryRealtime();
  if(page==="orders")startOrderRealtime();else stopOrderRealtime();
 }
-function bindInventoryRows(){ $$("[data-edit-item]").forEach(b=>b.onclick=()=>itemModal(b.dataset.editItem)); $$("[data-delete-item]").forEach(b=>b.onclick=()=>deleteItem(b.dataset.deleteItem)); }
+function bindInventoryRows(){ $("[data-edit-item]").forEach(b=>b.onclick=()=>itemModal(b.dataset.editItem)); $("[data-delete-item]").forEach(b=>b.onclick=()=>deleteItem(b.dataset.deleteItem)); $("[data-toggle-availability]").forEach(b=>b.onclick=()=>toggleAvailability(b.dataset.toggleAvailability,b.dataset.available==="true")); }
+async function toggleAvailability(id,current){if(!canManageCatalog())throw Error("Du darfst die Verfügbarkeit nicht ändern.");const next=!current;const result=await supabaseClient.from("vineyard_inventory").update({is_available:next,updated_at:new Date().toISOString(),updated_by:profile?.user_id||null}).eq("id",id).eq("category","Produkte");if(result.error)throw result.error;await auditLog(next?"Produkt verfügbar geschaltet":"Produkt als nicht verfügbar markiert","inventory",id,{is_available:next});await render();}
 function bind(){
  const manualSearch=$("#manualSearch");
  if(manualSearch)manualSearch.addEventListener("input",()=>{const q=manualSearch.value.trim().toLocaleLowerCase("de");$(".manual-section").forEach(section=>{const match=!q||section.dataset.search.includes(q)||section.textContent.toLocaleLowerCase("de").includes(q);section.style.display=match?"":"none";if(q&&match)section.open=true;});});
@@ -840,7 +842,7 @@ async function deleteRecipe(id){
 async function invoiceModal(id){
  $("#modalroot").innerHTML='<div class="modalback"><div class="modal"><div class="modalhead"><b>Rechnung wird vorbereitet</b></div><p class="muted">Lagerartikel und Mitarbeiter werden geladen…</p></div></div>';
  const [{data:inventory=[],error},{data:existingInvoice},{data:employees=[],error:ee},{data:customerRows=[],error:ce}]=await Promise.all([
-  supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category,purchase_price,sale_price").order("category").order("item_name"),
+  supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category,purchase_price,sale_price,is_available").order("category").order("item_name"),
   id?supabaseClient.from("vineyard_invoices").select("id,invoice_type,partner_name,status,employee_id,commission_rate,commission_amount,customer_id").eq("id",id).single():Promise.resolve({data:null}),
   supabaseClient.rpc("vineyard_order_employees"),
   supabaseClient.from("vineyard_customers").select("id,name,discount_percent,active").eq("active",true).order("name")
@@ -862,6 +864,7 @@ async function invoiceModal(id){
   if(ie)throw ie;
   existingItems=its||[];
  }
+ const sellableInventory=inventory.filter(x=>x.category!=="Produkte"||x.is_available===true||existingItems.some(e=>String(e.inventory_id)===String(x.id)));
  const rows=existingItems.length?existingItems.map(x=>({inventory_id:x.inventory_id,quantity:x.quantity,unit_price:x.unit_price})):[{inventory_id:inventory[0].id,quantity:1,unit_price:0}];
  const defaultPrice=(item,type)=>type==="Einkauf"?Number(item?.purchase_price||0):Number(item?.sale_price||0);
  const defaultEmployee=existingInvoice?.employee_id||profile.user_id;
@@ -883,7 +886,8 @@ async function invoiceModal(id){
  customerEl.onchange=()=>{const k=customerRows.find(x=>x.id===customerEl.value);if(k)$("#invoiceform [name=partner_name]").value=k.name;else $("#invoiceform [name=partner_name]").value="Privatkunde"};
  const commissionRate=type=>type==="Produktion"?10:type==="Verkauf"?20:type==="Bestellung"?30:0;
  const draw=()=>{
-  $("#invoiceitemsform").innerHTML=rows.map((r,n)=>'<div class="invoiceformrow"><select data-ii="'+n+'" class="invoiceitem">'+inventory.map(x=>'<option value="'+esc(x.id)+'" '+(x.id===r.inventory_id?"selected":"")+'>'+esc(x.item_name)+' · '+esc(x.unit)+'</option>').join("")+'</select><input data-iq="'+n+'" class="invoicequantity" type="number" min="0.0001" step="any" value="'+esc(r.quantity)+'" required><input data-ip="'+n+'" class="invoiceprice" type="number" min="0" step="0.01" value="'+esc(r.unit_price)+'" required><button type="button" class="mini" data-remove-ii="'+n+'">×</button></div>').join("");
+  const invoiceInventory=typeEl.value==="Verkauf"||typeEl.value==="Bestellung"?sellableInventory:inventory;
+  $("#invoiceitemsform").innerHTML=rows.map((r,n)=>'<div class="invoiceformrow"><select data-ii="'+n+'" class="invoiceitem">'+invoiceInventory.map(x=>'<option value="'+esc(x.id)+'" '+(x.id===r.inventory_id?"selected":"")+'>'+esc(x.item_name)+' · '+esc(x.unit)+'</option>').join("")+'</select><input data-iq="'+n+'" class="invoicequantity" type="number" min="0.0001" step="any" value="'+esc(r.quantity)+'" required><input data-ip="'+n+'" class="invoiceprice" type="number" min="0" step="0.01" value="'+esc(r.unit_price)+'" required><button type="button" class="mini" data-remove-ii="'+n+'">×</button></div>').join("");
   const refresh=()=>{
    let sum=0,base=0;
    rows.forEach((r,n)=>{
@@ -1004,7 +1008,7 @@ async function tradeModal(id,defaultType=null){
  const type=existing?.trade_type||defaultType||"Einkauf";
  const initialItems=items.filter(x=>x.category===(type==="Einkauf"?"Zutaten":"Produkte"));
  if(!initialItems.length)throw Error(type==="Einkauf"?"Lege zuerst mindestens eine Zutat mit Einkaufspreis im Lager an.":"Lege zuerst mindestens ein Produkt mit Verkaufspreis im Lager an.");
- const optionsFor=t=>items.filter(x=>x.category===(t==="Einkauf"?"Zutaten":"Produkte"));
+ const optionsFor=t=>items.filter(x=>x.category===(t==="Einkauf"?"Zutaten":"Produkte")&&(t!=="Verkauf"||x.is_available===true||String(x.id)===String(existing?.inventory_id)));
  const optionHtml=(t,selected)=>{
   const list=optionsFor(t);
   return list.map(x=>'<option value="'+esc(x.id)+'" '+(String(selected)===String(x.id)?"selected":"")+'>'+esc(x.item_name)+' · '+esc(x.unit)+'</option>').join("");
