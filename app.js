@@ -560,8 +560,35 @@ async function render(){
  startInventoryRealtime();
  if(page==="orders")startOrderRealtime();else stopOrderRealtime();
 }
-function bindInventoryRows(){ $$("[data-edit-item]").forEach(b=>b.onclick=()=>itemModal(b.dataset.editItem)); $$("[data-delete-item]").forEach(b=>b.onclick=()=>deleteItem(b.dataset.deleteItem)); $$("[data-toggle-availability]").forEach(b=>b.onclick=()=>toggleAvailability(b.dataset.toggleAvailability,b.dataset.available==="true")); }
-async function toggleAvailability(id,current){if(!canManageCatalog())throw Error("Du darfst die Verfügbarkeit nicht ändern.");const next=!current;const result=await supabaseClient.rpc("vineyard_set_product_availability",{p_inventory_id:id,p_is_available:next});if(result.error)throw result.error;const removed=Number(result.data?.removed_from_active_orders||0);alert(next?"Produkt ist jetzt verfügbar.":("Produkt ist nicht mehr verfügbar."+(removed?" "+removed+" Bestellposition(en) wurden aus offenen Bestellungen entfernt und die Preise neu berechnet.":"")));await render();}
+function bindInventoryRows(){
+ $("[data-edit-item]").forEach(b=>b.onclick=()=>itemModal(b.dataset.editItem));
+ $("[data-delete-item]").forEach(b=>b.onclick=()=>deleteItem(b.dataset.deleteItem));
+ $("[data-toggle-availability]").forEach(b=>b.onclick=async()=>{
+  if(b.dataset.busy==="1")return;
+  const id=b.dataset.toggleAvailability;
+  const current=b.dataset.available==="true";
+  b.dataset.busy="1";b.disabled=true;
+  try{
+   await toggleAvailability(id,current);
+  }catch(error){
+   console.error("Verfügbarkeit konnte nicht geändert werden:",error);
+   alert("Die Verfügbarkeit konnte nicht gespeichert werden. "+(error?.message||"Bitte Berechtigung und Verbindung prüfen."));
+  }finally{
+   b.dataset.busy="0";
+   if(document.body.contains(b))b.disabled=false;
+  }
+ });
+}
+async function toggleAvailability(id,current){
+ if(!canManageCatalog())throw new Error("Du darfst die Verfügbarkeit nicht ändern.");
+ const next=!current;
+ const {data,error}=await supabaseClient.rpc("vineyard_set_product_availability",{p_inventory_id:id,p_is_available:next});
+ if(error)throw error;
+ if(!data||data.is_available!==next)throw new Error("Die Datenbank hat die Änderung nicht bestätigt.");
+ const removed=Number(data.removed_from_active_orders||0);
+ await render();
+ alert(next?"Produkt ist jetzt verfügbar.":"Produkt ist nicht mehr verfügbar."+(removed?" "+removed+" Bestellposition(en) wurden aus offenen Bestellungen entfernt.":""));
+}
 function bind(){
  const manualSearch=$("#manualSearch");
  if(manualSearch)manualSearch.addEventListener("input",()=>{const q=manualSearch.value.trim().toLocaleLowerCase("de");$$(".manual-section").forEach(section=>{const match=!q||section.dataset.search.includes(q)||section.textContent.toLocaleLowerCase("de").includes(q);section.style.display=match?"":"none";if(q&&match)section.open=true;});});
