@@ -140,7 +140,7 @@ function canManageRecipes(){
  const allowed=new Set(["familienoberhaupt","familienvogt","master"]);
  return isFamilyHead()||[role?.key,role?.label,profile?.role_key].some(value=>allowed.has(normalizedRole(value)));
 }
-function badge(s){const good=["Bezahlt","OK","Bestellung abgeschlossen"].includes(s);const warn=["Niedrig","Offen","Eingegangen","In Bearbeitung"].includes(s);return '<span class="badge '+(good?"good":warn?"warn":"bad")+'">'+esc(s)+"</span>"}
+function badge(s){const good=["Bezahlt","OK","Bestellung abgeschlossen"].includes(s);const warn=["Niedrig","Offen","Eingegangen","In Bearbeitung","Abhol-/Versandbereit"].includes(s);return '<span class="badge '+(good?"good":warn?"warn":"bad")+'">'+esc(s)+"</span>"}
 
 
 async function init(){
@@ -196,7 +196,7 @@ function intro(k,h,p,action,label){return '<div class="intro"><div><div class="e
 async function dashboard(){
  const [invoiceCount,orderCount]=await Promise.all([
   can("invoice_view")?supabaseClient.from("vineyard_invoices").select("id",{count:"exact",head:true}).eq("status","Offen"):Promise.resolve({count:0,error:null}),
-  supabaseClient.from("vineyard_orders").select("id",{count:"exact",head:true}).in("status",["Eingegangen","In Bearbeitung"])
+  supabaseClient.from("vineyard_orders").select("id",{count:"exact",head:true}).in("status",["Eingegangen","In Bearbeitung","Abhol-/Versandbereit"])
  ]);
  const openInvoices=invoiceCount.error?0:(invoiceCount.count||0);
  const openOrders=orderCount.error?0:(orderCount.count||0);
@@ -240,7 +240,7 @@ async function orders(){
  const customerOptions=[{value:"",label:"Privatkunde (0 % Rabatt)"},...customersList.map(k=>({value:k.id,label:k.name+" (−"+Number(k.discount_percent||0).toLocaleString("de-DE")+" %)"}))];
  const emap=Object.fromEntries(employees.map(x=>[x.user_id,x.display_name]));
  rows.forEach(x=>x.employee_name=emap[x.employee_id]||"—");
- const open=rows.filter(x=>x.status==="Eingegangen"||x.status==="In Bearbeitung");
+ const open=rows.filter(x=>["Eingegangen","In Bearbeitung","Abhol-/Versandbereit"].includes(x.status));
  const recent=rows.filter(x=>x.status==="Bestellung abgeschlossen").slice(0,10);
  const totalOpen=open.reduce((n,x)=>n+Number(x.total||0),0);
  const formLink=new URL("./bestellung.html",location.href).href;
@@ -251,7 +251,7 @@ async function orders(){
  ((x.status==="In Bearbeitung"||x.status==="Eingegangen")?'<div class="order-customer-select"><label style="display:block;margin:10px 0 5px;font-weight:700">KUNDE</label><select data-order-customer="'+x.id+'">'+customerOptions.map(o=>'<option value="'+esc(o.value)+'" '+(String(x.customer_id||"")===String(o.value)?"selected":"")+'>'+esc(o.label)+'</option>').join("")+'</select><small>Rabatt wird vom Warenwert abgezogen; Liefergebühr bleibt unverändert.</small><button class="mini gold" data-save-order-customer="'+x.id+'">Kundenwahl speichern</button></div>':"")+
  '<div class="orderactions"><button class="mini gold" data-view-order="'+x.id+'">Details</button>'+
  (x.status==="Eingegangen"?'<button class="mini gold" data-order-status="'+x.id+'|In Bearbeitung">Bestellung annehmen</button>':"")+
- (x.status==="In Bearbeitung"?'<button class="mini gold" data-order-status="'+x.id+'|Bestellung abgeschlossen">Bestellung abschließen</button>':"")+
+ (x.status==="In Bearbeitung"?'<button class="mini gold" data-order-status="'+x.id+'|Abhol-/Versandbereit">Abhol-/Versandbereit</button>':"")+(x.status==="Abhol-/Versandbereit"?'<button class="mini gold" data-order-status="'+x.id+'|Bestellung abgeschlossen">Bestellung abschließen</button>':"")+
  (x.status!=="Bestellung abgeschlossen"?'<button class="mini" data-delete-order="'+x.id+'">Löschen</button>':"")+
  '</div></div>';
  return intro("BESTELLUNGEN","Bestellungsmenü","Kunden bestellen über den öffentlichen Link. Mitarbeiter übernehmen Bestellungen und erhalten dabei 30% Provision. Beim Abschluss werden Lager und Kasse automatisch gebucht.",null,null)+
@@ -281,7 +281,8 @@ async function updateOrderStatus(id,status){
  try{
   const {error}=await supabaseClient.rpc("vineyard_update_order_status",{p_order_id:id,p_status:status});
   if(error)throw error;
-  await auditLog(status==="In Bearbeitung"?"Bestellung angenommen":"Bestellung abgeschlossen","order",id,{status});
+  await auditLog(status==="In Bearbeitung"?"Bestellung angenommen":status==="Abhol-/Versandbereit"?"Bestellung abhol-/versandbereit":"Bestellung abgeschlossen","order",id,{status});
+  if(status==="Abhol-/Versandbereit")alert("Die Bestellung ist jetzt als abhol-/versandbereit markiert. Lagerbestand und Kasse bleiben bis zum endgültigen Abschluss unverändert.");
   if(status==="Bestellung abgeschlossen")alert("Bestellung abgeschlossen. Lagerbestand und Kasse wurden automatisch angepasst.");
   await render();
  }catch(err){alert(err.message||String(err))}finally{if(button)button.disabled=false}
