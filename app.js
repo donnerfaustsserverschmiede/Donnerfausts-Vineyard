@@ -160,7 +160,7 @@ async function selectEmployee(forcePicker=true){
   sessionStorage.removeItem("vineyard_employee_session");sessionStorage.removeItem("vineyard_employee_id");currentEmployeeId="";
  }
  document.body.innerHTML=`<div class="login"><div class="loginbox"><div class="loginbrand"><div class="brandmark"><img src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"></div><h1>Donnerfaust Saloon</h1><p>Mitarbeiter auswählen</p></div><p class="muted" style="margin:18px 0">Wähle deinen Namen aus. Anschließend wird das persönliche Passwort dieses Mitarbeiters abgefragt.</p><div class="employeegrid">${employees.map(x=>'<button type="button" class="employee" data-choose-employee="'+esc(x.user_id)+'" style="text-align:left;width:100%;cursor:pointer"><div class="avatar">'+esc(initials(x.display_name))+'</div><div style="flex:1"><b>'+esc(x.display_name)+'</b><small>'+esc(x.vineyard_roles?.label||x.role_key)+'</small></div><span>›</span></button>').join("")}</div></div></div>`;
- $$("[data-choose-employee]").forEach(button=>button.addEventListener("click",async()=>{
+ $$$("[data-choose-employee]").forEach(button=>button.addEventListener("click",async()=>{
   const employee=employees.find(x=>x.user_id===button.dataset.chooseEmployee);if(!employee)return;
   button.disabled=true;
   try{
@@ -560,11 +560,11 @@ async function render(){
  startInventoryRealtime();
  if(page==="orders")startOrderRealtime();else stopOrderRealtime();
 }
-function bindInventoryRows(){ $$("[data-edit-item]").forEach(b=>b.onclick=()=>itemModal(b.dataset.editItem)); $$("[data-delete-item]").forEach(b=>b.onclick=()=>deleteItem(b.dataset.deleteItem)); $$("[data-toggle-availability]").forEach(b=>b.onclick=()=>toggleAvailability(b.dataset.toggleAvailability,b.dataset.available==="true")); }
+function bindInventoryRows(){ $$$("[data-edit-item]").forEach(b=>b.onclick=()=>itemModal(b.dataset.editItem)); $$$("[data-delete-item]").forEach(b=>b.onclick=()=>deleteItem(b.dataset.deleteItem)); $$$("[data-toggle-availability]").forEach(b=>b.onclick=()=>toggleAvailability(b.dataset.toggleAvailability,b.dataset.available==="true")); }
 async function toggleAvailability(id,current){if(!canManageCatalog())throw Error("Du darfst die Verfügbarkeit nicht ändern.");const next=!current;const result=await supabaseClient.rpc("vineyard_set_product_availability",{p_inventory_id:id,p_is_available:next});if(result.error)throw result.error;const removed=Number(result.data?.removed_from_active_orders||0);alert(next?"Produkt ist jetzt verfügbar.":("Produkt ist nicht mehr verfügbar."+(removed?" "+removed+" Bestellposition(en) wurden aus offenen Bestellungen entfernt und die Preise neu berechnet.":"")));await render();}
 function bind(){
  const manualSearch=$("#manualSearch");
- if(manualSearch)manualSearch.addEventListener("input",()=>{const q=manualSearch.value.trim().toLocaleLowerCase("de");$$(".manual-section").forEach(section=>{const match=!q||section.dataset.search.includes(q)||section.textContent.toLocaleLowerCase("de").includes(q);section.style.display=match?"":"none";if(q&&match)section.open=true;});});
+ if(manualSearch)manualSearch.addEventListener("input",()=>{const q=manualSearch.value.trim().toLocaleLowerCase("de");$$$(".manual-section").forEach(section=>{const match=!q||section.dataset.search.includes(q)||section.textContent.toLocaleLowerCase("de").includes(q);section.style.display=match?"":"none";if(q&&match)section.open=true;});});
  document.onclick=async e=>{
   const hamburger=e.target.closest?.("#hamb");
   if(hamburger){
@@ -657,22 +657,22 @@ function bind(){
   });
  }
  $("#q")?.addEventListener("input",async e=>{const {data=[]}=await supabaseClient.from("vineyard_inventory").select("*").order("category").order("item_name");const q=e.target.value.toLowerCase();$("#inventoryRows").innerHTML=inventoryRows(data.filter(x=>(x.item_name+" "+x.category+" "+x.unit).toLowerCase().includes(q)));bindInventoryRows()});
- $$("[data-stock]").forEach(b=>b.onclick=()=>stockModal(b.dataset.stock));
+ $$$("[data-stock]").forEach(b=>b.onclick=()=>stockModal(b.dataset.stock));
  bindInventoryRows();
- $$("[data-edit-recipe]").forEach(b=>b.onclick=()=>recipeModal(b.dataset.editRecipe));
- $$("[data-delete-recipe]").forEach(b=>b.onclick=()=>deleteRecipe(b.dataset.deleteRecipe));
- $$("[data-edit-trade]").forEach(b=>b.onclick=()=>tradeModal(b.dataset.editTrade));
- $$("[data-delete-trade]").forEach(b=>b.onclick=()=>deleteTrade(b.dataset.deleteTrade));
- $$("[data-edit-cash]").forEach(b=>b.onclick=()=>cashModal(b.dataset.editCash));
- $$("[data-delete-cash]").forEach(b=>b.onclick=()=>deleteCash(b.dataset.deleteCash));
- $$("[data-edit-employee]").forEach(b=>b.onclick=()=>employeeModal(b.dataset.editEmployee));
- $$("[data-share-invoice]").forEach(b=>b.onclick=()=>shareInvoice(b.dataset.shareInvoice));
- $$("[data-edit-invoice]").forEach(b=>b.onclick=()=>invoiceModal(b.dataset.editInvoice));
- $$("[data-delete-invoice]").forEach(b=>b.onclick=()=>deleteInvoice(b.dataset.deleteInvoice));
- $$("[data-view-order]").forEach(b=>b.onclick=()=>orderModal(b.dataset.viewOrder));
-  $$("[data-save-order-customer]").forEach(b=>b.onclick=async()=>{if(b.dataset.busy==="1")return;const id=b.dataset.saveOrderCustomer,select=document.querySelector('[data-order-customer="'+id+'"]');if(!select)return;b.dataset.busy="1";b.disabled=true;try{const {error}=await supabaseClient.rpc("vineyard_assign_order_customer",{p_order_id:id,p_customer_id:select.value||null});if(error)throw error;alert("Kunde zugeordnet; Rabatt und Bestellwert wurden aktualisiert.");await render()}catch(err){alert(err.message||String(err))}finally{b.dataset.busy="0";if(b.isConnected)b.disabled=false}});
- $$("[data-order-status]").forEach(b=>b.onclick=async()=>{if(b.dataset.busy==="1")return;b.dataset.busy="1";b.disabled=true;try{const parts=b.dataset.orderStatus.split("|");if(parts.length!==2||!parts[0]||!parts[1])throw Error("Ungültige Bestellaktion.");await updateOrderStatus(parts[0],parts[1]);}catch(err){console.error("Bestellung aktualisieren:",err);alert(err?.message||String(err));}finally{b.dataset.busy="0";if(b.isConnected)b.disabled=false;}});
- $$("[data-delete-order]").forEach(b=>b.onclick=()=>deleteOrder(b.dataset.deleteOrder)); $$("[data-pay-commission]").forEach(b=>b.onclick=async()=>{if(b.dataset.busy==="1")return;if(!confirm("Provision für diesen Mitarbeiter jetzt vollständig auszahlen und den offenen Wert auf 0 setzen?"))return;b.dataset.busy="1";b.disabled=true;try{const r=await supabaseClient.rpc("vineyard_pay_commission",{p_employee_id:b.dataset.payCommission});if(r.error)throw r.error;alert("Provision von "+money(r.data)+" wurde als ausgezahlt verbucht.");await render()}catch(err){alert(err.message||String(err));b.dataset.busy="";b.disabled=false}});
+ $$$("[data-edit-recipe]").forEach(b=>b.onclick=()=>recipeModal(b.dataset.editRecipe));
+ $$$("[data-delete-recipe]").forEach(b=>b.onclick=()=>deleteRecipe(b.dataset.deleteRecipe));
+ $$$("[data-edit-trade]").forEach(b=>b.onclick=()=>tradeModal(b.dataset.editTrade));
+ $$$("[data-delete-trade]").forEach(b=>b.onclick=()=>deleteTrade(b.dataset.deleteTrade));
+ $$$("[data-edit-cash]").forEach(b=>b.onclick=()=>cashModal(b.dataset.editCash));
+ $$$("[data-delete-cash]").forEach(b=>b.onclick=()=>deleteCash(b.dataset.deleteCash));
+ $$$("[data-edit-employee]").forEach(b=>b.onclick=()=>employeeModal(b.dataset.editEmployee));
+ $$$("[data-share-invoice]").forEach(b=>b.onclick=()=>shareInvoice(b.dataset.shareInvoice));
+ $$$("[data-edit-invoice]").forEach(b=>b.onclick=()=>invoiceModal(b.dataset.editInvoice));
+ $$$("[data-delete-invoice]").forEach(b=>b.onclick=()=>deleteInvoice(b.dataset.deleteInvoice));
+ $$$("[data-view-order]").forEach(b=>b.onclick=()=>orderModal(b.dataset.viewOrder));
+  $$$("[data-save-order-customer]").forEach(b=>b.onclick=async()=>{if(b.dataset.busy==="1")return;const id=b.dataset.saveOrderCustomer,select=document.querySelector('[data-order-customer="'+id+'"]');if(!select)return;b.dataset.busy="1";b.disabled=true;try{const {error}=await supabaseClient.rpc("vineyard_assign_order_customer",{p_order_id:id,p_customer_id:select.value||null});if(error)throw error;alert("Kunde zugeordnet; Rabatt und Bestellwert wurden aktualisiert.");await render()}catch(err){alert(err.message||String(err))}finally{b.dataset.busy="0";if(b.isConnected)b.disabled=false}});
+ $$$("[data-order-status]").forEach(b=>b.onclick=async()=>{if(b.dataset.busy==="1")return;b.dataset.busy="1";b.disabled=true;try{const parts=b.dataset.orderStatus.split("|");if(parts.length!==2||!parts[0]||!parts[1])throw Error("Ungültige Bestellaktion.");await updateOrderStatus(parts[0],parts[1]);}catch(err){console.error("Bestellung aktualisieren:",err);alert(err?.message||String(err));}finally{b.dataset.busy="0";if(b.isConnected)b.disabled=false;}});
+ $$$("[data-delete-order]").forEach(b=>b.onclick=()=>deleteOrder(b.dataset.deleteOrder)); $$$("[data-pay-commission]").forEach(b=>b.onclick=async()=>{if(b.dataset.busy==="1")return;if(!confirm("Provision für diesen Mitarbeiter jetzt vollständig auszahlen und den offenen Wert auf 0 setzen?"))return;b.dataset.busy="1";b.disabled=true;try{const r=await supabaseClient.rpc("vineyard_pay_commission",{p_employee_id:b.dataset.payCommission});if(r.error)throw r.error;alert("Provision von "+money(r.data)+" wurde als ausgezahlt verbucht.");await render()}catch(err){alert(err.message||String(err));b.dataset.busy="";b.disabled=false}});
 
 }
 async function action(a,actionButton){
@@ -785,7 +785,7 @@ async function recipeModal(id){
    '</select><input data-rq="'+n+'" class="recipequantity" type="number" min="0.0001" step="any" value="'+esc(r.quantity)+'" required>'+
    '<button type="button" class="mini" data-remove-ri="'+n+'">×</button></div>'
   ).join("");
-  $$("[data-remove-ri]").forEach(b=>b.onclick=()=>{
+  $$$("[data-remove-ri]").forEach(b=>b.onclick=()=>{
    if(rows.length<=1)return;
    rows.splice(Number(b.dataset.removeRi),1);
    draw();
@@ -902,13 +902,13 @@ async function invoiceModal(id){
    $("#invoiceTotal").innerHTML="<span>Rechnungssumme</span><b>"+money(sum)+"</b>";
    $("#invoiceCommission").innerHTML=rate?"<span>Mitarbeiterprovision · "+rate+"%</span><b>"+money(commission)+"</b><small>Berechnet aus dem im Lager hinterlegten Verkaufspreis.</small>":"<span>Keine Mitarbeiterprovision bei Einkauf</span>";
   };
-  $$(".invoiceitem").forEach(s=>s.onchange=()=>{const n=Number(s.dataset.ii),item=inventory.find(x=>x.id===s.value);rows[n].inventory_id=s.value;rows[n].unit_price=defaultPrice(item,typeEl.value);$("[data-ip='"+n+"']").value=rows[n].unit_price.toFixed(2);refresh()});
-  $$(".invoicequantity").forEach(i=>i.oninput=refresh);
-  $$(".invoiceprice").forEach(i=>i.oninput=refresh);
-  $$(".invoicequantity").forEach(i=>i.onchange=()=>rows[Number(i.dataset.iq)].quantity=Number(i.value));
-  $$(".invoiceprice").forEach(i=>i.onchange=()=>rows[Number(i.dataset.ip)].unit_price=Number(i.value));
-  $$(".invoiceitem").forEach(s=>{const n=Number(s.dataset.ii);if(!rows[n].unit_price){const item=inventory.find(x=>x.id===s.value);rows[n].unit_price=defaultPrice(item,typeEl.value);$("[data-ip='"+n+"']").value=rows[n].unit_price.toFixed(2)}});
-  $$(".invoiceformrow [data-remove-ii]").forEach(b=>b.onclick=()=>{rows.splice(Number(b.dataset.removeIi),1);if(!rows.length)rows.push({inventory_id:inventory[0].id,quantity:1,unit_price:defaultPrice(inventory[0],typeEl.value)});draw()});
+  $$$(".invoiceitem").forEach(s=>s.onchange=()=>{const n=Number(s.dataset.ii),item=inventory.find(x=>x.id===s.value);rows[n].inventory_id=s.value;rows[n].unit_price=defaultPrice(item,typeEl.value);$("[data-ip='"+n+"']").value=rows[n].unit_price.toFixed(2);refresh()});
+  $$$(".invoicequantity").forEach(i=>i.oninput=refresh);
+  $$$(".invoiceprice").forEach(i=>i.oninput=refresh);
+  $$$(".invoicequantity").forEach(i=>i.onchange=()=>rows[Number(i.dataset.iq)].quantity=Number(i.value));
+  $$$(".invoiceprice").forEach(i=>i.onchange=()=>rows[Number(i.dataset.ip)].unit_price=Number(i.value));
+  $$$(".invoiceitem").forEach(s=>{const n=Number(s.dataset.ii);if(!rows[n].unit_price){const item=inventory.find(x=>x.id===s.value);rows[n].unit_price=defaultPrice(item,typeEl.value);$("[data-ip='"+n+"']").value=rows[n].unit_price.toFixed(2)}});
+  $$$(".invoiceformrow [data-remove-ii]").forEach(b=>b.onclick=()=>{rows.splice(Number(b.dataset.removeIi),1);if(!rows.length)rows.push({inventory_id:inventory[0].id,quantity:1,unit_price:defaultPrice(inventory[0],typeEl.value)});draw()});
   refresh();
  };
  $("#addinvoiceitem").onclick=()=>{const item=inventory[0];rows.push({inventory_id:item.id,quantity:1,unit_price:defaultPrice(item,typeEl.value)});draw()};
