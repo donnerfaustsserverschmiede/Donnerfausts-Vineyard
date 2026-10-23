@@ -4,6 +4,7 @@ import os
 from typing import Any
 
 import aiohttp
+from aiohttp import web
 import discord
 from discord.ext import commands, tasks
 
@@ -264,8 +265,8 @@ async def on_resumed() -> None:
     log.info("Discord-Verbindung wiederhergestellt.")
 
 
-async def health_check(request: aiohttp.web.Request) -> aiohttp.web.Response:
-    return aiohttp.web.Response(text="Hausbutler Steven is running", status=200)
+async def health_check(request: web.Request) -> web.Response:
+    return web.Response(text="Hausbutler Steven is running", status=200)
 
 
 async def main() -> None:
@@ -275,13 +276,13 @@ async def main() -> None:
 
     # Render currently hosts this process as a free Web Service. Expose a tiny
     # health endpoint so Render detects an open port while the Discord bot runs.
-    app = aiohttp.web.Application()
+    app = web.Application()
     app.router.add_get("/", health_check)
     app.router.add_get("/health", health_check)
-    runner = aiohttp.web.AppRunner(app)
+    runner = web.AppRunner(app)
     await runner.setup()
     port = int(os.getenv("PORT", "10000"))
-    site = aiohttp.web.TCPSite(runner, "0.0.0.0", port)
+    site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
     log.info("Health endpoint aktiv auf Port %s.", port)
 
