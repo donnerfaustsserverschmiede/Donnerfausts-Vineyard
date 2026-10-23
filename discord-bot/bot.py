@@ -12,12 +12,14 @@ log = logging.getLogger("hausbutler-preisliste")
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN", "").strip()
 PRICE_CHANNEL_ID = int(os.getenv("DISCORD_PRICE_CHANNEL_ID", "1552767251776675945") or "1552767251776675945")
+ORDER_CHANNEL_ID = int(os.getenv("DISCORD_ORDER_CHANNEL_ID", "1563129597032403035") or "1563129597032403035")
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 POLL_SECONDS = max(30, int(os.getenv("PRICE_SYNC_SECONDS", "60")))
 CATEGORY_PRODUCTS = os.getenv("PRODUCT_CATEGORY", "Produkte")
 BRAND = os.getenv("PRICE_LIST_TITLE", "DONNERFAUST SALOON")
 MARKER_PREFIX = "DFSALON_PREISLISTE_SYNC"
+ORDER_MARKER_PREFIX = "DFSALON_BESTELLUNG"
 
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
@@ -132,12 +134,117 @@ async def sync_price_list() -> None:
             log.info("Überzählige Preisliste-Nachricht %s entfernt.", index)
 
 
+async def supabase_get(session: aiohttp.ClientSession, table: str, params: dict[str, str]) -> list[dict[str, Any]]:
+    url = f"{SUPABASE_URL}/rest/v1/{table}"
+    headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "Accept": "application/json",
+    }
+    async with session.get(url, params=params, headers=headers) as response:
+        body = await response.text()
+        if response.status >= 400:
+            raise RuntimeError(f"Supabase {table} returned HTTP {response.status}: {body[:400]}")
+        data = await response.json()
+    return data if isinstance(data, list) else []
+
+
+def format_order_message(order: dict[str, Any], items: list[dict[str, Any]], employee_name: str | None) -> str:
+    created = order.get("created_at")
+    try:
+        created_text = discord.utils.format_dt(discord.utils.parse_time(created), style="F") if created else "Unbekannt"
+    except Exception:
+        created_text = str(created or "Unbekannt")
+    item_lines = []
+    for item in items:
+        name = str(item.get("item_name") or "Produkt").strip()
+        quantity = item.get("quantity", "?")
+        unit = str(item.get("unit") or "").strip()
+        qty_text = str(quantity).rstrip("0").rstrip(".") if isinstance(quantity, float) else str(quantity)
+        item_lines.append(f"• {name} × {qty_text}{(' ' + unit) if unit else ''}")
+    if not item_lines:
+        item_lines = ["• Keine Produktpositionen gefunden"]
+    number = str(order.get("order_number") or order.get("id") or "Unbekannt")
+    customer = str(order.get("customer_name") or "Unbekannt")
+    status = str(order.get("status") or "Unbekannt")
+    employee = employee_name or "Noch nicht angenommen"
+    content = (
+        f"🛒 **BESTELLUNG {number}**\n"
+        f"**Nummer:** {number}\n"
+        f"**Name Kunde:** {customer}\n"
+        f"**Datum/Uhrzeit:** {created_text}\n"
+        f"**Bestellt:**\n" + "\n".join(item_lines) + "\n"
+        f"**Mitarbeiter:** {employee}\n"
+        f"**Status:** {status}\n\n"
+        f"-# {ORDER_MARKER_PREFIX}:{order.get('id')}"
+    )
+    return content[:1990]
+
+
+async def sync_orders() -> None:
+    channel = bot.get_channel(ORDER_CHANNEL_ID)
+    if channel is None:
+        channel = await bot.fetch_channel(ORDER_CHANNEL_ID)
+    if not hasattr(channel, "history") or not hasattr(channel, "send"):
+        raise RuntimeError("DISCORD_ORDER_CHANNEL_ID ist kein Textkanal.")
+    timeout = aiohttp.ClientTimeout(total=25)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        orders = await supabase_get(session, "vineyard_orders", {
+            "select": "id,order_number,status,customer_name,employee_id,created_at",
+            "order": "created_at.asc",
+            "limit": "1000",
+        })
+        order_items = await supabase_get(session, "vineyard_order_items", {
+            "select": "order_id,item_name,unit,quantity,created_at",
+            "order": "created_at.asc",
+            "limit": "5000",
+        })
+        employee_ids = sorted({str(o["employee_id"]) for o in orders if o.get("employee_id")})
+        employee_names: dict[str, str] = {}
+        for employee_id in employee_ids:
+            profiles = await supabase_get(session, "vineyard_profiles", {
+                "select": "user_id,display_name",
+                "user_id": f"eq.{employee_id}",
+                "limit": "1",
+            })
+            if profiles:
+                employee_names[employee_id] = str(profiles[0].get("display_name") or "Mitarbeiter")
+
+    items_by_order: dict[str, list[dict[str, Any]]] = {}
+    for item in order_items:
+        items_by_order.setdefault(str(item.get("order_id")), []).append(item)
+
+    existing: dict[str, discord.Message] = {}
+    async for message in channel.history(limit=1000):
+        if bot.user and message.author.id == bot.user.id:
+            for line in message.content.splitlines():
+                if line.startswith(f"-# {ORDER_MARKER_PREFIX}:"):
+                    existing[line.split(":", 1)[1].strip()] = message
+                    break
+
+    for order in orders:
+        order_id = str(order.get("id") or "")
+        if not order_id:
+            continue
+        employee_id = str(order.get("employee_id") or "")
+        content = format_order_message(order, items_by_order.get(order_id, []), employee_names.get(employee_id))
+        message = existing.get(order_id)
+        if message:
+            if message.content != content:
+                await message.edit(content=content, allowed_mentions=discord.AllowedMentions.none())
+                log.info("Bestellung %s im Discord-Kanal aktualisiert.", order.get("order_number", order_id))
+        else:
+            await channel.send(content, allowed_mentions=discord.AllowedMentions.none())
+            log.info("Bestellung %s in Discord veröffentlicht.", order.get("order_number", order_id))
+
+
 @tasks.loop(seconds=POLL_SECONDS)
 async def periodic_sync() -> None:
     try:
         await sync_price_list()
+        await sync_orders()
     except Exception:
-        log.exception("Synchronisierung der Discord-Preisliste fehlgeschlagen.")
+        log.exception("Synchronisierung der Preisliste oder Bestellungen fehlgeschlagen.")
 
 
 @periodic_sync.before_loop
