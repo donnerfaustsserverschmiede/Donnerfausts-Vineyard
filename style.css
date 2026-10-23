@@ -157,3 +157,14 @@ nav{padding:12px;overflow:auto}.nav{width:100%;padding:11px 12px;margin:2px 0;bo
  .order-customer-select select{font-size:14px}
  .order-customer-select .mini{width:100%;padding:9px 10px}
 }
+
+
+/* Produktverfügbarkeit im Lager */
+.availability-toggle{
+ display:inline-flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #a7a7a7;border-radius:999px;
+ background:#ececec;color:#333;font:inherit;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;
+}
+.availability-toggle span{display:inline-block;width:10px;height:10px;border-radius:50%;background:#8b8b8b;flex-shrink:0}
+.availability-toggle.is-available{background:#e3f7e9;border-color:#32a852;color:#176b32}
+.availability-toggle.is-available span{background:#22a447;box-shadow:0 0 0 3px rgba(34,164,71,.14)}
+.availability-toggle:disabled{opacity:.6;cursor:wait}
