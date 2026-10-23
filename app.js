@@ -617,6 +617,9 @@ async function action(a,actionButton){
  if(a==="edit-employee"){const id=actionButton?.dataset.employeeId;if(!id)throw Error("Mitarbeiter konnte nicht ermittelt werden.");await employeeModal(id);return}
  if(a==="delete-employee"){const id=actionButton?.dataset.employeeId;await deleteEmployee(id);return}
  if(a==="newinvoice"){await invoiceModal();return}
+ if(a==="edit-customer"){const id=actionButton?.dataset.customerId;if(!id)throw Error("Kunde konnte nicht ermittelt werden.");await customerModal(id);return}
+ if(a==="toggle-customer"){const id=actionButton?.dataset.customerId;if(!id)throw Error("Kunde konnte nicht ermittelt werden.");await toggleCustomer(id,actionButton.dataset.active==="true");return}
+ if(a==="newcustomer"){await customerModal();return}
  if(a==="copy-order-link"){const link=new URL("./bestellung.html",location.href).href;try{await navigator.clipboard.writeText(link);alert("Kunden-Bestelllink kopiert.")}catch(_){prompt("Kunden-Bestelllink",link)}return}
  if(a==="open-order-form"){window.open(new URL("./bestellung.html",location.href).href,"_blank");return}
  
