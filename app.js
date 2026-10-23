@@ -865,7 +865,9 @@ async function invoiceModal(id){
   existingItems=its||[];
  }
  const sellableInventory=inventory.filter(x=>x.category!=="Produkte"||x.is_available===true||existingItems.some(e=>String(e.inventory_id)===String(x.id)));
- const rows=existingItems.length?existingItems.map(x=>({inventory_id:x.inventory_id,quantity:x.quantity,unit_price:x.unit_price})):[{inventory_id:inventory[0].id,quantity:1,unit_price:0}];
+ const initialInvoiceType=existingInvoice?.invoice_type||"Verkauf";
+ const initialInventory=(initialInvoiceType==="Verkauf"||initialInvoiceType==="Bestellung"?sellableInventory:inventory)[0]||inventory[0];
+ const rows=existingItems.length?existingItems.map(x=>({inventory_id:x.inventory_id,quantity:x.quantity,unit_price:x.unit_price})):[{inventory_id:initialInventory.id,quantity:1,unit_price:0}];
  const defaultPrice=(item,type)=>type==="Einkauf"?Number(item?.purchase_price||0):Number(item?.sale_price||0);
  const defaultEmployee=existingInvoice?.employee_id||profile.user_id;
  $("#modalroot").innerHTML='<div class="modalback"><div class="modal invoiceModal"><div class="modalhead"><b>'+(id?"Rechnung bearbeiten":"Neue Rechnung")+'</b><button id="x">×</button></div><form id="invoiceform">'+
