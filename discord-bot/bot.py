@@ -11,7 +11,7 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 log = logging.getLogger("hausbutler-preisliste")
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN", "").strip()
-PRICE_CHANNEL_ID = int(os.getenv("DISCORD_PRICE_CHANNEL_ID", "0") or "0")
+PRICE_CHANNEL_ID = int(os.getenv("DISCORD_PRICE_CHANNEL_ID", "1552767251776675945") or "1552767251776675945")
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 POLL_SECONDS = max(30, int(os.getenv("PRICE_SYNC_SECONDS", "60")))
