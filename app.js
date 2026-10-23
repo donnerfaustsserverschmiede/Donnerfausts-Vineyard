@@ -1026,7 +1026,7 @@ async function stockModal(id=null,mode=null){
 
 async function tradeModal(id,defaultType=null){
  const [{data:items=[],error:ie},{data:existing,error:te},{data:customerRows=[],error:ce}]=await Promise.all([
-  supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category,purchase_price,sale_price,quantity").order("category").order("item_name"),
+  supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category,purchase_price,sale_price,quantity,is_available").order("category").order("item_name"),
   id?supabaseClient.from("vineyard_trades").select("*").eq("id",id).single():Promise.resolve({data:null,error:null}),
   supabaseClient.from("vineyard_customers").select("id,name,discount_percent,active").eq("active",true).order("name")
  ]);
