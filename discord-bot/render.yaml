@@ -1,0 +1,23 @@
+services:
+  - type: worker
+    name: hausbutler-steven-preisliste
+    runtime: python
+    plan: free
+    rootDir: discord-bot
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    envVars:
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: DISCORD_PRICE_CHANNEL_ID
+        sync: false
+      - key: SUPABASE_URL
+        value: https://qsyijgvikxmwmhaiulne.supabase.co
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: PRICE_SYNC_SECONDS
+        value: "60"
+      - key: PRODUCT_CATEGORY
+        value: Produkte
+      - key: PRICE_LIST_TITLE
+        value: DONNERFAUST SALOON
