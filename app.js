@@ -122,7 +122,7 @@ const NAV=[
 ["employees","♟","Mitarbeiter","employees_view"],
 ["appointments","◷","Termine","dashboard"],
 ["commission","%","Provision","invoice_view"],
-["admin","⚙","Administration","admin_access"],
+
 ["manual","▤","Betriebsanleitung","dashboard"]
 ];
 
