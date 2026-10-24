@@ -1226,10 +1226,34 @@ async function auditLog(action,entity,entityId,details){
   if(!profile?.user_id)return;
   const d={...(details||{})};
   if(!d.actor_name)d.actor_name=profile.display_name||"";
+  const event={
+   actor_id:profile.user_id,
+   actor_name:profile.display_name||"",
+   action:String(action||"Aktion"),
+   entity:String(entity||"Website"),
+   entity_id:entityId==null?null:String(entityId),
+   details:d,
+   occurred_at:new Date().toISOString()
+  };
   const {error}=await supabaseClient.from("vineyard_audit_log").insert({
-   actor_id:profile.user_id,action,entity,entity_id:entityId?String(entityId):null,details:d
+   actor_id:event.actor_id,action:event.action,entity:event.entity,entity_id:event.entity_id,details:d
   });
-  if(error)console.warn("Audit-Log konnte nicht gespeichert werden:",error.message);
+  if(error){
+   console.warn("Audit-Log konnte nicht gespeichert werden:",error.message);
+   return;
+  }
+  // Discord is an additional audit destination only; it must never block or repeat a business transaction.
+  const session=sessionStorage.getItem("vineyard_employee_session")||"";
+  if(session){
+   fetch(SUPABASE_URL+"/functions/v1/vineyard-discord-audit",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","apikey":SUPABASE_KEY,"x-employee-session":session},
+    body:JSON.stringify(event),
+    keepalive:true
+   }).then(async response=>{
+    if(!response.ok)console.warn("Discord-Audit konnte nicht zugestellt werden:",response.status);
+   }).catch(err=>console.warn("Discord-Audit:",err));
+  }
  }catch(err){console.warn("Audit-Log:",err)}
 }
 function showBootError(err){
