@@ -902,7 +902,7 @@ async function invoiceModal(id){
   if(ie)throw ie;
   existingItems=its||[];
  }
- const sellableInventory=inventory.filter(x=>x.category!=="Produkte"||x.is_available!==false||existingItems.some(e=>String(e.inventory_id)===String(x.id)));
+ const sellableInventory=inventory.filter(x=>x.category!=="Produkte"||x.is_available===true||existingItems.some(e=>String(e.inventory_id)===String(x.id)));
  const initialInvoiceType=existingInvoice?.invoice_type||"Verkauf";
  const initialInventory=(initialInvoiceType==="Verkauf"?sellableInventory:inventory)[0]||inventory[0];
  const rows=existingItems.length?existingItems.map(x=>({inventory_id:x.inventory_id,quantity:x.quantity,unit_price:x.unit_price})):[{inventory_id:initialInventory.id,quantity:1,unit_price:0}];
@@ -927,7 +927,7 @@ async function invoiceModal(id){
  const commissionRate=type=>type==="Verkauf"?20:0;
  const draw=()=>{
   const invoiceInventory=typeEl.value==="Verkauf"?sellableInventory:inventory;
-  $("#invoiceitemsform").innerHTML=rows.map((r,n)=>'<div class="invoiceformrow"><select data-ii="'+n+'" class="invoiceitem">'+invoiceInventory.map(x=>'<option value="'+esc(x.id)+'" '+(x.id===r.inventory_id?"selected":"")+'>'+esc(x.item_name)+' · '+esc(x.unit)+'</option>').join("")+'</select><input data-iq="'+n+'" class="invoicequantity" type="number" min="0.0001" step="any" value="'+esc(r.quantity)+'" required><input data-ip="'+n+'" class="invoiceprice" type="number" min="0" step="0.01" value="'+esc(r.unit_price)+'" required><button type="button" class="mini" data-remove-ii="'+n+'">×</button></div>').join("");
+  $("#invoiceitemsform").innerHTML=rows.map((r,n)=>'<div class="invoiceformrow"><select data-ii="'+n+'" class="invoiceitem">'+invoiceInventory.map(x=>'<option value="'+esc(x.id)+'" '+(x.id===r.inventory_id?"selected":"")+'>'+ (x.is_branded?"★ ":"")+esc(x.item_name)+' · '+esc(x.unit)+'</option>').join("")+'</select><input data-iq="'+n+'" class="invoicequantity" type="number" min="0.0001" step="any" value="'+esc(r.quantity)+'" required><input data-ip="'+n+'" class="invoiceprice" type="number" min="0" step="0.01" value="'+esc(r.unit_price)+'" required><button type="button" class="mini" data-remove-ii="'+n+'">×</button></div>').join("");
   const refresh=()=>{
    let sum=0,base=0;
    rows.forEach((r,n)=>{
@@ -1051,7 +1051,7 @@ async function tradeModal(id,defaultType=null){
  const optionsFor=t=>items.filter(x=>x.category===(t==="Einkauf"?"Zutaten":"Produkte")&&(t!=="Verkauf"||x.is_available===true||String(x.id)===String(existing?.inventory_id)));
  const optionHtml=(t,selected)=>{
   const list=optionsFor(t);
-  return list.map(x=>'<option value="'+esc(x.id)+'" '+(String(selected)===String(x.id)?"selected":"")+'>'+esc(x.item_name)+' · '+esc(x.unit)+'</option>').join("");
+  return list.map(x=>'<option value="'+esc(x.id)+'" '+(String(selected)===String(x.id)?"selected":"")+'>'+(x.is_branded?"★ ":"")+esc(x.item_name)+' · '+esc(x.unit)+'</option>').join("");
  };
  const selected=existing?.inventory_id||initialItems[0].id;
  $("#modalroot").innerHTML='<div class="modalback"><div class="modal tradeModal"><div class="modalhead"><b>'+(id?"Ein-/Verkauf bearbeiten":"Ein- und Verkauf")+'</b><button id="x">×</button></div><form id="tradeform">'+
