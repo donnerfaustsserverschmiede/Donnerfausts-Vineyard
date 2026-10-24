@@ -445,7 +445,7 @@ async function appointments(){
 async function commissions(){
  const [{data:employees=[],error:ee},{data:orders=[],error:oe},{data:invoices=[],error:ie},{data:payouts=[],error:pe}]=await Promise.all([
   supabaseClient.from("vineyard_profiles").select("user_id,display_name,role_key,active").eq("active",true),
-  supabaseClient.from("vineyard_orders").select("employee_id,commission_amount").eq("status","Lieferung abgeschlossen"),
+  supabaseClient.from("vineyard_orders").select("employee_id,commission_amount").in("status",["Bestellung abgeschlossen","Lieferung abgeschlossen"]),
   supabaseClient.from("vineyard_invoices").select("employee_id,commission_amount").gt("commission_amount",0).neq("status","Storniert"),
   supabaseClient.from("vineyard_commission_payouts").select("employee_id,amount,paid_at")
  ]);
