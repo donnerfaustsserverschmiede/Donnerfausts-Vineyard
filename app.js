@@ -339,16 +339,17 @@ async function inventory(){
  const ingredients=items.filter(x=>x.category==="Zutaten"),products=items.filter(x=>x.category==="Produkte");
  return '<div class="intro"><div><div class="eyebrow">LAGER</div><h1>Lagerbestand</h1><p>Alle Artikel und Bestandsbewegungen übersichtlich verwalten.</p></div><div class="actions">'+(canManageCatalog()?'<button type="button" class="btn gold" data-action="newitem">+ Lagerartikel</button>':'')+(can("inventory_view")?'<button type="button" class="btn outline" data-action="stockin">＋ Eingang</button><button type="button" class="btn outline" data-action="stockout">− Ausgang</button>':'')+'</div></div>'+
  '<div class="panel"><input class="fullinput" id="q" placeholder="Artikel suchen …"><div class="inventoryhint"><b>'+ingredients.length+'</b> Zutaten · <b>'+products.length+'</b> Produkte · <b>'+items.length+'</b> Artikel insgesamt</div></div>'+
- '<div class="panel inventorytablewrap"><table class="inventorytable"><thead><tr><th>Artikel</th><th>Kategorie</th><th>Bestand</th><th>Einheit</th><th>Mindestbestand</th><th>Preis</th><th>Verfügbarkeit</th><th class="inventoryactionshead">Aktionen</th></tr></thead><tbody id="inventoryRows">'+inventoryRows(items)+'</tbody></table></div>';
+ '<div class="panel inventorytablewrap"><table class="inventorytable"><thead><tr><th>Artikel</th><th>Kategorie</th><th>Bestand</th><th>Einheit</th><th>Mindestbestand</th><th>Preis</th><th>Verfügbarkeit</th><th class="inventoryactionshead">Aktionen</th><th aria-label="Gebrandet"></th></tr></thead><tbody id="inventoryRows">'+inventoryRows(items)+'</tbody></table></div>';
 }
 function inventoryRows(items){
  return items.map(x=>{
   const low=Number(x.quantity)<=Number(x.min_stock);
   const price=x.category==="Zutaten"?"Einkauf "+money(x.purchase_price):"Verkauf "+money(x.sale_price);
   const actions=canManageCatalog()?'<button class="mini" data-edit-item="'+x.id+'">Bearbeiten</button> <button class="mini danger" data-delete-item="'+x.id+'">Löschen</button>':'';
+  const branded=x.category==="Produkte"?(canManageCatalog()?'<button type="button" class="brand-star '+(x.is_branded?"active":"")+'" data-toggle-branded="'+x.id+'" data-branded="'+String(!!x.is_branded)+'" aria-pressed="'+String(!!x.is_branded)+'" title="'+(x.is_branded?"Gebrandet – anklicken zum Entfernen":"Als gebrandet markieren")+'">'+(x.is_branded?"★":"☆")+'</button>':(x.is_branded?'<span class="brand-star active" title="Gebrandet">★</span>':'<span class="muted">—</span>')):'<span class="muted">—</span>';
   const availability=x.category==="Produkte"?(canManageCatalog()?'<button type="button" class="availability-toggle '+(x.is_available?"is-available":"")+'" data-toggle-availability="'+x.id+'" data-available="'+String(!!x.is_available)+'" aria-pressed="'+String(!!x.is_available)+'"><span></span>'+(x.is_available?"Verfügbar":"Nicht verfügbar")+'</button>':(x.is_available?'<span class="badge good">Verfügbar</span>':'<span class="badge bad">Nicht verfügbar</span>')):'<span class="muted">—</span>';
-  return '<tr><td><b>'+esc(x.item_name)+'</b></td><td>'+esc(x.category)+'</td><td><span class="qty '+(low?'low':'')+'">'+Number(x.quantity).toLocaleString("de-DE")+'</span></td><td>'+esc(x.unit)+'</td><td>'+Number(x.min_stock).toLocaleString("de-DE")+'</td><td>'+price+'</td><td>'+availability+'</td><td class="inventoryactions">'+actions+'</td></tr>';
- }).join("")||'<tr><td colspan="8" class="muted">Noch keine Lagerartikel angelegt.</td></tr>';
+  return '<tr><td><b>'+esc(x.item_name)+'</b></td><td>'+esc(x.category)+'</td><td><span class="qty '+(low?'low':'')+'">'+Number(x.quantity).toLocaleString("de-DE")+'</span></td><td>'+esc(x.unit)+'</td><td>'+Number(x.min_stock).toLocaleString("de-DE")+'</td><td>'+price+'</td><td>'+availability+'</td><td class="inventoryactions">'+actions+'</td><td class="brand-star-cell">'+branded+'</td></tr>';
+ }).join("")||'<tr><td colspan="9" class="muted">Noch keine Lagerartikel angelegt.</td></tr>';
 }
 async function recipes(){
  const {data:rows=[],error}=await supabaseClient.from("vineyard_recipes").select("*").order("name");
@@ -562,7 +563,19 @@ async function render(){
 }
 function bindInventoryRows(){
  $$("[data-edit-item]").forEach(b=>b.onclick=()=>itemModal(b.dataset.editItem));
- $$("[data-delete-item]").forEach(b=>b.onclick=()=>deleteItem(b.dataset.deleteItem));
+ $("[data-delete-item]").forEach(b=>b.onclick=()=>deleteItem(b.dataset.deleteItem));
+ $("[data-toggle-branded]").forEach(b=>b.onclick=async()=>{
+  if(b.dataset.busy==="1")return;
+  b.dataset.busy="1";b.disabled=true;
+  try{
+   if(!canManageCatalog())throw new Error("Du darfst Produkte nicht ändern.");
+   const next=b.dataset.branded!=="true";
+   const {error}=await supabaseClient.from("vineyard_inventory").update({is_branded:next,updated_at:new Date().toISOString(),updated_by:profile?.user_id||null}).eq("id",b.dataset.toggleBranded).eq("category","Produkte");
+   if(error)throw error;
+   await auditLog(next?"Produkt als gebrandet markiert":"Branding-Markierung entfernt","inventory",b.dataset.toggleBranded,{is_branded:next});
+   await render();
+  }catch(error){alert("Branding-Markierung konnte nicht gespeichert werden. "+(error?.message||""));b.disabled=false;b.dataset.busy="0";}
+ });
  $$("[data-toggle-availability]").forEach(b=>b.onclick=async()=>{
   if(b.dataset.busy==="1")return;
   const id=b.dataset.toggleAvailability;
