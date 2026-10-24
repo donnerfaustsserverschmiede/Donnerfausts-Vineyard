@@ -892,7 +892,7 @@ async function invoiceModal(id){
  }
  const sellableInventory=inventory.filter(x=>x.category!=="Produkte"||x.is_available!==false||existingItems.some(e=>String(e.inventory_id)===String(x.id)));
  const initialInvoiceType=existingInvoice?.invoice_type||"Verkauf";
- const initialInventory=(initialInvoiceType==="Verkauf"||initialInvoiceType==="Bestellung"?sellableInventory:inventory)[0]||inventory[0];
+ const initialInventory=(initialInvoiceType==="Verkauf"?sellableInventory:inventory)[0]||inventory[0];
  const rows=existingItems.length?existingItems.map(x=>({inventory_id:x.inventory_id,quantity:x.quantity,unit_price:x.unit_price})):[{inventory_id:initialInventory.id,quantity:1,unit_price:0}];
  const defaultPrice=(item,type)=>type==="Einkauf"?Number(item?.purchase_price||0):Number(item?.sale_price||0);
  const defaultEmployee=existingInvoice?.employee_id||profile.user_id;
@@ -914,7 +914,7 @@ async function invoiceModal(id){
  customerEl.onchange=()=>{const k=customerRows.find(x=>x.id===customerEl.value);if(k)$("#invoiceform [name=partner_name]").value=k.name;else $("#invoiceform [name=partner_name]").value="Privatkunde"};
  const commissionRate=type=>type==="Verkauf"?20:0;
  const draw=()=>{
-  const invoiceInventory=typeEl.value==="Verkauf"||typeEl.value==="Bestellung"?sellableInventory:inventory;
+  const invoiceInventory=typeEl.value==="Verkauf"?sellableInventory:inventory;
   $("#invoiceitemsform").innerHTML=rows.map((r,n)=>'<div class="invoiceformrow"><select data-ii="'+n+'" class="invoiceitem">'+invoiceInventory.map(x=>'<option value="'+esc(x.id)+'" '+(x.id===r.inventory_id?"selected":"")+'>'+esc(x.item_name)+' · '+esc(x.unit)+'</option>').join("")+'</select><input data-iq="'+n+'" class="invoicequantity" type="number" min="0.0001" step="any" value="'+esc(r.quantity)+'" required><input data-ip="'+n+'" class="invoiceprice" type="number" min="0" step="0.01" value="'+esc(r.unit_price)+'" required><button type="button" class="mini" data-remove-ii="'+n+'">×</button></div>').join("");
   const refresh=()=>{
    let sum=0,base=0;
@@ -938,7 +938,7 @@ async function invoiceModal(id){
   refresh();
  };
  $("#addinvoiceitem").onclick=()=>{const source=(typeEl.value==="Verkauf")?sellableInventory:inventory;const item=source[0];if(!item){alert("Für diesen Vorgang sind aktuell keine verfügbaren Artikel vorhanden.");return}rows.push({inventory_id:item.id,quantity:1,unit_price:defaultPrice(item,typeEl.value)});draw()};
- typeEl.onchange=()=>{const source=(typeEl.value==="Verkauf"||typeEl.value==="Bestellung")?sellableInventory:inventory;rows.forEach(r=>{if((typeEl.value==="Verkauf"||typeEl.value==="Bestellung")&&!source.some(x=>String(x.id)===String(r.inventory_id))){r.inventory_id=source[0]?.id||""}const item=inventory.find(x=>String(x.id)===String(r.inventory_id));r.unit_price=defaultPrice(item,typeEl.value)});draw()};
+ typeEl.onchange=()=>{const source=(typeEl.value==="Verkauf")?sellableInventory:inventory;rows.forEach(r=>{if((typeEl.value==="Verkauf"||typeEl.value==="Bestellung")&&!source.some(x=>String(x.id)===String(r.inventory_id))){r.inventory_id=source[0]?.id||""}const item=inventory.find(x=>String(x.id)===String(r.inventory_id));r.unit_price=defaultPrice(item,typeEl.value)});draw()};
  rows[0].unit_price=defaultPrice(inventory[0],existingInvoice?.invoice_type||"Verkauf");draw();
  $("#invoiceform").onsubmit=async e=>{
   e.preventDefault();const b=e.submitter;b.disabled=true;
