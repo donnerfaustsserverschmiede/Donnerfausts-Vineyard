@@ -434,7 +434,7 @@ async function trades(filter="all"){
  stat("▦","NETTO",money(salesTotal-purchaseTotal))+
  '</div>'+
  '<div class="panel tradehint"><b>Automatik:</b> Einkauf erhöht den Lagerbestand und belastet die Kasse. Verkauf reduziert den Lagerbestand und schreibt den Verkauf als Einnahme in die Kasse.</div>'+
- '<div class="panel"><div class="tablewrap"><table><thead><tr><th>DATUM</th><th>ART</th><th>ARTIKEL</th><th>MENGE</th><th>EINZELPREIS</th><th>GESAMT</th><th></th></tr></thead><tbody>'+
+ '<div class="panel"><h3>Letzte Buchungen</h3><div class="tablewrap"><table><thead><tr><th>DATUM</th><th>ART</th><th>ARTIKEL</th><th>MENGE</th><th>EINZELPREIS</th><th>GESAMT</th><th></th></tr></thead><tbody>'+
  (visibleRows.map(x=>'<tr><td>'+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</td><td>'+(x.trade_type==="Einkauf"?'<span class="badge warn">Einkauf</span>':'<span class="badge good">Verkauf</span>')+'</td><td><b>'+esc(x.item_name)+'</b><small class="tableunit">'+esc(x.unit)+'</small></td><td>'+Number(x.quantity).toLocaleString("de-DE")+'</td><td>'+money(x.unit_price)+'</td><td><b>'+money(x.total)+'</b></td><td><button class="mini gold" data-edit-trade="'+x.id+'">Bearbeiten</button> <button class="mini" data-delete-trade="'+x.id+'">Löschen</button></td></tr>').join("")||'<tr><td colspan="7">Noch keine Ein- oder Verkäufe gebucht.</td></tr>')+
  '</tbody></table></div></div>';
 }
@@ -476,7 +476,7 @@ async function cash(){
  const expenses=visibleRows.filter(x=>x.kind==="out").reduce((s,x)=>s+Number(x.amount||0),0);
  const sourceLabels={trade:"Ein-/Verkauf",order:"Bestellung",commission:"Provisionsauszahlung",invoice:"Rechnung",payroll:"Lohn",purchase:"Einkauf",sale:"Verkauf"};
  const body=visibleRows.map(x=>'<tr><td>'+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</td><td>'+(x.kind==="in"?'<span class="badge good">Einnahme</span>':'<span class="badge bad">Ausgabe</span>')+'</td><td><b>'+money(x.amount)+'</b></td><td>'+esc(x.category||"—")+(x.source_type&&sourceLabels[x.source_type]?' <span class="badge warn">'+esc(sourceLabels[x.source_type])+'</span>':"")+'</td><td>'+esc(x.description||"")+'</td><td>'+(x.source_type?'<span class="muted">Automatisch gebucht</span>':'<button class="mini" data-edit-cash="'+x.id+'">Bearbeiten</button> <button class="mini" data-delete-cash="'+x.id+'">Löschen</button>')+'</td></tr>').join("")||'<tr><td colspan="6">Keine Buchungen.</td></tr>';
- return intro("KASSE","Kassenbuch","Ein- und Auszahlungen mit Benutzerprotokoll.",can("cash_edit")?"newcash":null,can("cash_edit")?"+ Buchung":null)+
+ return intro("KASSE","Kassenbuch","Alle Kassenbewegungen: Einzahlungen, Auszahlungen, Verkäufe, Einkäufe, Bestellungen, Rechnungen, Lohn- und Provisionsauszahlungen.",can("cash_edit")?"newcash":null,can("cash_edit")?"+ Buchung":null)+
  '<div class="stats">'+stat("$","AKTUELLER KASSENSTAND",money(balance))+stat("↗","EINNAHMEN",money(income))+stat("↘","AUSGABEN",money(expenses))+stat("▤","BUCHUNGEN",visibleRows.length)+"</div>"+
  '<div class="panel"><div class="tablewrap"><table><thead><tr><th>DATUM</th><th>ART</th><th>BETRAG</th><th>KATEGORIE</th><th>BESCHREIBUNG</th><th></th></tr></thead><tbody>'+body+'</tbody></table></div></div>';
 }
