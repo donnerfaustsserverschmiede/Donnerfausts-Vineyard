@@ -563,8 +563,8 @@ async function render(){
 }
 function bindInventoryRows(){
  $$("[data-edit-item]").forEach(b=>b.onclick=()=>itemModal(b.dataset.editItem));
- $("[data-delete-item]").forEach(b=>b.onclick=()=>deleteItem(b.dataset.deleteItem));
- $("[data-toggle-branded]").forEach(b=>b.onclick=async()=>{
+ $$("[data-delete-item]").forEach(b=>b.onclick=()=>deleteItem(b.dataset.deleteItem));
+ $$("[data-toggle-branded]").forEach(b=>b.onclick=async()=>{
   if(b.dataset.busy==="1")return;
   b.dataset.busy="1";b.disabled=true;
   try{
