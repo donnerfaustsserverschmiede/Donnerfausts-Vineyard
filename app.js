@@ -1103,7 +1103,9 @@ async function tradeModal(id,defaultType=null){
     const employeeId=$("#tradeform [name=employee_id]")?.value||"";
     if(!employeeId)throw Error("Bitte den Mitarbeiter auswählen, dem die Provision zugeordnet werden soll.");
     if(!tradeId)throw Error("Der Verkauf wurde gespeichert, aber die Provisionszuordnung konnte nicht hergestellt werden. Bitte prüfen, bevor du erneut buchst.");
-    const total=Number(tradeSaved?.total??(Number(qtyEl.value)*Number(items.find(x=>String(x.id)===String(itemEl.value))?.sale_price||0)));
+    const {data:savedTrade,error:fetchTradeError}=await supabaseClient.from("vineyard_trades").select("total").eq("id",tradeId).single();
+    if(fetchTradeError)throw fetchTradeError;
+    const total=Number(savedTrade.total||0);
     const commission=Math.round(total*0.20*100)/100;
     const {error:commissionSaveError}=await supabaseClient.from("vineyard_trades").update({
       customer_id:$("#tradeform [name=customer_id]").value||null,
