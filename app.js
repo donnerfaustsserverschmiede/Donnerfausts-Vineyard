@@ -1093,6 +1093,7 @@ async function tradeModal(id,defaultType=null){
   try{
    const quantity=Number(qtyEl.value);
    if(!Number.isFinite(quantity)||quantity<=0)throw Error("Die Menge muss größer als 0 sein.");
+   if(typeEl.value==="Verkauf"&&!$("#tradeform [name=employee_id]")?.value)throw Error("Bitte den Mitarbeiter auswählen, dem die Provision zugeordnet werden soll.");
    const rpc=id?"vineyard_update_trade":"vineyard_create_trade";
    const args=id?{p_trade_id:id,p_trade_type:typeEl.value,p_inventory_id:itemEl.value,p_quantity:quantity}:{p_trade_type:typeEl.value,p_inventory_id:itemEl.value,p_quantity:quantity};
    const {data:tradeSaved,error}=await supabaseClient.rpc(rpc,args);
