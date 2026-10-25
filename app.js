@@ -1059,7 +1059,7 @@ async function tradeModal(id,defaultType=null){
  $("#modalroot").innerHTML='<div class="modalback"><div class="modal tradeModal"><div class="modalhead"><b>'+(id?"Ein-/Verkauf bearbeiten":"Ein- und Verkauf")+'</b><button id="x">×</button></div><form id="tradeform">'+
  selectField("Ein- oder Verkauf","trade_type",[{value:"Einkauf",label:"Einkauf"},{value:"Verkauf",label:"Verkauf"}],type)+
  (type==="Verkauf"?selectField("KUNDE","customer_id",[{value:"",label:"Privatkunde"},...customerRows.map(k=>({value:k.id,label:k.name+" (−"+Number(k.discount_percent||0).toLocaleString("de-DE")+" %)"}))],existing?.customer_id||""):"")+
- (type==="Verkauf"?selectField("Mitarbeiter","employee_id",[{value:"",label:"Mitarbeiter auswählen…"},...employees.map(x=>({value:x.user_id,label:x.display_name}))],existing?.employee_id||""):"")+
+ '<div id="tradeEmployeeWrap" style="display:'+(type==="Verkauf"?"block":"none")+'">'+selectField("Mitarbeiter","employee_id",[{value:"",label:"Mitarbeiter auswählen…"},...employees.map(x=>({value:x.user_id,label:x.display_name}))],existing?.employee_id||"")+'</div>'+
  '<label>Was wurde ein/verkauft?<select id="trade_inventory" name="inventory_id">'+optionHtml(type,selected)+'</select></label>'+
  field("Menge","quantity","number",existing?.quantity??1,true)+
  '<div class="tradeprice"><div><span>PREIS</span><b id="tradeTotal">'+money(existing?.total||0)+'</b><small id="tradeUnitPrice"></small></div><div class="tradeformula" id="tradeFormula"></div></div>'+
@@ -1082,7 +1082,7 @@ async function tradeModal(id,defaultType=null){
   unitEl.textContent="Einzelpreis: "+money(unitPrice)+" · "+(typeEl.value==="Einkauf"?"Zugang zum Lager":"Abgang aus dem Lager");
   formulaEl.textContent=qty.toLocaleString("de-DE")+" × "+money(unitPrice)+" = "+money(total);
  };
- typeEl.onchange=()=>refreshItems(typeEl.value,null);
+ typeEl.onchange=()=>{refreshItems(typeEl.value,null);const wrap=$("#tradeEmployeeWrap");if(wrap)wrap.style.display=typeEl.value==="Verkauf"?"block":"none";};
  itemEl.onchange=updatePrice;
  qtyEl.oninput=updatePrice;
  updatePrice();
