@@ -1036,14 +1036,16 @@ async function stockModal(id=null,mode=null){
 }
 
 async function tradeModal(id,defaultType=null){
- const [{data:items=[],error:ie},{data:existing,error:te},{data:customerRows=[],error:ce}]=await Promise.all([
-  supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category,purchase_price,sale_price,quantity,is_available").order("category").order("item_name"),
+ const [{data:items=[],error:ie},{data:existing,error:te},{data:customerRows=[],error:ce},{data:employees=[],error:ee}]=await Promise.all([
+  supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category,purchase_price,sale_price,quantity,is_available,is_branded").order("category").order("item_name"),
   id?supabaseClient.from("vineyard_trades").select("*").eq("id",id).single():Promise.resolve({data:null,error:null}),
-  supabaseClient.from("vineyard_customers").select("id,name,discount_percent,active").eq("active",true).order("name")
+  supabaseClient.from("vineyard_customers").select("id,name,discount_percent,active").eq("active",true).order("name"),
+  supabaseClient.rpc("vineyard_order_employees")
  ]);
  if(ie)throw ie;
  if(te)throw te;
  if(ce)throw ce;
+ if(ee)throw ee;
  if(id&&!existing)throw Error("Handelsvorgang nicht gefunden.");
  const type=existing?.trade_type||defaultType||"Einkauf";
  const initialItems=items.filter(x=>x.category===(type==="Einkauf"?"Zutaten":"Produkte"));
@@ -1057,6 +1059,7 @@ async function tradeModal(id,defaultType=null){
  $("#modalroot").innerHTML='<div class="modalback"><div class="modal tradeModal"><div class="modalhead"><b>'+(id?"Ein-/Verkauf bearbeiten":"Ein- und Verkauf")+'</b><button id="x">×</button></div><form id="tradeform">'+
  selectField("Ein- oder Verkauf","trade_type",[{value:"Einkauf",label:"Einkauf"},{value:"Verkauf",label:"Verkauf"}],type)+
  (type==="Verkauf"?selectField("KUNDE","customer_id",[{value:"",label:"Privatkunde"},...customerRows.map(k=>({value:k.id,label:k.name+" (−"+Number(k.discount_percent||0).toLocaleString("de-DE")+" %)"}))],existing?.customer_id||""):"")+
+ (type==="Verkauf"?selectField("Mitarbeiter","employee_id",[{value:"",label:"Mitarbeiter auswählen…"},...employees.map(x=>({value:x.user_id,label:x.display_name}))],existing?.employee_id||""):"")+
  '<label>Was wurde ein/verkauft?<select id="trade_inventory" name="inventory_id">'+optionHtml(type,selected)+'</select></label>'+
  field("Menge","quantity","number",existing?.quantity??1,true)+
  '<div class="tradeprice"><div><span>PREIS</span><b id="tradeTotal">'+money(existing?.total||0)+'</b><small id="tradeUnitPrice"></small></div><div class="tradeformula" id="tradeFormula"></div></div>'+
@@ -1094,7 +1097,24 @@ async function tradeModal(id,defaultType=null){
    const args=id?{p_trade_id:id,p_trade_type:typeEl.value,p_inventory_id:itemEl.value,p_quantity:quantity}:{p_trade_type:typeEl.value,p_inventory_id:itemEl.value,p_quantity:quantity};
    const {data:tradeSaved,error}=await supabaseClient.rpc(rpc,args);
    if(error)throw error;
-   if(typeEl.value==="Verkauf"){const tradeId=id||tradeSaved?.id;if(tradeId){const {error:customerSaveError}=await supabaseClient.from("vineyard_trades").update({customer_id:$("#tradeform [name=customer_id]").value||null}).eq("id",tradeId);if(customerSaveError)throw customerSaveError;}}
+   if(typeEl.value==="Verkauf"){
+    const tradeId=id||tradeSaved?.id;
+    const employeeId=$("#tradeform [name=employee_id]")?.value||"";
+    if(!employeeId)throw Error("Bitte den Mitarbeiter auswählen, dem die Provision zugeordnet werden soll.");
+    if(!tradeId)throw Error("Der Verkauf wurde gespeichert, aber die Provisionszuordnung konnte nicht hergestellt werden. Bitte prüfen, bevor du erneut buchst.");
+    const total=Number(tradeSaved?.total??(Number(qtyEl.value)*Number(items.find(x=>String(x.id)===String(itemEl.value))?.sale_price||0)));
+    const commission=Math.round(total*0.20*100)/100;
+    const {error:commissionSaveError}=await supabaseClient.from("vineyard_trades").update({
+      customer_id:$("#tradeform [name=customer_id]").value||null,
+      employee_id:employeeId,
+      commission_rate:20,
+      commission_amount:commission
+    }).eq("id",tradeId);
+    if(commissionSaveError)throw commissionSaveError;
+   }else if(id&&existing?.trade_type==="Verkauf"){
+    const {error:clearError}=await supabaseClient.from("vineyard_trades").update({employee_id:null,commission_rate:0,commission_amount:0,customer_id:null}).eq("id",id);
+    if(clearError)throw clearError;
+   }
    await auditLog(id?"Ein-/Verkauf geändert":"Ein-/Verkauf gebucht","trade",id||null,{trade_type:typeEl.value,inventory_id:itemEl.value,quantity});
    close();
    await render();
