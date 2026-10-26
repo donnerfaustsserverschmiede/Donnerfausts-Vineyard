@@ -1042,85 +1042,79 @@ async function tradeModal(id,defaultType=null){
   supabaseClient.from("vineyard_customers").select("id,name,discount_percent,active").eq("active",true).order("name"),
   supabaseClient.rpc("vineyard_order_employees")
  ]);
- if(ie)throw ie;
- if(te)throw te;
- if(ce)throw ce;
- if(ee)throw ee;
+ if(ie)throw ie;if(te)throw te;if(ce)throw ce;if(ee)throw ee;
  if(id&&!existing)throw Error("Handelsvorgang nicht gefunden.");
  const type=existing?.trade_type||defaultType||"Einkauf";
- const initialItems=items.filter(x=>x.category===(type==="Einkauf"?"Zutaten":"Produkte"));
- if(!initialItems.length)throw Error(type==="Einkauf"?"Lege zuerst mindestens eine Zutat mit Einkaufspreis im Lager an.":"Lege zuerst mindestens ein Produkt mit Verkaufspreis im Lager an.");
+ const initialItems=items.filter(x=>x.category===(type==="Einkauf"?"Zutaten":"Produkte")&&(type!=="Verkauf"||x.is_available===true||String(x.id)===String(existing?.inventory_id)));
+ if(!initialItems.length)throw Error(type==="Einkauf"?"Lege zuerst mindestens eine Zutat mit Einkaufspreis im Lager an.":"Lege zuerst mindestens ein verfügbares Produkt im Lager an.");
  const optionsFor=t=>items.filter(x=>x.category===(t==="Einkauf"?"Zutaten":"Produkte")&&(t!=="Verkauf"||x.is_available===true||String(x.id)===String(existing?.inventory_id)));
- const optionHtml=(t,selected)=>{
-  const list=optionsFor(t);
-  return list.map(x=>'<option value="'+esc(x.id)+'" '+(String(selected)===String(x.id)?"selected":"")+'>'+(x.is_branded?"★ ":"")+esc(x.item_name)+' · '+esc(x.unit)+'</option>').join("");
- };
- const selected=existing?.inventory_id||initialItems[0].id;
- $("#modalroot").innerHTML='<div class="modalback"><div class="modal tradeModal"><div class="modalhead"><b>'+(id?"Ein-/Verkauf bearbeiten":"Ein- und Verkauf")+'</b><button id="x">×</button></div><form id="tradeform">'+
+ const optionHtml=(t,selected)=>optionsFor(t).map(x=>'<option value="'+esc(x.id)+'" '+(String(selected)===String(x.id)?"selected":"")+'>'+(x.is_branded?"★ ":"")+esc(x.item_name)+' · '+esc(x.unit)+'</option>').join("");
+ const customerOptions=[{value:"",label:"Privatkunde"},...customerRows.map(k=>({value:k.id,label:k.name+" (−"+Number(k.discount_percent||0).toLocaleString("de-DE")+" %)"}))];
+ $("#modalroot").innerHTML='<div class="modalback"><div class="modal tradeModal"><div class="modalhead"><b>'+(id?"Ein-/Verkauf bearbeiten":"Ein- und Verkauf")+'</b><button type="button" id="x">×</button></div><form id="tradeform">'+
  selectField("Ein- oder Verkauf","trade_type",[{value:"Einkauf",label:"Einkauf"},{value:"Verkauf",label:"Verkauf"}],type)+
- (type==="Verkauf"?selectField("KUNDE","customer_id",[{value:"",label:"Privatkunde"},...customerRows.map(k=>({value:k.id,label:k.name+" (−"+Number(k.discount_percent||0).toLocaleString("de-DE")+" %)"}))],existing?.customer_id||""):"")+
- '<div id="tradeEmployeeWrap" style="display:'+(type==="Verkauf"?"block":"none")+'">'+selectField("Mitarbeiter","employee_id",[{value:"",label:"Mitarbeiter auswählen…"},...employees.map(x=>({value:x.user_id,label:x.display_name}))],existing?.employee_id||"")+'</div>'+
- '<label>Was wurde ein/verkauft?<select id="trade_inventory" name="inventory_id">'+optionHtml(type,selected)+'</select></label>'+
- field("Menge","quantity","number",existing?.quantity??1,true)+
- '<div class="tradeprice"><div><span>PREIS</span><b id="tradeTotal">'+money(existing?.total||0)+'</b><small id="tradeUnitPrice"></small></div><div class="tradeformula" id="tradeFormula"></div></div>'+
- '<div class="actions"><button type="button" class="btn outline" id="cancel">Abbrechen</button><button class="btn primary">Buchen</button></div></form></div></div>';
+ (type==="Verkauf"?selectField("KUNDE","customer_id",customerOptions,existing?.customer_id||""):"")+
+ '<div id="tradeEmployeeWrap" style="display:'+(type==="Verkauf"?"block":"none")+'">'+selectField("Mitarbeiter","employee_id",[{value:"",label:"Mitarbeiter auswählen…"},...employees.map(x=>({value:x.user_id,label:x.display_name}))],existing?.employee_id||profile?.user_id||"")+'</div>'+
+ '<div id="tradeItems"></div><div class="actions" id="tradeAddWrap" style="justify-content:flex-start"><button type="button" class="btn outline" id="addTradeItem">＋ Weiteren Artikel hinzufügen</button></div>'+
+ '<div class="tradeprice"><div><span>GESAMTSUMME</span><b id="tradeTotal">'+money(existing?.total||0)+'</b><small id="tradeUnitPrice"></small></div><div class="tradeformula" id="tradeFormula"></div></div>'+
+ '<div class="actions"><button type="button" class="btn outline" id="cancel">Abbrechen</button><button type="submit" class="btn primary">Buchen</button></div></form></div></div>';
  const close=()=>$("#modalroot").innerHTML="";
  $("#x").onclick=$("#cancel").onclick=close;
- const typeEl=$("#tradeform [name=trade_type]"),itemEl=$("#trade_inventory"),qtyEl=$("#tradeform [name=quantity]"),totalEl=$("#tradeTotal"),unitEl=$("#tradeUnitPrice"),formulaEl=$("#tradeFormula"),submitBtn=$("#tradeform button[type=submit]");
- const refreshItems=(t,selectedId)=>{
-  const list=optionsFor(t);
-  itemEl.innerHTML=optionHtml(t,selectedId&&list.some(x=>String(x.id)===String(selectedId))?selectedId:(list[0]?.id||""));
-  updatePrice();
- };
+ const typeEl=$("#tradeform [name=trade_type]"),itemsWrap=$("#tradeItems"),totalEl=$("#tradeTotal"),unitEl=$("#tradeUnitPrice"),formulaEl=$("#tradeFormula"),addWrap=$("#tradeAddWrap");
+ const rowHtml=(selectedId,quantity=1)=>'<div class="trade-item-row" style="display:grid;grid-template-columns:minmax(0,2fr) minmax(85px,1fr) auto;gap:10px;align-items:end;margin:12px 0;padding:12px;border:1px solid var(--line,#444);border-radius:12px"><label>Artikel<select class="trade-item-select">'+optionHtml(typeEl.value,selectedId)+'</select></label><label>Menge<input class="trade-item-qty" type="number" min="0.01" step="any" value="'+esc(quantity)+'" required></label><button type="button" class="mini remove-trade-item" aria-label="Artikel entfernen">✕</button><small class="trade-item-total" style="grid-column:1/-1"></small></div>';
+ const addRow=(selectedId=null,quantity=1)=>{const wrap=document.createElement("div");wrap.innerHTML=rowHtml(selectedId||optionsFor(typeEl.value)[0]?.id||"",quantity);const row=wrap.firstElementChild;itemsWrap.appendChild(row);row.querySelector(".trade-item-select").onchange=updatePrice;row.querySelector(".trade-item-qty").oninput=updatePrice;row.querySelector(".remove-trade-item").onclick=()=>{if(itemsWrap.children.length===1)return alert("Mindestens ein Artikel muss enthalten sein.");row.remove();updatePrice()};updatePrice()};
  const updatePrice=()=>{
-  const item=items.find(x=>String(x.id)===String(itemEl.value));
-  const qty=Number(qtyEl.value)||0;
-  if(!item){totalEl.textContent=money(0);unitEl.textContent="";formulaEl.textContent="";return}
-  const unitPrice=typeEl.value==="Einkauf"?Number(item.purchase_price||0):Number(item.sale_price||0);
-  const total=Math.round(unitPrice*qty*100)/100;
-  totalEl.textContent=money(total);
-  unitEl.textContent="Einzelpreis: "+money(unitPrice)+" · "+(typeEl.value==="Einkauf"?"Zugang zum Lager":"Abgang aus dem Lager");
-  formulaEl.textContent=qty.toLocaleString("de-DE")+" × "+money(unitPrice)+" = "+money(total);
+  let total=0;const summaries=[];
+  [...itemsWrap.querySelectorAll(".trade-item-row")].forEach(row=>{
+   const item=items.find(x=>String(x.id)===String(row.querySelector(".trade-item-select").value));
+   const qty=Number(row.querySelector(".trade-item-qty").value)||0;
+   const price=item?(typeEl.value==="Einkauf"?Number(item.purchase_price||0):Number(item.sale_price||0)):0;
+   const line=Math.round(price*qty*100)/100;total+=line;
+   row.querySelector(".trade-item-total").textContent=item?qty.toLocaleString("de-DE")+" × "+money(price)+" = "+money(line):"";
+   if(item)summaries.push(item.item_name+": "+qty.toLocaleString("de-DE")+" "+item.unit);
+  });
+  total=Math.round(total*100)/100;totalEl.textContent=money(total);
+  unitEl.textContent=typeEl.value==="Einkauf"?"Zugang zum Lager":"Abgang aus dem Lager";
+  formulaEl.textContent=summaries.join(" · ");
  };
- typeEl.onchange=()=>{refreshItems(typeEl.value,null);const wrap=$("#tradeEmployeeWrap");if(wrap)wrap.style.display=typeEl.value==="Verkauf"?"block":"none";};
- itemEl.onchange=updatePrice;
- qtyEl.oninput=updatePrice;
+ const refreshType=()=>{
+  const wrap=$("#tradeEmployeeWrap");if(wrap)wrap.style.display=typeEl.value==="Verkauf"?"block":"none";
+  const customer=$("#tradeform [name=customer_id]");if(typeEl.value==="Verkauf"&&!customer){const label=document.createElement("div");label.innerHTML=selectField("KUNDE","customer_id",customerOptions,"");wrap.before(label.firstElementChild)}
+  if(typeEl.value!=="Verkauf")$("#tradeform [name=customer_id]")?.closest("label")?.remove();
+  itemsWrap.innerHTML="";addRow();addWrap.style.display=id?"none":"flex";$("#addTradeItem").style.display=id?"none":"inline-flex";updatePrice();
+ };
+ typeEl.onchange=refreshType;
+ $("#addTradeItem").onclick=()=>addRow();
+ if(existing)addRow(existing.inventory_id,existing.quantity);else addRow();
+ if(id){addWrap.style.display="none";$("#addTradeItem").style.display="none"}
  updatePrice();
  $("#tradeform").onsubmit=async e=>{
-  e.preventDefault();
-  const b=e.submitter;
-  b.disabled=true;
+  e.preventDefault();const b=e.submitter;b.disabled=true;
   try{
-   const quantity=Number(qtyEl.value);
-   if(!Number.isFinite(quantity)||quantity<=0)throw Error("Die Menge muss größer als 0 sein.");
+   const rows=[...itemsWrap.querySelectorAll(".trade-item-row")].map(row=>({inventory_id:row.querySelector(".trade-item-select").value,quantity:Number(row.querySelector(".trade-item-qty").value)}));
+   if(!rows.length)throw Error("Bitte mindestens einen Artikel hinzufügen.");
+   if(rows.some(x=>!x.inventory_id||!Number.isFinite(x.quantity)||x.quantity<=0))throw Error("Bitte für alle Artikel eine gültige Menge angeben.");
    if(typeEl.value==="Verkauf"&&!$("#tradeform [name=employee_id]")?.value)throw Error("Bitte den Mitarbeiter auswählen, dem die Provision zugeordnet werden soll.");
-   const rpc=id?"vineyard_update_trade":"vineyard_create_trade";
-   const args=id?{p_trade_id:id,p_trade_type:typeEl.value,p_inventory_id:itemEl.value,p_quantity:quantity}:{p_trade_type:typeEl.value,p_inventory_id:itemEl.value,p_quantity:quantity};
-   const {data:tradeSaved,error}=await supabaseClient.rpc(rpc,args);
-   if(error)throw error;
-   if(typeEl.value==="Verkauf"){
-    const tradeId=id||tradeSaved?.id;
-    const employeeId=$("#tradeform [name=employee_id]")?.value||"";
-    if(!employeeId)throw Error("Bitte den Mitarbeiter auswählen, dem die Provision zugeordnet werden soll.");
-    if(!tradeId)throw Error("Der Verkauf wurde gespeichert, aber die Provisionszuordnung konnte nicht hergestellt werden. Bitte prüfen, bevor du erneut buchst.");
-    const {data:savedTrade,error:fetchTradeError}=await supabaseClient.from("vineyard_trades").select("total").eq("id",tradeId).single();
-    if(fetchTradeError)throw fetchTradeError;
-    const total=Number(savedTrade.total||0);
-    const commission=Math.round(total*0.20*100)/100;
-    const {error:commissionSaveError}=await supabaseClient.from("vineyard_trades").update({
-      customer_id:$("#tradeform [name=customer_id]").value||null,
-      employee_id:employeeId,
-      commission_rate:20,
-      commission_amount:commission
-    }).eq("id",tradeId);
-    if(commissionSaveError)throw commissionSaveError;
-   }else if(id&&existing?.trade_type==="Verkauf"){
-    const {error:clearError}=await supabaseClient.from("vineyard_trades").update({employee_id:null,commission_rate:0,commission_amount:0,customer_id:null}).eq("id",id);
-    if(clearError)throw clearError;
+   const employeeId=$("#tradeform [name=employee_id]")?.value||"";
+   const customerId=$("#tradeform [name=customer_id]")?.value||null;
+   if(id&&rows.length!==1)throw Error("Beim Bearbeiten eines bestehenden Handelsvorgangs kann nur ein Artikel geändert werden. Für mehrere Artikel bitte einen neuen Vorgang anlegen.");
+   const savedIds=[];
+   for(const item of rows){
+    const rpc=id?"vineyard_update_trade":"vineyard_create_trade";
+    const args=id?{p_trade_id:id,p_trade_type:typeEl.value,p_inventory_id:item.inventory_id,p_quantity:item.quantity}:{p_trade_type:typeEl.value,p_inventory_id:item.inventory_id,p_quantity:item.quantity};
+    const {data:tradeSaved,error}=await supabaseClient.rpc(rpc,args);if(error)throw error;
+    const tradeId=id?(tradeSaved?.trade_id||id):(tradeSaved?.trade_id||tradeSaved?.id);
+    if(!tradeId)throw Error("Der Handelsvorgang wurde gespeichert, aber die Rückgabe enthielt keine Vorgangsnummer.");
+    savedIds.push(tradeId);
+    if(typeEl.value==="Verkauf"){
+     const {error:assignError}=await supabaseClient.rpc("vineyard_assign_trade_commission",{p_trade_id:tradeId,p_employee_id:employeeId,p_customer_id:customerId});
+     if(assignError)throw Error("Verkauf "+tradeId+" wurde gespeichert, aber die Provision konnte nicht zugeordnet werden: "+assignError.message);
+    }else if(id&&existing?.trade_type==="Verkauf"){
+     const {error:clearError}=await supabaseClient.from("vineyard_trades").update({employee_id:null,commission_rate:0,commission_amount:0,customer_id:null}).eq("id",id);
+     if(clearError)throw clearError;
+    }
    }
-   await auditLog(id?"Ein-/Verkauf geändert":"Ein-/Verkauf gebucht","trade",id||null,{trade_type:typeEl.value,inventory_id:itemEl.value,quantity});
-   close();
-   await render();
+   await auditLog(id?"Ein-/Verkauf geändert":"Ein-/Verkauf gebucht","trade",savedIds[0]||null,{trade_type:typeEl.value,items:rows,trade_ids:savedIds});
+   close();await render();
   }catch(err){alert(err.message||String(err));b.disabled=false}
  };
 }
