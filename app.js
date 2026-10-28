@@ -271,55 +271,18 @@ async function orders(){
  '<div class="ordergrid">'+(recent.map(card).join("")||'<div class="panel"><p class="muted">Keine Bestellungen hinterlegt</p></div>')+'</div></div>';
 }
 
-document.addEventListener("click",async event=>{
- const button=event.target.closest?.("[data-view-order]");
- if(!button)return;
- event.preventDefault();
- event.stopPropagation();
- if(button.dataset.busy==="1")return;
- button.dataset.busy="1";button.disabled=true;
- try{await orderModal(button.dataset.viewOrder)}
- catch(err){console.error("Bestelldetails konnten nicht geöffnet werden:",err);alert("Bestelldetails konnten nicht geöffnet werden: "+(err?.message||String(err)))}
- finally{button.dataset.busy="0";if(button.isConnected)button.disabled=false}
-},true);
-
 async function orderModal(id){
- // Bestelldetails zuerst öffnen; optionale Artikel-/Mitarbeiterabfragen dürfen das Modal nicht verhindern.
- const root=$("#modalroot");
- if(!root)throw Error("Das Fenster für Bestelldetails fehlt im Seitenaufbau.");
- const orderResult=await supabaseClient.from("vineyard_orders").select("*").eq("id",id).maybeSingle();
- if(!orderResult)throw Error("Die Datenbank hat keine Antwort auf die Bestellanfrage geliefert.");
- if(orderResult.error)throw orderResult.error;
- const order=orderResult.data;
- if(!order)throw Error("Die Bestellung wurde nicht gefunden oder du hast keinen Zugriff darauf.");
+ const {data:order,error}=await supabaseClient.from("vineyard_orders").select("id,order_number,status,customer_name,customer_email,customer_phone,customer_address,customer_note,employee_id,total,commission_rate,commission_amount,delivery_date,delivery_requested,delivery_fee,created_at,accepted_at,completed_at").eq("id",id).single();
+ if(error)throw error;
+ const {data:items=[],error:ie}=await supabaseClient.from("vineyard_order_items").select("item_name,unit,quantity,unit_price,line_total").eq("order_id",id).order("created_at");
+ if(ie)throw ie;
+ const employee=order.employee_id?await supabaseClient.from("vineyard_profiles").select("display_name").eq("user_id",order.employee_id).maybeSingle():{data:null};
+ const closer=order.completed_by?await supabaseClient.from("vineyard_profiles").select("display_name").eq("user_id",order.completed_by).maybeSingle():{data:null};
  const date=order.delivery_date?new Date(order.delivery_date+"T00:00:00").toLocaleDateString("de-DE"):"—";
- root.innerHTML='<div class="modalback"><div class="modal"><div class="modalhead"><b>Bestellung · '+esc(order.order_number||"—")+'</b><button type="button" id="orderDetailsX" aria-label="Schließen">×</button></div><div class="grid2"><div class="panel"><b>Kunde</b><p>'+esc(order.customer_name||"—")+'</p><b>E-Mail</b><p>'+esc(order.customer_email||"—")+'</p><b>Telefon</b><p>'+esc(order.customer_phone||"—")+'</p><b>Adresse</b><p>'+esc(order.customer_address||"—")+'</p><b>Lieferdatum</b><p>'+esc(date)+'</p><b>Lieferung</b><p>'+(order.delivery_requested?"Ja · +10% Liefergebühr":"Nein")+'</p></div><div class="panel"><b>Status</b><p>'+badge(order.status||"Unbekannt")+'</p><b>Angenommen von</b><p id="orderDetailsEmployee">Wird geladen …</p><b>Abgeschlossen von</b><p id="orderDetailsCloser">Wird geladen …</p><b>Provision</b><p>'+money(order.commission_amount||0)+'</p><b>Erstellt am</b><p>'+esc(order.created_at?new Date(order.created_at).toLocaleString("de-DE"):"—")+'</p></div></div><div class="tablewrap"><table><thead><tr><th>Produkt</th><th>Menge</th><th>Einzelpreis</th><th>Gesamt</th></tr></thead><tbody><tr><td colspan="4">Bestellpositionen werden geladen …</td></tr></tbody></table></div><div class="publicTotal"><span>Gesamtsumme</span><b>'+money(order.total||0)+'</b></div><p class="muted">'+esc(order.customer_note||"")+'</p><div class="actions"><button type="button" class="btn outline" id="orderDetailsClose">Schließen</button></div></div></div>';
- const close=()=>{root.innerHTML=""};
- root.querySelector("#orderDetailsX")?.addEventListener("click",close);
- root.querySelector("#orderDetailsClose")?.addEventListener("click",close);
- // Load secondary details after the modal is already visible.
- const loadName=async userId=>{
-  if(!userId)return "—";
-  try{
-   const result=await supabaseClient.from("vineyard_profiles").select("display_name").eq("user_id",userId).maybeSingle();
-   return result?.data?.display_name||"—";
-  }catch(err){console.warn("Mitarbeiterprofil konnte nicht geladen werden:",err);return "—"}
- };
- const loadItems=async()=>{
-  const tbody=root.querySelector("tbody");
-  if(!tbody)return;
-  try{
-   const result=await supabaseClient.from("vineyard_order_items").select("*").eq("order_id",id);
-   if(!result)throw Error("Keine Antwort beim Laden der Bestellpositionen.");
-   if(result.error)throw result.error;
-   const items=Array.isArray(result.data)?result.data:[];
-   tbody.innerHTML=items.map(x=>'<tr><td>'+esc(x.item_name||x.product_name||"Artikel")+'</td><td>'+Number(x.quantity||0).toLocaleString("de-DE")+' '+esc(x.unit||"")+'</td><td>'+money(x.unit_price||0)+'</td><td>'+money(x.line_total??(Number(x.quantity||0)*Number(x.unit_price||0)))+'</td></tr>').join("")||'<tr><td colspan="4">Keine Bestellpositionen gefunden.</td></tr>';
-  }catch(err){console.error("Bestellpositionen konnten nicht geladen werden:",err);tbody.innerHTML='<tr><td colspan="4">Bestellung geöffnet, aber die Positionen konnten nicht geladen werden.</td></tr>'}
- };
- const [employeeName,closerName]=await Promise.all([loadName(order.employee_id),loadName(order.completed_by)]);
- if(root.querySelector("#orderDetailsEmployee"))root.querySelector("#orderDetailsEmployee").textContent=employeeName;
- if(root.querySelector("#orderDetailsCloser"))root.querySelector("#orderDetailsCloser").textContent=closerName;
- await loadItems();
+ const rows=items.map(x=>'<tr><td>'+esc(x.item_name)+'</td><td>'+Number(x.quantity).toLocaleString("de-DE")+' '+esc(x.unit)+'</td><td>'+money(x.unit_price)+'</td><td>'+money(x.line_total)+'</td></tr>').join("");
+ $("#modalroot").innerHTML='<div class="modalback"><div class="modal"><div class="modalhead"><b>Bestellung · '+esc(order.order_number)+'</b><button type="button" id="x">×</button></div><div class="grid2"><div class="panel"><b>Kunde</b><p>'+esc(order.customer_name)+'</p><b>Lieferdatum</b><p>'+esc(date)+'</p><b>Lieferung</b><p>'+(order.delivery_requested?"Ja · +10% Liefergebühr":"Nein")+'</p></div><div class="panel"><b>Status</b><p>'+badge(order.status)+'</p><b>Angenommen von</b><p>'+esc(employee?.data?.display_name||"Noch nicht zugewiesen")+'</p><b>Abgeschlossen von</b><p>'+esc(closer?.data?.display_name||"—")+'</p><b>Provision</b><p>'+money(order.commission_amount||0)+'</p></div></div><div class="tablewrap"><table><thead><tr><th>Produkt</th><th>Menge</th><th>Einzelpreis</th><th>Gesamt</th></tr></thead><tbody>'+rows+'</tbody></table></div><div class="publicTotal"><span>Gesamtsumme</span><b>'+money(order.total)+'</b></div><p class="muted">'+esc(order.customer_note||"")+'</p><div class="actions"><button type="button" class="btn outline" id="closeOrderModal">Schließen</button></div></div></div>';
+ const close=()=>$("#modalroot").innerHTML="";
+ $("#x").onclick=$("#closeOrderModal").onclick=close;
 }
 async function updateOrderStatus(id,status){
  const button=document.querySelector('[data-order-status="'+id+'|'+status+'"]');
@@ -756,7 +719,8 @@ function bind(){
  $$("[data-edit-invoice]").forEach(b=>b.onclick=()=>invoiceModal(b.dataset.editInvoice));
  $$("[data-delete-invoice]").forEach(b=>b.onclick=()=>deleteInvoice(b.dataset.deleteInvoice));
  // Der Details-Button wird zentral per Event-Delegation behandelt (auch nach erneutem Rendern).
-  $$("[data-save-order-customer]").forEach(b=>b.onclick=async()=>{if(b.dataset.busy==="1")return;const id=b.dataset.saveOrderCustomer,select=document.querySelector('[data-order-customer="'+id+'"]');if(!select)return;b.dataset.busy="1";b.disabled=true;try{const {error}=await supabaseClient.rpc("vineyard_assign_order_customer",{p_order_id:id,p_customer_id:select.value||null});if(error)throw error;alert("Kunde zugeordnet; Rabatt und Bestellwert wurden aktualisiert.");await render()}catch(err){alert(err.message||String(err))}finally{b.dataset.busy="0";if(b.isConnected)b.disabled=false}});
+  $("[data-view-order]").forEach(b=>b.onclick=()=>orderModal(b.dataset.viewOrder));
+ $("[data-save-order-customer]").forEach(b=>b.onclick=async()=>{if(b.dataset.busy==="1")return;const id=b.dataset.saveOrderCustomer,select=document.querySelector('[data-order-customer="'+id+'"]');if(!select)return;b.dataset.busy="1";b.disabled=true;try{const {error}=await supabaseClient.rpc("vineyard_assign_order_customer",{p_order_id:id,p_customer_id:select.value||null});if(error)throw error;alert("Kunde zugeordnet; Rabatt und Bestellwert wurden aktualisiert.");await render()}catch(err){alert(err.message||String(err))}finally{b.dataset.busy="0";if(b.isConnected)b.disabled=false}});
  $$("[data-order-status]").forEach(b=>b.onclick=async()=>{if(b.dataset.busy==="1")return;b.dataset.busy="1";b.disabled=true;try{const parts=b.dataset.orderStatus.split("|");if(parts.length!==2||!parts[0]||!parts[1])throw Error("Ungültige Bestellaktion.");await updateOrderStatus(parts[0],parts[1]);}catch(err){console.error("Bestellung aktualisieren:",err);alert(err?.message||String(err));}finally{b.dataset.busy="0";if(b.isConnected)b.disabled=false;}});
  $$("[data-delete-order]").forEach(b=>b.onclick=()=>deleteOrder(b.dataset.deleteOrder)); $$("[data-pay-commission]").forEach(b=>b.onclick=async()=>{if(b.dataset.busy==="1")return;const paymentSource=await new Promise(resolve=>{const root=$("#modalroot");root.innerHTML='<div class="modalback"><div class="modal"><div class="modalhead"><b>Auszahlung verbuchen</b><button type="button" id="commission-source-x">×</button></div><form id="commission-source-form"><label>Auszahlung erfolgt über<select name="payment_source" required><option value="Kasse">Kasse – vom Kassenbestand abziehen</option><option value="Privat">Privat – Kassenbestand bleibt unverändert</option></select></label><div class="actions"><button type="button" class="btn outline" id="commission-source-cancel">Abbrechen</button><button class="btn primary">Weiter</button></div></form></div></div>';const close=()=>{root.innerHTML="";resolve(null)};$("#commission-source-x").onclick=$("#commission-source-cancel").onclick=close;$("#commission-source-form").onsubmit=e=>{e.preventDefault();const value=new FormData(e.target).get("payment_source");root.innerHTML="";resolve(value)}});if(!paymentSource)return;if(!confirm("Provision vollständig als "+paymentSource+" ausgezahlt markieren?"+(paymentSource==="Kasse"?"\n\nDer Betrag wird als Kassenausgabe verbucht.":"\n\nDer Kassenbestand bleibt unverändert.")))return;b.dataset.busy="1";b.disabled=true;try{const r=await supabaseClient.rpc("vineyard_pay_commission",{p_employee_id:b.dataset.payCommission,p_payment_source:paymentSource});if(r.error)throw r.error;alert("Provision von "+money(r.data)+" wurde als "+paymentSource+" ausgezahlt verbucht.");await render()}catch(err){alert(err.message||String(err));b.dataset.busy="";b.disabled=false}});
 
