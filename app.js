@@ -7,7 +7,7 @@ if(!window.supabase||typeof window.supabase.createClient!=="function"){
 let currentEmployeeId=sessionStorage.getItem("vineyard_employee_id")||"";
 const employeeFetch=(input,init={})=>{
  const headers=new Headers(input instanceof Request?input.headers:undefined);
- new Headers(init.headers||{}).forEach((v,k)=>headers.set(k,v));
+ for(const [k,v] of new Headers(init.headers||{}).entries())headers.set(k,v);
  const employeeSession=sessionStorage.getItem("vineyard_employee_session")||"";
  if(employeeSession)headers.set("x-employee-session",employeeSession);else headers.delete("x-employee-session");
  headers.delete("x-employee-id");
