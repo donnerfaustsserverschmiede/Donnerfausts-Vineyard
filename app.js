@@ -219,7 +219,7 @@ async function invoices(){
  const {data:employees=[],error:ee}=await supabaseClient.rpc("vineyard_order_employees");
  if(ee)return errorBox(ee.message);
  const emap=Object.fromEntries((employees||[]).map(x=>[x.user_id,x.display_name]));
- rows.forEach(x=>x.employee_name=emap[x.employee_id]||"—");
+ rows.forEach(x=>{x.employee_name=emap[x.employee_id]||"—";x.completed_by_name=emap[x.completed_by]||"—"});
  const open=rows.filter(x=>x.status==="Offen").length;
  const total=rows.length;
  const commission=rows.reduce((s,x)=>s+Number(x.commission_amount||0),0);
@@ -230,7 +230,7 @@ async function invoices(){
  '</tbody></table></div></div>';
 }
 async function orders(){
- const {data:rawRows,error}=await supabaseClient.from("vineyard_orders").select("id,order_number,status,customer_name,customer_email,customer_phone,customer_address,customer_note,employee_id,total,commission_rate,commission_amount,delivery_date,delivery_requested,delivery_fee,created_at,accepted_at,completed_at,customer_id,subtotal_before_discount,customer_discount_percent").order("created_at",{ascending:false});
+ const {data:rawRows,error}=await supabaseClient.from("vineyard_orders").select("id,order_number,status,customer_name,customer_email,customer_phone,customer_address,customer_note,employee_id,completed_by,total,commission_rate,commission_amount,delivery_date,delivery_requested,delivery_fee,created_at,accepted_at,completed_at,customer_id,subtotal_before_discount,customer_discount_percent,completed_by").order("created_at",{ascending:false});
  if(error)return errorBox(error.message);
  const rows=Array.isArray(rawRows)?rawRows:[];
  const [{data:rawEmployees,error:ee},{data:customerRows,error:ce}]=await Promise.all([supabaseClient.rpc("vineyard_order_employees"),supabaseClient.from("vineyard_customers").select("id,name,discount_percent").eq("active",true).order("name")]);
@@ -247,7 +247,7 @@ async function orders(){
  const dateText=x=>x.delivery_date?new Date(x.delivery_date+"T00:00:00").toLocaleDateString("de-DE"):"—";
  const card=x=>'<div class="ordercard"><div class="ordercardtop"><div><span class="orderNo">'+esc(x.order_number)+'</span>'+badge(x.status)+'</div><b>'+money(x.total)+'</b></div>'+
  '<div class="ordercustomer"><strong>'+esc(x.customer_name)+'</strong><span>Lieferdatum: '+esc(dateText(x))+'</span><span>Lieferung: '+(x.delivery_requested?"Ja · +10%":"Nein")+'</span>'+(Number(x.customer_discount_percent||0)>0?'<span>Kundenrabatt: −'+Number(x.customer_discount_percent).toLocaleString("de-DE")+' %</span>':'<span>Kundenrabatt: 0 %</span>')+'</div>'+
- '<div class="ordermeta"><span>Erstellt: '+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</span><span>Mitarbeiter: '+esc(x.employee_name)+'</span>'+(x.commission_amount?'<span>Provision: '+money(x.commission_amount)+'</span>':'')+'</div>'+
+ '<div class="ordermeta"><span>Erstellt: '+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</span><span>Mitarbeiter: '+esc(x.employee_name)+'</span>'+(x.commission_amount?'<span>Provision: '+money(x.commission_amount)+'</span>':'')+(x.status==="Bestellung abgeschlossen"?'<span>Abgeschlossen von: '+esc(x.completed_by_name)+'</span>':'')+'</div>'+
  ((x.status==="In Bearbeitung")?'<div class="order-customer-select"><label style="display:block;margin:10px 0 5px;font-weight:700">KUNDE AUSWÄHLEN</label><select data-order-customer="'+x.id+'">'+customerOptions.map(o=>'<option value="'+esc(o.value)+'" '+(String(x.customer_id||"")===String(o.value)?"selected":"")+'>'+esc(o.label)+'</option>').join("")+'</select><small>Rabatt wird sofort auf den Warenwert angewendet. Liefergebühr bleibt unverändert.</small><button class="mini gold" data-save-order-customer="'+x.id+'">Kundenwahl speichern</button></div>':"")+
  '<div class="orderactions"><button class="mini gold" data-view-order="'+x.id+'">Details</button>'+
  (x.status==="Eingegangen"?'<button class="mini gold" data-order-status="'+x.id+'|In Bearbeitung">Bestellung annehmen</button>':"")+
@@ -268,7 +268,7 @@ async function orderModal(id){
  if(error)throw error;
  const {data:items=[],error:ie}=await supabaseClient.from("vineyard_order_items").select("item_name,unit,quantity,unit_price,line_total").eq("order_id",id).order("created_at");
  if(ie)throw ie;
- const employee=order.employee_id?await supabaseClient.from("vineyard_profiles").select("display_name").eq("user_id",order.employee_id).maybeSingle():{data:null};
+ const [{data:employee},{data:closer}]=await Promise.all([order.employee_id?supabaseClient.from("vineyard_profiles").select("display_name").eq("user_id",order.employee_id).maybeSingle():Promise.resolve({data:null}),order.completed_by?supabaseClient.from("vineyard_profiles").select("display_name").eq("user_id",order.completed_by).maybeSingle():Promise.resolve({data:null})]);
  const date=order.delivery_date?new Date(order.delivery_date+"T00:00:00").toLocaleDateString("de-DE"):"—";
  const rows=items.map(x=>'<tr><td>'+esc(x.item_name)+'</td><td>'+Number(x.quantity).toLocaleString("de-DE")+' '+esc(x.unit)+'</td><td>'+money(x.unit_price)+'</td><td>'+money(x.line_total)+'</td></tr>').join("");
  $("#modalroot").innerHTML='<div class="modalback"><div class="modal"><div class="modalhead"><b>Bestellung · '+esc(order.order_number)+'</b><button type="button" id="x">×</button></div><div class="grid2"><div class="panel"><b>Kunde</b><p>'+esc(order.customer_name)+'</p><b>Lieferdatum</b><p>'+esc(date)+'</p><b>Lieferung</b><p>'+(order.delivery_requested?"Ja · +10% Liefergebühr":"Nein")+'</p></div><div class="panel"><b>Status</b><p>'+badge(order.status)+'</p><b>Mitarbeiter</b><p>'+esc(employee.data?.display_name||"Noch nicht zugewiesen")+'</p><b>Provision</b><p>'+money(order.commission_amount||0)+'</p></div></div><div class="tablewrap"><table><thead><tr><th>Produkt</th><th>Menge</th><th>Einzelpreis</th><th>Gesamt</th></tr></thead><tbody>'+rows+'</tbody></table></div><div class="publicTotal"><span>Gesamtsumme</span><b>'+money(order.total)+'</b></div><p class="muted">'+esc(order.customer_note||"")+'</p><div class="actions"><button type="button" class="btn outline" id="closeOrderModal">Schließen</button></div></div></div>';
