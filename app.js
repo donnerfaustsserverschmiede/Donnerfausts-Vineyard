@@ -14,7 +14,7 @@ const employeeFetch=(input,init={})=>{
  return fetch(input,{...init,headers});
 };
 const supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{global:{fetch:employeeFetch},auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
-const $=s=>document.querySelector(s), $=s=>[...document.querySelectorAll(s)];
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const asArray=value=>Array.isArray(value)?value:[];
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 const money=n=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format(Number(n)||0);
