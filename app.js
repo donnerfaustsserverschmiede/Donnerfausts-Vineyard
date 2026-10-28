@@ -217,9 +217,11 @@ async function dashboard(){
 async function invoices(){
  const {data:rawRows,error}=await supabaseClient.from("vineyard_invoices").select("id,invoice_number,invoice_type,partner_name,status,created_at,created_by,employee_id,commission_rate,commission_amount").order("created_at",{ascending:false});
  if(error)return errorBox(error.message);
+ const rows=asArray(rawRows);
  const {data:rawEmployees,error:ee}=await supabaseClient.rpc("vineyard_order_employees");
  if(ee)return errorBox(ee.message);
- const emap=Object.fromEntries((employees||[]).map(x=>[x.user_id,x.display_name]));
+ const employees=asArray(rawEmployees);
+ const emap=Object.fromEntries(employees.map(x=>[x.user_id,x.display_name]));
  rows.forEach(x=>{x.employee_name=emap[x.employee_id]||"—";x.completed_by_name=emap[x.completed_by]||"—"});
  const open=rows.filter(x=>x.status==="Offen").length;
  const total=rows.length;
