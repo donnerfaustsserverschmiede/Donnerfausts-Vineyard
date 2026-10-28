@@ -14,7 +14,8 @@ const employeeFetch=(input,init={})=>{
  return fetch(input,{...init,headers});
 };
 const supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{global:{fetch:employeeFetch},auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
-const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const $=s=>document.querySelector(s), $=s=>[...document.querySelectorAll(s)];
+const asArray=value=>Array.isArray(value)?value:[];
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 const money=n=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format(Number(n)||0);
 const dateTime=()=>new Date().toLocaleString("de-DE");
@@ -214,9 +215,9 @@ async function dashboard(){
 }
 
 async function invoices(){
- const {data:rows=[],error}=await supabaseClient.from("vineyard_invoices").select("id,invoice_number,invoice_type,partner_name,status,created_at,created_by,employee_id,commission_rate,commission_amount").order("created_at",{ascending:false});
+ const {data:rawRows,error}=await supabaseClient.from("vineyard_invoices").select("id,invoice_number,invoice_type,partner_name,status,created_at,created_by,employee_id,commission_rate,commission_amount").order("created_at",{ascending:false});
  if(error)return errorBox(error.message);
- const {data:employees=[],error:ee}=await supabaseClient.rpc("vineyard_order_employees");
+ const {data:rawEmployees,error:ee}=await supabaseClient.rpc("vineyard_order_employees");
  if(ee)return errorBox(ee.message);
  const emap=Object.fromEntries((employees||[]).map(x=>[x.user_id,x.display_name]));
  rows.forEach(x=>{x.employee_name=emap[x.employee_id]||"—";x.completed_by_name=emap[x.completed_by]||"—"});
@@ -366,7 +367,7 @@ async function recipes(){
  const {data:inv=[]}=await supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category");
  const map=Object.fromEntries(inv.map(x=>[x.id,x]));
  const {data:items=[]}=await supabaseClient.from("vineyard_recipe_items").select("recipe_id,quantity,inventory_id,vineyard_inventory:inventory_id(item_name,unit,category)").order("created_at");
- const byRecipe={};items.forEach(x=>(byRecipe[x.recipe_id]??=[]).push(x));
+ const byRecipe={};asArray(items).forEach(x=>(byRecipe[x.recipe_id]??=[]).push(x));
  return intro("REZEPTE","Rezeptverwaltung","Hier legst du fest, welche im Lager angelegten Zutaten für ein Produkt benötigt werden.",canManageRecipes()?"newrecipe":null,canManageRecipes()?"+ Rezept":null)+
  '<div class="recipehint"><b>Wichtig:</b> Nur Artikel, die vorher im <b>Lager</b> angelegt wurden, können hier ausgewählt werden. Als Zutaten können sowohl <b>Zutaten</b> als auch bereits hergestellte <b>Produkte</b> verwendet werden. Das Rezept-Ergebnis muss als <b>Produkt</b> angelegt sein.</div>'+
  '<div class="recipegrid">'+rows.map(r=>{
@@ -394,7 +395,7 @@ async function production(){
   items=r.data||[];
  }
  const byRecipe={};
- items.forEach(x=>(byRecipe[x.recipe_id]??=[]).push(x));
+ asArray(items).forEach(x=>(byRecipe[x.recipe_id]??=[]).push(x));
  const {data:lastProductionRows=[]}=await supabaseClient.from("vineyard_inventory_movements").select("inventory_id,delta,reason,created_at").gt("delta",0).like("reason","Produktion:%").order("created_at",{ascending:false}).limit(1);
  const lastProduction=lastProductionRows[0];
  const lastProduct=lastProduction?inv.find(x=>x.id===lastProduction.inventory_id):null;
@@ -464,10 +465,10 @@ async function commissions(){
  const rankMap={master:12,familienvogt:11,familienrat:10,geschaeftsfuehrer:9,vertrauensmitglied:8,verwaltung:7,lager:6,winzer:5,winzerlehrling:4,kasse:3,kellerhelfer:2,mitarbeiter:1};
  const labelMap={master:"FAMILIENOBERHAUPT",familienvogt:"FAMILIENVOGT",familienrat:"FAMILIENRAT",geschaeftsfuehrer:"GESCHÄFTSFÜHRER",vertrauensmitglied:"VERTRAUENSMITGLIED",verwaltung:"BETRIEBSLEITER",lager:"KELLERMEISTER",winzer:"WINZER/BRAUER",winzerlehrling:"LEHRLING",kasse:"STUBENBEDIENSTETE",kellerhelfer:"KELLERHELFER",mitarbeiter:"ERNTEHELFER"};
  const accrued={}; const paid={};
- orders.forEach(x=>{const recipient=x.completed_by;if(recipient)accrued[recipient]=(accrued[recipient]||0)+Number(x.commission_amount||0)});
- invoices.forEach(x=>accrued[x.employee_id]=(accrued[x.employee_id]||0)+Number(x.commission_amount||0));
- trades.forEach(x=>accrued[x.employee_id]=(accrued[x.employee_id]||0)+Number(x.commission_amount||0));
- payouts.forEach(x=>paid[x.employee_id]=(paid[x.employee_id]||0)+Number(x.amount||0));
+ asArray(orders).forEach(x=>{const recipient=x.completed_by;if(recipient)accrued[recipient]=(accrued[recipient]||0)+Number(x.commission_amount||0)});
+ asArray(invoices).forEach(x=>accrued[x.employee_id]=(accrued[x.employee_id]||0)+Number(x.commission_amount||0));
+ asArray(trades).forEach(x=>accrued[x.employee_id]=(accrued[x.employee_id]||0)+Number(x.commission_amount||0));
+ asArray(payouts).forEach(x=>paid[x.employee_id]=(paid[x.employee_id]||0)+Number(x.amount||0));
  const rows=employees.filter(x=>rankMap[x.role_key]).map(x=>({...x,rank:rankMap[x.role_key],roleLabel:labelMap[x.role_key]||x.role_key,accrued:accrued[x.user_id]||0,paid:paid[x.user_id]||0,due:Math.max((accrued[x.user_id]||0)-(paid[x.user_id]||0),0)})).sort((a,b)=>b.rank-a.rank||a.display_name.localeCompare(b.display_name,"de"));
  const total=rows.reduce((s,x)=>s+x.due,0);
  const canPay=profile?.role_key==="master"||profile?.role_key==="familienvogt";
