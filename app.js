@@ -233,13 +233,19 @@ async function orders(){
  const {data:rawRows,error}=await supabaseClient.from("vineyard_orders").select("id,order_number,status,customer_name,customer_email,customer_phone,customer_address,customer_note,employee_id,completed_by,total,commission_rate,commission_amount,delivery_date,delivery_requested,delivery_fee,created_at,accepted_at,completed_at,customer_id,subtotal_before_discount,customer_discount_percent,completed_by").order("created_at",{ascending:false});
  if(error)return errorBox(error.message);
  const rows=Array.isArray(rawRows)?rawRows:[];
- const [{data:rawEmployees,error:ee},{data:customerRows,error:ce}]=await Promise.all([supabaseClient.rpc("vineyard_order_employees"),supabaseClient.from("vineyard_customers").select("id,name,discount_percent").eq("active",true).order("name")]);
- if(ee)return errorBox(ee.message);if(ce)return errorBox(ce.message);
+ const [{data:rawEmployees,error:ee},{data:customerRows,error:ce},{data:completionLogs,error:le}]=await Promise.all([supabaseClient.rpc("vineyard_order_employees"),supabaseClient.from("vineyard_customers").select("id,name,discount_percent").eq("active",true).order("name"),supabaseClient.from("vineyard_audit_log").select("entity_id,actor_id,created_at").eq("entity","order").eq("action","Bestellung abgeschlossen").order("created_at",{ascending:false})]);
+ if(ee)return errorBox(ee.message);if(ce)return errorBox(ce.message);if(le)return errorBox(le.message);
  const employees=Array.isArray(rawEmployees)?rawEmployees:[];
  const customersList=Array.isArray(customerRows)?customerRows:[];
  const customerOptions=[{value:"",label:"Privatkunde (0 % Rabatt)"},...customersList.map(k=>({value:k.id,label:k.name+" (−"+Number(k.discount_percent||0).toLocaleString("de-DE")+" %)"}))];
  const emap=Object.fromEntries(employees.map(x=>[x.user_id,x.display_name]));
- rows.forEach(x=>x.employee_name=emap[x.employee_id]||"—");
+ const completedByOrder={};
+ for(const log of (completionLogs||[])){if(log.actor_id&&!completedByOrder[log.entity_id])completedByOrder[log.entity_id]=log.actor_id;}
+ const completedIds=[...new Set(Object.values(completedByOrder))];
+ const {data:completedProfiles=[],error:cpe}=completedIds.length?await supabaseClient.from("vineyard_profiles").select("user_id,display_name").in("user_id",completedIds):{data:[],error:null};
+ if(cpe)return errorBox(cpe.message);
+ const completedNames=Object.fromEntries((completedProfiles||[]).map(x=>[x.user_id,x.display_name]));
+ rows.forEach(x=>{x.employee_name=emap[x.employee_id]||"—";x.completed_by_name=completedNames[completedByOrder[x.id]]||"—";});
  const open=rows.filter(x=>["Eingegangen","In Bearbeitung","Abhol-/Versandbereit"].includes(x.status));
  const recent=rows.filter(x=>x.status==="Bestellung abgeschlossen").slice(0,10);
  const totalOpen=open.reduce((n,x)=>n+Number(x.total||0),0);
