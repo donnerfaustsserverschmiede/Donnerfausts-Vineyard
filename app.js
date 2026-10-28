@@ -284,16 +284,42 @@ document.addEventListener("click",async event=>{
 },true);
 
 async function orderModal(id){
- const {data:order,error}=await supabaseClient.from("vineyard_orders").select("id,order_number,status,customer_name,customer_email,customer_phone,customer_address,customer_note,employee_id,completed_by,total,commission_rate,commission_amount,delivery_date,delivery_requested,delivery_fee,created_at,accepted_at,completed_at").eq("id",id).single();
- if(error)throw error;
- const {data:items=[],error:ie}=await supabaseClient.from("vineyard_order_items").select("item_name,unit,quantity,unit_price,line_total").eq("order_id",id).order("created_at");
- if(ie)throw ie;
- const [{data:employee},{data:closer}]=await Promise.all([order.employee_id?supabaseClient.from("vineyard_profiles").select("display_name").eq("user_id",order.employee_id).maybeSingle():Promise.resolve({data:null}),order.completed_by?supabaseClient.from("vineyard_profiles").select("display_name").eq("user_id",order.completed_by).maybeSingle():Promise.resolve({data:null})]);
+ // Bestelldetails zuerst öffnen; optionale Artikel-/Mitarbeiterabfragen dürfen das Modal nicht verhindern.
+ const root=$("#modalroot");
+ if(!root)throw Error("Das Fenster für Bestelldetails fehlt im Seitenaufbau.");
+ const orderResult=await supabaseClient.from("vineyard_orders").select("*").eq("id",id).maybeSingle();
+ if(!orderResult)throw Error("Die Datenbank hat keine Antwort auf die Bestellanfrage geliefert.");
+ if(orderResult.error)throw orderResult.error;
+ const order=orderResult.data;
+ if(!order)throw Error("Die Bestellung wurde nicht gefunden oder du hast keinen Zugriff darauf.");
  const date=order.delivery_date?new Date(order.delivery_date+"T00:00:00").toLocaleDateString("de-DE"):"—";
- const rows=items.map(x=>'<tr><td>'+esc(x.item_name)+'</td><td>'+Number(x.quantity).toLocaleString("de-DE")+' '+esc(x.unit)+'</td><td>'+money(x.unit_price)+'</td><td>'+money(x.line_total)+'</td></tr>').join("");
- $("#modalroot").innerHTML='<div class="modalback"><div class="modal"><div class="modalhead"><b>Bestellung · '+esc(order.order_number)+'</b><button type="button" id="x">×</button></div><div class="grid2"><div class="panel"><b>Kunde</b><p>'+esc(order.customer_name)+'</p><b>Lieferdatum</b><p>'+esc(date)+'</p><b>Lieferung</b><p>'+(order.delivery_requested?"Ja · +10% Liefergebühr":"Nein")+'</p></div><div class="panel"><b>Status</b><p>'+badge(order.status)+'</p><b>Angenommen von</b><p>'+esc(employee?.display_name||"Noch nicht zugewiesen")+'</p><b>Abgeschlossen von</b><p>'+esc(closer?.display_name||"—")+'</p><b>Provision</b><p>'+money(order.commission_amount||0)+'</p></div></div><div class="tablewrap"><table><thead><tr><th>Produkt</th><th>Menge</th><th>Einzelpreis</th><th>Gesamt</th></tr></thead><tbody>'+rows+'</tbody></table></div><div class="publicTotal"><span>Gesamtsumme</span><b>'+money(order.total)+'</b></div><p class="muted">'+esc(order.customer_note||"")+'</p><div class="actions"><button type="button" class="btn outline" id="closeOrderModal">Schließen</button></div></div></div>';
- const close=()=>$("#modalroot").innerHTML="";
- $("#x").onclick=$("#closeOrderModal").onclick=close;
+ root.innerHTML='<div class="modalback"><div class="modal"><div class="modalhead"><b>Bestellung · '+esc(order.order_number||"—")+'</b><button type="button" id="orderDetailsX" aria-label="Schließen">×</button></div><div class="grid2"><div class="panel"><b>Kunde</b><p>'+esc(order.customer_name||"—")+'</p><b>E-Mail</b><p>'+esc(order.customer_email||"—")+'</p><b>Telefon</b><p>'+esc(order.customer_phone||"—")+'</p><b>Adresse</b><p>'+esc(order.customer_address||"—")+'</p><b>Lieferdatum</b><p>'+esc(date)+'</p><b>Lieferung</b><p>'+(order.delivery_requested?"Ja · +10% Liefergebühr":"Nein")+'</p></div><div class="panel"><b>Status</b><p>'+badge(order.status||"Unbekannt")+'</p><b>Angenommen von</b><p id="orderDetailsEmployee">Wird geladen …</p><b>Abgeschlossen von</b><p id="orderDetailsCloser">Wird geladen …</p><b>Provision</b><p>'+money(order.commission_amount||0)+'</p><b>Erstellt am</b><p>'+esc(order.created_at?new Date(order.created_at).toLocaleString("de-DE"):"—")+'</p></div></div><div class="tablewrap"><table><thead><tr><th>Produkt</th><th>Menge</th><th>Einzelpreis</th><th>Gesamt</th></tr></thead><tbody><tr><td colspan="4">Bestellpositionen werden geladen …</td></tr></tbody></table></div><div class="publicTotal"><span>Gesamtsumme</span><b>'+money(order.total||0)+'</b></div><p class="muted">'+esc(order.customer_note||"")+'</p><div class="actions"><button type="button" class="btn outline" id="orderDetailsClose">Schließen</button></div></div></div>';
+ const close=()=>{root.innerHTML=""};
+ root.querySelector("#orderDetailsX")?.addEventListener("click",close);
+ root.querySelector("#orderDetailsClose")?.addEventListener("click",close);
+ // Load secondary details after the modal is already visible.
+ const loadName=async userId=>{
+  if(!userId)return "—";
+  try{
+   const result=await supabaseClient.from("vineyard_profiles").select("display_name").eq("user_id",userId).maybeSingle();
+   return result?.data?.display_name||"—";
+  }catch(err){console.warn("Mitarbeiterprofil konnte nicht geladen werden:",err);return "—"}
+ };
+ const loadItems=async()=>{
+  const tbody=root.querySelector("tbody");
+  if(!tbody)return;
+  try{
+   const result=await supabaseClient.from("vineyard_order_items").select("*").eq("order_id",id);
+   if(!result)throw Error("Keine Antwort beim Laden der Bestellpositionen.");
+   if(result.error)throw result.error;
+   const items=Array.isArray(result.data)?result.data:[];
+   tbody.innerHTML=items.map(x=>'<tr><td>'+esc(x.item_name||x.product_name||"Artikel")+'</td><td>'+Number(x.quantity||0).toLocaleString("de-DE")+' '+esc(x.unit||"")+'</td><td>'+money(x.unit_price||0)+'</td><td>'+money(x.line_total??(Number(x.quantity||0)*Number(x.unit_price||0)))+'</td></tr>').join("")||'<tr><td colspan="4">Keine Bestellpositionen gefunden.</td></tr>';
+  }catch(err){console.error("Bestellpositionen konnten nicht geladen werden:",err);tbody.innerHTML='<tr><td colspan="4">Bestellung geöffnet, aber die Positionen konnten nicht geladen werden.</td></tr>'}
+ };
+ const [employeeName,closerName]=await Promise.all([loadName(order.employee_id),loadName(order.completed_by)]);
+ if(root.querySelector("#orderDetailsEmployee"))root.querySelector("#orderDetailsEmployee").textContent=employeeName;
+ if(root.querySelector("#orderDetailsCloser"))root.querySelector("#orderDetailsCloser").textContent=closerName;
+ await loadItems();
 }
 async function updateOrderStatus(id,status){
  const button=document.querySelector('[data-order-status="'+id+'|'+status+'"]');
