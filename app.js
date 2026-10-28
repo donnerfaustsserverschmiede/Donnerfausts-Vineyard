@@ -271,6 +271,18 @@ async function orders(){
  '<div class="ordergrid">'+(recent.map(card).join("")||'<div class="panel"><p class="muted">Keine Bestellungen hinterlegt</p></div>')+'</div></div>';
 }
 
+document.addEventListener("click",async event=>{
+ const button=event.target.closest?.("[data-view-order]");
+ if(!button)return;
+ event.preventDefault();
+ event.stopPropagation();
+ if(button.dataset.busy==="1")return;
+ button.dataset.busy="1";button.disabled=true;
+ try{await orderModal(button.dataset.viewOrder)}
+ catch(err){console.error("Bestelldetails konnten nicht geöffnet werden:",err);alert("Bestelldetails konnten nicht geöffnet werden: "+(err?.message||String(err)))}
+ finally{button.dataset.busy="0";if(button.isConnected)button.disabled=false}
+},true);
+
 async function orderModal(id){
  const {data:order,error}=await supabaseClient.from("vineyard_orders").select("id,order_number,status,customer_name,customer_email,customer_phone,customer_address,customer_note,employee_id,completed_by,total,commission_rate,commission_amount,delivery_date,delivery_requested,delivery_fee,created_at,accepted_at,completed_at").eq("id",id).single();
  if(error)throw error;
@@ -717,7 +729,7 @@ function bind(){
  $$("[data-share-invoice]").forEach(b=>b.onclick=()=>shareInvoice(b.dataset.shareInvoice));
  $$("[data-edit-invoice]").forEach(b=>b.onclick=()=>invoiceModal(b.dataset.editInvoice));
  $$("[data-delete-invoice]").forEach(b=>b.onclick=()=>deleteInvoice(b.dataset.deleteInvoice));
- $$("[data-view-order]").forEach(b=>b.onclick=async()=>{if(b.dataset.busy==="1")return;b.dataset.busy="1";b.disabled=true;try{await orderModal(b.dataset.viewOrder)}catch(err){console.error("Bestelldetails konnten nicht geöffnet werden:",err);alert("Die Bestelldetails konnten nicht geladen werden: "+(err?.message||String(err)))}finally{b.dataset.busy="0";if(b.isConnected)b.disabled=false}});
+ // Der Details-Button wird zentral per Event-Delegation behandelt (auch nach erneutem Rendern).
   $$("[data-save-order-customer]").forEach(b=>b.onclick=async()=>{if(b.dataset.busy==="1")return;const id=b.dataset.saveOrderCustomer,select=document.querySelector('[data-order-customer="'+id+'"]');if(!select)return;b.dataset.busy="1";b.disabled=true;try{const {error}=await supabaseClient.rpc("vineyard_assign_order_customer",{p_order_id:id,p_customer_id:select.value||null});if(error)throw error;alert("Kunde zugeordnet; Rabatt und Bestellwert wurden aktualisiert.");await render()}catch(err){alert(err.message||String(err))}finally{b.dataset.busy="0";if(b.isConnected)b.disabled=false}});
  $$("[data-order-status]").forEach(b=>b.onclick=async()=>{if(b.dataset.busy==="1")return;b.dataset.busy="1";b.disabled=true;try{const parts=b.dataset.orderStatus.split("|");if(parts.length!==2||!parts[0]||!parts[1])throw Error("Ungültige Bestellaktion.");await updateOrderStatus(parts[0],parts[1]);}catch(err){console.error("Bestellung aktualisieren:",err);alert(err?.message||String(err));}finally{b.dataset.busy="0";if(b.isConnected)b.disabled=false;}});
  $$("[data-delete-order]").forEach(b=>b.onclick=()=>deleteOrder(b.dataset.deleteOrder)); $$("[data-pay-commission]").forEach(b=>b.onclick=async()=>{if(b.dataset.busy==="1")return;const paymentSource=await new Promise(resolve=>{const root=$("#modalroot");root.innerHTML='<div class="modalback"><div class="modal"><div class="modalhead"><b>Auszahlung verbuchen</b><button type="button" id="commission-source-x">×</button></div><form id="commission-source-form"><label>Auszahlung erfolgt über<select name="payment_source" required><option value="Kasse">Kasse – vom Kassenbestand abziehen</option><option value="Privat">Privat – Kassenbestand bleibt unverändert</option></select></label><div class="actions"><button type="button" class="btn outline" id="commission-source-cancel">Abbrechen</button><button class="btn primary">Weiter</button></div></form></div></div>';const close=()=>{root.innerHTML="";resolve(null)};$("#commission-source-x").onclick=$("#commission-source-cancel").onclick=close;$("#commission-source-form").onsubmit=e=>{e.preventDefault();const value=new FormData(e.target).get("payment_source");root.innerHTML="";resolve(value)}});if(!paymentSource)return;if(!confirm("Provision vollständig als "+paymentSource+" ausgezahlt markieren?"+(paymentSource==="Kasse"?"\n\nDer Betrag wird als Kassenausgabe verbucht.":"\n\nDer Kassenbestand bleibt unverändert.")))return;b.dataset.busy="1";b.disabled=true;try{const r=await supabaseClient.rpc("vineyard_pay_commission",{p_employee_id:b.dataset.payCommission,p_payment_source:paymentSource});if(r.error)throw r.error;alert("Provision von "+money(r.data)+" wurde als "+paymentSource+" ausgezahlt verbucht.");await render()}catch(err){alert(err.message||String(err));b.dataset.busy="";b.disabled=false}});
