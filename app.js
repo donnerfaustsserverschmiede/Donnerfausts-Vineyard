@@ -198,7 +198,6 @@ function installAuditLifecycleListeners(){
   }
  };
  window.addEventListener("pagehide",()=>leave("Tab oder Fenster geschlossen, Seite neu geladen oder verlassen"));
- document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="hidden")leave("Browser-Tab wurde verborgen")});
 }
 function shell(content){
  const nav=NAV.filter(n=>can(n[3])||role?.key==="admin").map(n=>`<button type="button" class="nav ${page===n[0]?"active":""}" data-page="${n[0]}"><i>${n[1]}</i>${n[2]}</button>`).join("");
