@@ -359,7 +359,8 @@ async function inventory(){
 }
 function inventoryRows(items,customers=[]){
  const customerName=id=>customers.find(c=>String(c.id)===String(id))?.name||"";
- return items.map(x=>{
+ const sortedItems=[...items].sort((a,b)=>String(a.category||"").localeCompare(String(b.category||""),"de",{sensitivity:"base"})||String(a.item_name||"").localeCompare(String(b.item_name||""),"de",{numeric:true,sensitivity:"base"}));
+ return sortedItems.map(x=>{
   const low=Number(x.quantity)<=Number(x.min_stock);
   const price=x.category==="Zutaten"?"Einkauf "+money(x.purchase_price):"Verkauf "+money(x.sale_price);
   const actions=canManageCatalog()?'<button class="mini" data-edit-item="'+x.id+'">Bearbeiten</button> <button class="mini danger" data-delete-item="'+x.id+'">Löschen</button>':'';
@@ -369,7 +370,8 @@ function inventoryRows(items,customers=[]){
  }).join("")||'<tr><td colspan="9" class="muted">Noch keine Lagerartikel angelegt.</td></tr>';
 }
 async function recipes(){
- const {data:rows=[],error}=await supabaseClient.from("vineyard_recipes").select("*").order("name");
+ const {data:rowsRaw=[],error}=await supabaseClient.from("vineyard_recipes").select("*");
+ const rows=[...rowsRaw].sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"de",{numeric:true,sensitivity:"base"}));
  if(error)return errorBox(error.message);
  const {data:inv=[]}=await supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category");
  const map=Object.fromEntries(inv.map(x=>[x.id,x]));
