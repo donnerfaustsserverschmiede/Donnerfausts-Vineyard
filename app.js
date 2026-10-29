@@ -956,7 +956,7 @@ async function invoiceModal(id){
   if(ie)throw ie;
   existingItems=its||[];
  }
- const sellableInventory=inventory;
+ const sellableInventory=inventory.filter(x=>x.category==="Produkte"&&x.is_available===true);
  const initialInvoiceType=existingInvoice?.invoice_type||"Verkauf";
  const initialInventory=(initialInvoiceType==="Verkauf"?sellableInventory:inventory)[0]||inventory[0];
  const rows=existingItems.length?existingItems.map(x=>({inventory_id:x.inventory_id,quantity:x.quantity,unit_price:x.unit_price})):[{inventory_id:initialInventory.id,quantity:1,unit_price:0}];
@@ -1099,9 +1099,9 @@ async function tradeModal(id,defaultType=null){
  if(ie)throw ie;if(te)throw te;if(ce)throw ce;if(ee)throw ee;
  if(id&&!existing)throw Error("Handelsvorgang nicht gefunden.");
  const type=existing?.trade_type||defaultType||"Einkauf";
- const initialItems=items;
+ const initialItems=type==="Einkauf"?items:items.filter(x=>x.category==="Produkte"&&x.is_available===true);
  if(!initialItems.length)throw Error(type==="Einkauf"?"Lege zuerst mindestens eine Zutat mit Einkaufspreis im Lager an.":"Lege zuerst mindestens ein verfügbares Produkt im Lager an.");
- const optionsFor=t=>items;
+ const optionsFor=t=>t==="Einkauf"?items:items.filter(x=>x.category==="Produkte"&&x.is_available===true);
  const optionHtml=(t,selected)=>optionsFor(t).map(x=>'<option value="'+esc(x.id)+'" '+(String(selected)===String(x.id)?"selected":"")+'>'+(x.owner_customer_id?"★ ":"")+esc(x.item_name)+' · '+esc(x.unit)+'</option>').join("");
  const customerOptions=[{value:"",label:"Privatkunde"},...customerRows.filter(k=>k.active).map(k=>({value:k.id,label:k.name+" (−"+Number(k.discount_percent||0).toLocaleString("de-DE")+" %)"}))];
  $("#modalroot").innerHTML='<div class="modalback"><div class="modal tradeModal"><div class="modalhead"><b>'+(id?"Ein-/Verkauf bearbeiten":"Ein- und Verkauf")+'</b><button type="button" id="x">×</button></div><form id="tradeform">'+
