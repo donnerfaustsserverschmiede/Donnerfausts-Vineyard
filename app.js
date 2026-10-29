@@ -629,10 +629,12 @@ function bindInventoryRows(){
 }
 async function toggleAvailability(id,current){
  if(!canManageCatalog())throw new Error("Du darfst die Verfügbarkeit nicht ändern.");
+ const {data:item}=await supabaseClient.from("vineyard_inventory").select("item_name,quantity,is_available").eq("id",id).maybeSingle();
  const next=!current;
  const {data,error}=await supabaseClient.rpc("vineyard_set_product_availability",{p_inventory_id:id,p_is_available:next});
  if(error)throw error;
  if(!data||data.is_available!==next)throw new Error("Die Datenbank hat die Änderung nicht bestätigt.");
+ await auditLog(next?"Produkt verfügbar gemacht":"Produkt nicht verfügbar","inventory",id,{item_name:item?.item_name||"Produkt",old_available:current,new_available:next});
  const removed=Number(data.removed_from_active_orders||0);
  await render();
  alert(next?"Produkt ist jetzt verfügbar.":"Produkt ist nicht mehr verfügbar."+(removed?" "+removed+" Bestellposition(en) wurden aus offenen Bestellungen entfernt.":""));
