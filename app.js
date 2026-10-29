@@ -157,7 +157,7 @@ async function selectEmployee(forcePicker=true){
  const saved=employees.find(x=>x.user_id===currentEmployeeId);
  if(!forcePicker&&saved&&sessionStorage.getItem("vineyard_employee_session")){
   const {data:verified,error:verifyError}=await supabaseClient.rpc("vineyard_current_employee_id");
-  if(!verifyError&&verified===saved.user_id){setCurrentEmployee(saved);await render();startPresence();return;}
+  if(!verifyError&&verified===saved.user_id){setCurrentEmployee(saved);await render();startPresence();installAuditLifecycleListeners();return;}
   sessionStorage.removeItem("vineyard_employee_session");sessionStorage.removeItem("vineyard_employee_id");currentEmployeeId="";
  }
  document.body.innerHTML=`<div class="login"><div class="loginbox"><div class="loginbrand"><div class="brandmark"><img src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"></div><h1>Donnerfaust Saloon</h1><p>Mitarbeiter auswählen</p></div><p class="muted" style="margin:18px 0">Wähle deinen Namen aus. Anschließend wird das persönliche Passwort dieses Mitarbeiters abgefragt.</p><div class="employeegrid">${employees.map(x=>'<button type="button" class="employee" data-choose-employee="'+esc(x.user_id)+'" style="text-align:left;width:100%;cursor:pointer"><div class="avatar">'+esc(initials(x.display_name))+'</div><div style="flex:1"><b>'+esc(x.display_name)+'</b><small>'+esc(x.vineyard_roles?.label||x.role_key)+'</small></div><span>›</span></button>').join("")}</div></div></div>`;
@@ -176,18 +176,35 @@ async function selectEmployee(forcePicker=true){
      const {data:token,error}=await supabaseClient.rpc("vineyard_check_employee_password",{p_employee_id:employee.user_id,p_password:input.value});
      if(error)throw error;if(!token)throw Error("Das Passwort ist falsch.");
      sessionStorage.setItem("vineyard_employee_session",String(token));sessionStorage.setItem("vineyard_employee_id",String(employee.user_id));
-     setCurrentEmployee(employee);await render();startPresence();
+     setCurrentEmployee(employee);await auditLog("Mitarbeiter angemeldet","session",employee.user_id,{display_name:employee.display_name,role_key:employee.role_key});await render();startPresence();installAuditLifecycleListeners();
     }catch(err){if(eb){eb.textContent=err?.message||String(err);eb.style.display="block"}else alert(err?.message||String(err));submit.disabled=false;input.focus();input.select();}
    };
   }catch(err){alert(err?.message||String(err));button.disabled=false}
  }));
 }
 function setCurrentEmployee(employee){profile=employee;role=employee.vineyard_roles;currentEmployeeId=employee.user_id;sessionStorage.setItem("vineyard_employee_id",currentEmployeeId);}
+let auditLifecycleInstalled=false;
+function installAuditLifecycleListeners(){
+ if(auditLifecycleInstalled)return;
+ auditLifecycleInstalled=true;
+ const leave=reason=>{
+  const actor=profile;if(!actor?.user_id)return;
+  const session=sessionStorage.getItem("vineyard_employee_session")||"";
+  const event={actor_id:actor.user_id,actor_name:actor.display_name||"",action:"Webseite verlassen",entity:"session",entity_id:String(actor.user_id),details:{display_name:actor.display_name||"",reason},occurred_at:new Date().toISOString()};
+  // Fire both destinations immediately; pagehide handlers cannot safely await a network round trip.
+  try{void supabaseClient.from("vineyard_audit_log").insert({actor_id:event.actor_id,action:event.action,entity:event.entity,entity_id:event.entity_id,details:event.details})}catch(_){}
+  if(session){
+   try{fetch(SUPABASE_URL+"/functions/v1/vineyard-discord-audit",{method:"POST",headers:{"Content-Type":"application/json","apikey":SUPABASE_KEY,"x-employee-session":session},body:JSON.stringify(event),keepalive:true}).catch(()=>{})}catch(_){}
+  }
+ };
+ window.addEventListener("pagehide",()=>leave("Tab oder Fenster geschlossen, Seite neu geladen oder verlassen"));
+ document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="hidden")leave("Browser-Tab wurde verborgen")});
+}
 function shell(content){
  const nav=NAV.filter(n=>can(n[3])||role?.key==="admin").map(n=>`<button type="button" class="nav ${page===n[0]?"active":""}" data-page="${n[0]}"><i>${n[1]}</i>${n[2]}</button>`).join("");
  document.body.innerHTML=`<div class="nav-overlay" id="navOverlay"></div><aside class="sidebar" id="sidebar"><div class="brand"><div class="brandmark"><img src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"></div><div><b>Donnerfaust Saloon</b><small>Interne Verwaltung</small></div></div><nav>${nav}</nav><div class="sidefoot"><span class="online"></span>${esc(profile.display_name)} · ${esc(role.label)}<br><button id="switchEmployee" class="mini" style="margin-top:9px">Mitarbeiter wechseln</button></div></aside><main class="main"><header class="top"><div class="topTitle"><button class="hamb" id="hamb" type="button" aria-label="Menü öffnen" aria-expanded="false">☰</button><img class="topbrandlogo" src="./assets/donnerfaust-saloon-logo.svg" alt="Donnerfaust Saloon"><div><span class="crumb">DONNERFAUST SALOON</span><h2>${esc(pageTitle())}</h2></div></div><div class="topright"><span class="online"></span><b>${esc(profile.display_name)}</b><span class="avatar">${esc(initials(profile.display_name))}</span></div></header><section class="content">${content}</section></main><div id="modalroot"></div>`;
  const switchEmployee=$("#switchEmployee");
- if(switchEmployee) switchEmployee.addEventListener("click",async e=>{e.preventDefault();if(presenceChannel){try{await supabaseClient.removeChannel(presenceChannel)}catch(_){}presenceChannel=null;}stopOrderRealtime();const token=sessionStorage.getItem("vineyard_employee_session")||"";if(token){try{await supabaseClient.rpc("vineyard_revoke_employee_session",{p_token:token})}catch(_){}}sessionStorage.removeItem("vineyard_employee_session");sessionStorage.removeItem("vineyard_employee_id");currentEmployeeId="";profile=null;role=null;await selectEmployee(true)});
+ if(switchEmployee) switchEmployee.addEventListener("click",async e=>{e.preventDefault();const oldProfile=profile;if(oldProfile?.user_id)await auditLog("Mitarbeiter abgemeldet","session",oldProfile.user_id,{display_name:oldProfile.display_name,reason:"Mitarbeiterwechsel"});if(presenceChannel){try{await supabaseClient.removeChannel(presenceChannel)}catch(_){}presenceChannel=null;}stopOrderRealtime();const token=sessionStorage.getItem("vineyard_employee_session")||"";if(token){try{await supabaseClient.rpc("vineyard_revoke_employee_session",{p_token:token})}catch(_){}}sessionStorage.removeItem("vineyard_employee_session");sessionStorage.removeItem("vineyard_employee_id");currentEmployeeId="";profile=null;role=null;await selectEmployee(true)});
 }
 function pageTitle(){return ({dashboard:"Übersicht",customers:"Kunden",invoices:"Rechnungen",orders:"Bestellungen",inventory:"Lagerübersicht",purchase:"Einkauf",sales:"Verkauf",cash:"Kasse",employees:"Mitarbeiter",appointments:"Termine",commission:"Provision",manual:"Betriebsanleitung"})[page]||"Übersicht"}
 function initials(n){return String(n||"DF").split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase()}
