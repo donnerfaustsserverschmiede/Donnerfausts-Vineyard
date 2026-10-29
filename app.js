@@ -781,12 +781,16 @@ function selectField(label,name,opts,value=""){return '<label>'+label+'<select n
 
 async function itemModal(id){
   if(!canManageCatalog())throw Error("Du darfst keine Lagerartikel anlegen oder Stammdaten bearbeiten.");
+ const {data:customers=[],error:customerError}=await supabaseClient.from("vineyard_customers").select("id,name,active").order("name");
+ if(customerError)throw customerError;
  let item=null;
  if(id){const {data,error}=await supabaseClient.from("vineyard_inventory").select("*").eq("id",id).single();if(error)throw error;item=data}
  const cat=item?.category||"Zutaten";
+ const customerOptions=[{value:"",label:"Kein Unternehmen"},...customers.filter(c=>c.active||String(c.id)===String(item?.owner_customer_id||"")).map(c=>({value:c.id,label:c.name}))];
  $("#modalroot").innerHTML='<div class="modalback"><div class="modal"><div class="modalhead"><b>'+(id?"Lagerartikel bearbeiten":"Neuer Lagerartikel")+'</b><button id="x">×</button></div><form id="mf">'+
  field("Artikel / Ressource","item_name","text",item?.item_name||"",true)+
  selectField("Kategorie","category",[{value:"Zutaten",label:"Zutaten"},{value:"Produkte",label:"Produkte"}],cat)+
+ '<label id="ownerCustomerWrap">Unternehmen / Kunde<select name="owner_customer_id">'+customerOptions.map(o=>'<option value="'+esc(o.value)+'" '+(String(item?.owner_customer_id||"")===String(o.value)?"selected":"")+'>'+esc(o.label)+'</option>').join("")+'</select><small class="muted">Nur bei Produkten relevant. Ohne Zuordnung wird kein Sternchen angezeigt.</small></label>'+
  field("Einheit","unit","text",item?.unit||"Stück",true)+
  field("Bestand","quantity","number",item?.quantity??0)+
  field("Mindestbestand","min_stock","number",item?.min_stock??0)+
@@ -795,11 +799,13 @@ async function itemModal(id){
  '<div class="actions"><button type="button" class="btn outline" id="cancel">Abbrechen</button><button class="btn primary">Speichern</button></div></form></div></div>';
  const close=()=>$("#modalroot").innerHTML="";
  $("#x").onclick=$("#cancel").onclick=close;
- const category=$("#mf [name=category]"),purchase=$("#purchaseWrap"),sale=$("#saleWrap");
+ const category=$("#mf [name=category]"),purchase=$("#purchaseWrap"),sale=$("#saleWrap"),ownerWrap=$("#ownerCustomerWrap");
  const updatePrices=()=>{
    const ingredient=category.value==="Zutaten";
    purchase.style.display=ingredient?"":"none";
    sale.style.display=ingredient?"none":"";
+   ownerWrap.style.display=ingredient?"none":"";
+   $("#ownerCustomerWrap select").disabled=ingredient;
    $("#purchaseWrap input").required=ingredient;
    $("#saleWrap input").required=!ingredient;
  };
@@ -813,7 +819,7 @@ async function itemModal(id){
     const sale_price=ingredient?0:Number(v.sale_price);
     if(!ingredient&&!Number.isFinite(sale_price))throw Error("Bitte einen gültigen Verkaufspreis angeben.");
     if(ingredient&&!Number.isFinite(purchase_price))throw Error("Bitte einen gültigen Einkaufspreis angeben.");
-    const patch={item_name:v.item_name.trim(),category:v.category,unit:v.unit.trim(),quantity:Number(v.quantity)||0,min_stock:Number(v.min_stock)||0,purchase_price,sale_price,updated_at:new Date().toISOString(),updated_by:profile?.user_id||null};
+    const patch={item_name:v.item_name.trim(),category:v.category,unit:v.unit.trim(),quantity:Number(v.quantity)||0,min_stock:Number(v.min_stock)||0,purchase_price,sale_price,owner_customer_id:ingredient?null:(v.owner_customer_id||null),updated_at:new Date().toISOString(),updated_by:profile?.user_id||null};
     const r=id?await supabaseClient.from("vineyard_inventory").update(patch).eq("id",id):await supabaseClient.from("vineyard_inventory").insert(patch);
     if(r.error)throw r.error;
     await auditLog(id?"Lagerartikel geändert":"Lagerartikel angelegt","inventory",id||v.item_name,patch);
