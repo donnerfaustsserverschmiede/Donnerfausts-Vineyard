@@ -726,7 +726,7 @@ function bind(){
    }catch(err){alert(err.message||String(err));book.disabled=false}
   });
  }
- $("#q")?.addEventListener("input",async e=>{const {data=[]}=await supabaseClient.from("vineyard_inventory").select("*").order("category").order("item_name");const q=e.target.value.toLowerCase();$("#inventoryRows").innerHTML=inventoryRows(data.filter(x=>(x.item_name+" "+x.category+" "+x.unit).toLowerCase().includes(q)));bindInventoryRows()});
+ $("#q")?.addEventListener("input",async e=>{const [{data=[]},{data:customers=[]}]=await Promise.all([supabaseClient.from("vineyard_inventory").select("*").order("category").order("item_name"),supabaseClient.from("vineyard_customers").select("id,name,active").order("name")]);const q=e.target.value.toLowerCase();$("#inventoryRows").innerHTML=inventoryRows(data.filter(x=>(x.item_name+" "+x.category+" "+x.unit+" "+(customers.find(c=>String(c.id)===String(x.owner_customer_id))?.name||"")).toLowerCase().includes(q)),customers);bindInventoryRows()});
  $$("[data-stock]").forEach(b=>b.onclick=()=>stockModal(b.dataset.stock));
  bindInventoryRows();
  $$("[data-edit-recipe]").forEach(b=>b.onclick=()=>recipeModal(b.dataset.editRecipe));
