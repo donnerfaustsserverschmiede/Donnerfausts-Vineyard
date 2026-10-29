@@ -781,6 +781,9 @@ function modal(title,body,onSubmit){
 function field(label,name,type="text",value="",required=false){return '<label>'+label+'<input name="'+name+'" type="'+type+'" value="'+esc(value)+'" '+(required?"required":"")+"></label>"}
 function selectField(label,name,opts,value=""){return '<label>'+label+'<select name="'+name+'">'+opts.map(o=>'<option value="'+esc(o.value??o)+'" '+(String(value)===String(o.value??o)?"selected":"")+'>'+esc(o.label??o)+"</option>").join("")+"</select></label>"}
 
+function isSellableProduct(item){return item?.category==="Produkte"&&item?.is_available===true;}
+function productStar(item){return item?.owner_customer_id?"★ ":"";}
+
 async function itemModal(id){
   if(!canManageCatalog())throw Error("Du darfst keine Lagerartikel anlegen oder Stammdaten bearbeiten.");
  const {data:customers=[],error:customerError}=await supabaseClient.from("vineyard_customers").select("id,name,active").order("name");
@@ -956,7 +959,7 @@ async function invoiceModal(id){
   if(ie)throw ie;
   existingItems=its||[];
  }
- const sellableInventory=inventory.filter(x=>x.category==="Produkte"&&x.is_available===true);
+ const sellableInventory=inventory.filter(isSellableProduct);
  const initialInvoiceType=existingInvoice?.invoice_type||"Verkauf";
  const initialInventory=(initialInvoiceType==="Verkauf"?sellableInventory:inventory)[0]||inventory[0];
  const rows=existingItems.length?existingItems.map(x=>({inventory_id:x.inventory_id,quantity:x.quantity,unit_price:x.unit_price})):[{inventory_id:initialInventory.id,quantity:1,unit_price:0}];
@@ -981,7 +984,7 @@ async function invoiceModal(id){
  const commissionRate=type=>type==="Verkauf"?20:0;
  const draw=()=>{
   const invoiceInventory=typeEl.value==="Verkauf"?sellableInventory:inventory;
-  $("#invoiceitemsform").innerHTML=rows.map((r,n)=>'<div class="invoiceformrow"><select data-ii="'+n+'" class="invoiceitem">'+invoiceInventory.map(x=>'<option value="'+esc(x.id)+'" '+(x.id===r.inventory_id?"selected":"")+'>'+ (x.owner_customer_id?"★ ":"")+esc(x.item_name)+' · '+esc(x.unit)+'</option>').join("")+'</select><input data-iq="'+n+'" class="invoicequantity" type="number" min="0.0001" step="any" value="'+esc(r.quantity)+'" required><input data-ip="'+n+'" class="invoiceprice" type="number" min="0" step="0.01" value="'+esc(r.unit_price)+'" required><button type="button" class="mini" data-remove-ii="'+n+'">×</button></div>').join("");
+  $("#invoiceitemsform").innerHTML=rows.map((r,n)=>'<div class="invoiceformrow"><select data-ii="'+n+'" class="invoiceitem">'+invoiceInventory.map(x=>'<option value="'+esc(x.id)+'" '+(x.id===r.inventory_id?"selected":"")+'>'+ productStar(x)+esc(x.item_name)+' · '+esc(x.unit)+'</option>').join("")+'</select><input data-iq="'+n+'" class="invoicequantity" type="number" min="0.0001" step="any" value="'+esc(r.quantity)+'" required><input data-ip="'+n+'" class="invoiceprice" type="number" min="0" step="0.01" value="'+esc(r.unit_price)+'" required><button type="button" class="mini" data-remove-ii="'+n+'">×</button></div>').join("");
   const refresh=()=>{
    let sum=0,base=0;
    rows.forEach((r,n)=>{
@@ -1099,9 +1102,9 @@ async function tradeModal(id,defaultType=null){
  if(ie)throw ie;if(te)throw te;if(ce)throw ce;if(ee)throw ee;
  if(id&&!existing)throw Error("Handelsvorgang nicht gefunden.");
  const type=existing?.trade_type||defaultType||"Einkauf";
- const initialItems=type==="Einkauf"?items:items.filter(x=>x.category==="Produkte"&&x.is_available===true);
+ const initialItems=type==="Einkauf"?items:items.filter(isSellableProduct);
  if(!initialItems.length)throw Error(type==="Einkauf"?"Lege zuerst mindestens eine Zutat mit Einkaufspreis im Lager an.":"Lege zuerst mindestens ein verfügbares Produkt im Lager an.");
- const optionsFor=t=>t==="Einkauf"?items:items.filter(x=>x.category==="Produkte"&&x.is_available===true);
+ const optionsFor=t=>t==="Einkauf"?items:items.filter(isSellableProduct);
  const optionHtml=(t,selected)=>optionsFor(t).map(x=>'<option value="'+esc(x.id)+'" '+(String(selected)===String(x.id)?"selected":"")+'>'+(x.owner_customer_id?"★ ":"")+esc(x.item_name)+' · '+esc(x.unit)+'</option>').join("");
  const customerOptions=[{value:"",label:"Privatkunde"},...customerRows.filter(k=>k.active).map(k=>({value:k.id,label:k.name+" (−"+Number(k.discount_percent||0).toLocaleString("de-DE")+" %)"}))];
  $("#modalroot").innerHTML='<div class="modalback"><div class="modal tradeModal"><div class="modalhead"><b>'+(id?"Ein-/Verkauf bearbeiten":"Ein- und Verkauf")+'</b><button type="button" id="x">×</button></div><form id="tradeform">'+
@@ -1207,7 +1210,7 @@ async function deliveryModal(){
  if(!employees.length)throw Error("Keine aktiven Mitarbeiter verfügbar.");
  if(!products.length)throw Error("Lege zuerst mindestens ein Produkt im Lager an.");
  const employeeOptions=employees.map(x=>({value:x.user_id,label:x.display_name}));
- const productOptions=products.map(x=>{const owner=customersList.find(c=>String(c.id)===String(x.owner_customer_id));return {value:x.id,label:(x.owner_customer_id?"★ ":"")+x.item_name}});
+ const productOptions=products.map(x=>{const owner=customersList.find(c=>String(c.id)===String(x.owner_customer_id));return {value:x.id,label:productStar(x)+x.item_name}});
  const customerOptions=[{value:"",label:"Privatkunde"},...customersList.map(x=>({value:x.id,label:x.name+" (−"+Number(x.discount_percent).toLocaleString("de-DE")+" %)"}))];
  modal("Lieferung an Großhändler",
  '<div class="recipehint"><b>Hinweis:</b> Standardmäßig ist „Privatkunde“ ausgewählt. Wähle einen angelegten Kunden aus, um dessen Rabatt automatisch vom regulären Produktpreis abzuziehen. Die Provision wird wie bisher in der Provisionstabelle geführt.</div>'+
