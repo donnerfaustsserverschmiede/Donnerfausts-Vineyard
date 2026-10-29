@@ -831,9 +831,10 @@ async function recipeModal(id){
   if(!canManageRecipes())throw Error("Nur Familienoberhaupt und Familienvogt dürfen Rezepte erstellen oder bearbeiten.");
  const [{data:ingredients=[]},{data:products=[]},recipeResult,itemsResult]=await Promise.all([
   supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category").order("item_name"),
-  supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category").eq("category","Produkte").order("item_name"),
+  supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category,owner_customer_id").eq("category","Produkte").order("item_name"),
   id?supabaseClient.from("vineyard_recipes").select("*").eq("id",id).single():Promise.resolve({data:null}),
-  id?supabaseClient.from("vineyard_recipe_items").select("inventory_id,quantity").eq("recipe_id",id).order("created_at"):Promise.resolve({data:[]})
+  id?supabaseClient.from("vineyard_recipe_items").select("inventory_id,quantity").eq("recipe_id",id).order("created_at"):Promise.resolve({data:[]}),
+  supabaseClient.from("vineyard_customers").select("id,name,active").order("name")
  ]);
  const recipe=recipeResult.data, existing=itemsResult.data||[];
  if(id&&!recipe)throw Error("Rezept nicht gefunden.");
@@ -849,12 +850,18 @@ async function recipeModal(id){
 
  $("#modalroot").innerHTML='<div class="modalback"><div class="modal recipeModal"><div class="modalhead"><b>'+(id?"Rezept bearbeiten":"Neues Rezept")+'</b><button id="x">×</button></div><form id="recipeform">'+
  selectField("Produkt","output_inventory_id",products.map(x=>({value:x.id,label:x.item_name+" · "+x.unit})),recipe?.output_inventory_id||products[0].id)+
+ '<label>Unternehmen / Kunde<select name="output_owner_customer_id"><option value="">Kein Unternehmen</option>'+customers.filter(c=>c.active||String(c.id)===String(products.find(p=>String(p.id)===String(recipe?.output_inventory_id||products[0].id))?.owner_customer_id||"")).map(c=>'<option value="'+esc(c.id)+'" '+(String(c.id)===String(products.find(p=>String(p.id)===String(recipe?.output_inventory_id||products[0].id))?.owner_customer_id||"")?"selected":"")+'">'+esc(c.name)+'</option>').join("")+'</select><small class="muted">Die Zuordnung wird am Produkt gespeichert und steuert das Sternchen in Bestellungen und Verkäufen.</small></label>'+
  field("Produzierte Menge pro Produktion","output_quantity","number",recipe?.output_quantity??1,true)+
  '<div class="recipeformhead"><b>Zutaten</b><button type="button" class="mini gold" id="addingredient">+ Zutat</button></div><div id="recipeitemsform"></div>'+
  '<div class="actions"><button type="button" class="btn outline" id="cancel">Abbrechen</button><button class="btn primary">Speichern</button></div></form></div></div>';
 
  const close=()=>$("#modalroot").innerHTML="";
  $("#x").onclick=$("#cancel").onclick=close;
+ $("#recipeform [name=output_inventory_id]").onchange=e=>{
+  const product=products.find(p=>String(p.id)===String(e.target.value));
+  const ownerSelect=$("#recipeform [name=output_owner_customer_id]");
+  if(ownerSelect)ownerSelect.value=product?.owner_customer_id||"";
+ };
 
  const draw=()=>{
   $("#recipeitemsform").innerHTML=rows.map((r,n)=>
@@ -892,6 +899,11 @@ async function recipeModal(id){
    if(!payload.length)throw Error("Ein Rezept benötigt mindestens eine Zutat.");
    if(payload.some(x=>!Number.isFinite(x.quantity)||x.quantity<=0))throw Error("Alle Zutatenmengen müssen größer als 0 sein.");
    if(new Set(payload.map(x=>x.inventory_id)).size!==payload.length)throw Error("Eine Zutat darf pro Rezept nur einmal vorkommen.");
+
+   const ownerId=e.target.output_owner_customer_id.value||null;
+   const ownerUpdate=await supabaseClient.from("vineyard_inventory").update({owner_customer_id:ownerId,updated_at:new Date().toISOString(),updated_by:profile?.user_id||null}).eq("id",output_inventory_id).eq("category","Produkte").select("id,owner_customer_id").single();
+   if(ownerUpdate.error)throw ownerUpdate.error;
+   if(!ownerUpdate.data||String(ownerUpdate.data.owner_customer_id||"")!==String(ownerId||""))throw Error("Unternehmen/Kunde konnte nicht am Produkt gespeichert werden.");
 
    const r=await supabaseClient.rpc("vineyard_save_recipe",{
     p_recipe_id:id||null,
