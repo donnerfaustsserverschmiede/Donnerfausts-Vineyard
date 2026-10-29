@@ -1086,9 +1086,13 @@ async function stockModal(id=null,mode=null){
   if(v.mode==="out"&&amount>Number(item.quantity))throw Error("Der Ausgang ist größer als der aktuelle Bestand ("+Number(item.quantity).toLocaleString("de-DE")+" "+item.unit+").");
   const reason="Mitarbeiter: "+employee.display_name+" · "+(v.reason||"Keine Bemerkung").trim();
   const delta=v.mode==="in"?amount:-amount;
+  const oldQuantity=Number(item.quantity);
   const {error}=await supabaseClient.rpc("vineyard_adjust_inventory",{p_inventory_id:v.inventory_id,p_delta:delta,p_reason:reason});
   if(error)throw error;
-  await auditLog(v.mode==="in"?"Lagerzugang gebucht":"Lagerausgang gebucht","inventory",v.inventory_id,{item_name:item.item_name,quantity:amount,unit:item.unit,employee_id:employee.user_id,employee_name:employee.display_name,reason:(v.reason||"").trim()});
+  const {data:updatedItem,error:stockReadError}=await supabaseClient.from("vineyard_inventory").select("quantity").eq("id",v.inventory_id).single();
+  if(stockReadError)throw stockReadError;
+  const newQuantity=Number(updatedItem.quantity);
+  await auditLog(v.mode==="in"?"Lagerzugang gebucht":"Lagerausgang gebucht","inventory",v.inventory_id,{item_name:item.item_name,quantity:amount,unit:item.unit,old_quantity:oldQuantity,new_quantity:newQuantity,delta,employee_id:employee.user_id,employee_name:employee.display_name,reason:(v.reason||"").trim()});
  });
 }
 
