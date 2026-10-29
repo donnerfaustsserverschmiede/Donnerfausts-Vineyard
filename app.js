@@ -359,7 +359,7 @@ async function inventory(){
 }
 function inventoryRows(items,customers=[]){
  const customerName=id=>customers.find(c=>String(c.id)===String(id))?.name||"";
- const sortedItems=[...items].sort((a,b)=>String(a.category||"").localeCompare(String(b.category||""),"de",{sensitivity:"base"})||String(a.item_name||"").localeCompare(String(b.item_name||""),"de",{numeric:true,sensitivity:"base"}));
+ const sortedItems=[...items].sort((a,b)=>String(a.item_name||"").localeCompare(String(b.item_name||""),"de",{numeric:true,sensitivity:"base"}));
  return sortedItems.map(x=>{
   const low=Number(x.quantity)<=Number(x.min_stock);
   const price=x.category==="Zutaten"?"Einkauf "+money(x.purchase_price):"Verkauf "+money(x.sale_price);
