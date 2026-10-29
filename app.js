@@ -1177,14 +1177,14 @@ async function toggleCustomer(id,active){
 async function deliveryModal(){
  const [{data:employees=[],error:ee},{data:products=[],error:ie},{data:customersList=[],error:ce}]=await Promise.all([
   supabaseClient.rpc("vineyard_order_employees"),
-  supabaseClient.from("vineyard_inventory").select("id,item_name,unit,quantity,sale_price").eq("category","Produkte").order("item_name"),
+  supabaseClient.from("vineyard_inventory").select("id,item_name,unit,quantity,sale_price,owner_customer_id").eq("category","Produkte").order("item_name"),
   supabaseClient.from("vineyard_customers").select("id,name,discount_percent").eq("active",true).order("name")
  ]);
  if(ee)throw ee;if(ie)throw ie;if(ce)throw ce;
  if(!employees.length)throw Error("Keine aktiven Mitarbeiter verfügbar.");
  if(!products.length)throw Error("Lege zuerst mindestens ein Produkt im Lager an.");
  const employeeOptions=employees.map(x=>({value:x.user_id,label:x.display_name}));
- const productOptions=products.map(x=>({value:x.id,label:x.item_name}));
+ const productOptions=products.map(x=>{const owner=customersList.find(c=>String(c.id)===String(x.owner_customer_id));return {value:x.id,label:(owner?owner.name+" · ":"")+x.item_name}});
  const customerOptions=[{value:"",label:"Privatkunde"},...customersList.map(x=>({value:x.id,label:x.name+" (−"+Number(x.discount_percent).toLocaleString("de-DE")+" %)"}))];
  modal("Lieferung an Großhändler",
  '<div class="recipehint"><b>Hinweis:</b> Standardmäßig ist „Privatkunde“ ausgewählt. Wähle einen angelegten Kunden aus, um dessen Rabatt automatisch vom regulären Produktpreis abzuziehen. Die Provision wird wie bisher in der Provisionstabelle geführt.</div>'+
