@@ -587,7 +587,7 @@ function bindInventoryRows(){
   const id=select.dataset.ownerCustomer,ownerId=select.value||null;
   try{
    if(!canManageCatalog())throw new Error("Du darfst Produktzuordnungen nicht ändern.");
-   const {data:savedOwner,error}=await supabaseClient.from("vineyard_inventory").update({owner_customer_id:ownerId,updated_at:new Date().toISOString(),updated_by:profile?.user_id||null}).eq("id",id).eq("category","Produkte").select("id,owner_customer_id").single();
+   const {data:savedOwner,error}=await supabaseClient.from("vineyard_inventory").update({owner_customer_id:ownerId,updated_at:new Date().toISOString(),updated_by:profile?.user_id||null}).eq("id",id).select("id,owner_customer_id").single();
    if(error)throw error;
    if(!savedOwner||String(savedOwner.id)!==String(id)||String(savedOwner.owner_customer_id||"")!==String(ownerId||""))throw new Error("Die Unternehmenszuordnung wurde nicht in der Datenbank gespeichert. Bitte Berechtigungen prüfen.");
    const ownerName=ownerId?select.options[select.selectedIndex]?.text||"Unternehmen":"";
