@@ -822,6 +822,7 @@ async function itemModal(id){
     if(!ingredient&&!Number.isFinite(sale_price))throw Error("Bitte einen gültigen Verkaufspreis angeben.");
     if(ingredient&&!Number.isFinite(purchase_price))throw Error("Bitte einen gültigen Einkaufspreis angeben.");
     const patch={item_name:v.item_name.trim(),category:v.category,unit:v.unit.trim(),quantity:Number(v.quantity)||0,min_stock:Number(v.min_stock)||0,purchase_price,sale_price,owner_customer_id:(v.owner_customer_id||null),updated_at:new Date().toISOString(),updated_by:profile?.user_id||null};
+    if(!id&&!ingredient)patch.is_available=true;
     const r=id?await supabaseClient.from("vineyard_inventory").update(patch).eq("id",id):await supabaseClient.from("vineyard_inventory").insert(patch);
     if(r.error)throw r.error;
     await auditLog(id?"Lagerartikel geändert":"Lagerartikel angelegt","inventory",id||v.item_name,patch);
@@ -955,7 +956,7 @@ async function invoiceModal(id){
   if(ie)throw ie;
   existingItems=its||[];
  }
- const sellableInventory=inventory.filter(x=>x.category!=="Produkte"||x.is_available===true||existingItems.some(e=>String(e.inventory_id)===String(x.id)));
+ const sellableInventory=inventory;
  const initialInvoiceType=existingInvoice?.invoice_type||"Verkauf";
  const initialInventory=(initialInvoiceType==="Verkauf"?sellableInventory:inventory)[0]||inventory[0];
  const rows=existingItems.length?existingItems.map(x=>({inventory_id:x.inventory_id,quantity:x.quantity,unit_price:x.unit_price})):[{inventory_id:initialInventory.id,quantity:1,unit_price:0}];
@@ -1098,9 +1099,9 @@ async function tradeModal(id,defaultType=null){
  if(ie)throw ie;if(te)throw te;if(ce)throw ce;if(ee)throw ee;
  if(id&&!existing)throw Error("Handelsvorgang nicht gefunden.");
  const type=existing?.trade_type||defaultType||"Einkauf";
- const initialItems=items.filter(x=>x.category===(type==="Einkauf"?"Zutaten":"Produkte")&&(type!=="Verkauf"||x.is_available===true||String(x.id)===String(existing?.inventory_id)));
+ const initialItems=items;
  if(!initialItems.length)throw Error(type==="Einkauf"?"Lege zuerst mindestens eine Zutat mit Einkaufspreis im Lager an.":"Lege zuerst mindestens ein verfügbares Produkt im Lager an.");
- const optionsFor=t=>items.filter(x=>x.category===(t==="Einkauf"?"Zutaten":"Produkte")&&(t!=="Verkauf"||x.is_available===true||String(x.id)===String(existing?.inventory_id)));
+ const optionsFor=t=>items;
  const optionHtml=(t,selected)=>optionsFor(t).map(x=>'<option value="'+esc(x.id)+'" '+(String(selected)===String(x.id)?"selected":"")+'>'+(x.owner_customer_id?"★ ":"")+esc(x.item_name)+' · '+esc(x.unit)+'</option>').join("");
  const customerOptions=[{value:"",label:"Privatkunde"},...customerRows.filter(k=>k.active).map(k=>({value:k.id,label:k.name+" (−"+Number(k.discount_percent||0).toLocaleString("de-DE")+" %)"}))];
  $("#modalroot").innerHTML='<div class="modalback"><div class="modal tradeModal"><div class="modalhead"><b>'+(id?"Ein-/Verkauf bearbeiten":"Ein- und Verkauf")+'</b><button type="button" id="x">×</button></div><form id="tradeform">'+
