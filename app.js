@@ -787,7 +787,7 @@ async function itemModal(id){
  if(customerError)throw customerError;
  let item=null;
  if(id){const {data,error}=await supabaseClient.from("vineyard_inventory").select("*").eq("id",id).single();if(error)throw error;item=data}
- const cat=item?.category||"Zutaten";
+ const cat=item?.category||"Produkte";
  const customerOptions=[{value:"",label:"Kein Unternehmen"},...customers.filter(c=>c.active||String(c.id)===String(item?.owner_customer_id||"")).map(c=>({value:c.id,label:c.name}))];
  $("#modalroot").innerHTML='<div class="modalback"><div class="modal"><div class="modalhead"><b>'+(id?"Lagerartikel bearbeiten":"Neuer Lagerartikel")+'</b><button id="x">×</button></div><form id="mf">'+
  field("Artikel / Ressource","item_name","text",item?.item_name||"",true)+
