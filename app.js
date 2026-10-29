@@ -829,7 +829,7 @@ async function itemModal(id){
 }
 async function recipeModal(id){
   if(!canManageRecipes())throw Error("Nur Familienoberhaupt und Familienvogt dürfen Rezepte erstellen oder bearbeiten.");
- const [{data:ingredients=[]},{data:products=[]},recipeResult,itemsResult]=await Promise.all([
+ const [{data:ingredients=[]},{data:products=[]},recipeResult,itemsResult,{data:customers=[],error:customerError}]=await Promise.all([
   supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category").order("item_name"),
   supabaseClient.from("vineyard_inventory").select("id,item_name,unit,category,owner_customer_id").eq("category","Produkte").order("item_name"),
   id?supabaseClient.from("vineyard_recipes").select("*").eq("id",id).single():Promise.resolve({data:null}),
@@ -837,6 +837,7 @@ async function recipeModal(id){
   supabaseClient.from("vineyard_customers").select("id,name,active").order("name")
  ]);
  const recipe=recipeResult.data, existing=itemsResult.data||[];
+ if(customerError)throw customerError;
  if(id&&!recipe)throw Error("Rezept nicht gefunden.");
  if(!ingredients.length)throw Error("Lege zuerst mindestens eine Zutat im Lager an.");
  if(!products.length)throw Error("Lege zuerst mindestens ein Produkt im Lager an.");
