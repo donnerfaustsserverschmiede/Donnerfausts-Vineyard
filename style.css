@@ -169,5 +169,8 @@ nav{padding:12px;overflow:auto}.nav{width:100%;padding:11px 12px;margin:2px 0;bo
 .availability-toggle.is-available span{background:#22a447;box-shadow:0 0 0 3px rgba(34,164,71,.14)}
 .availability-toggle:disabled{opacity:.6;cursor:wait}
 
-/* Gebrandete Produkte: Stern-Markierung im Lager */
-.brand-star-cell{text-align:center;white-space:nowrap;width:44px}.brand-star{appearance:none;border:0;background:transparent;color:#8b8b8b;font-size:25px;line-height:1;cursor:pointer;padding:4px 8px;min-width:36px}.brand-star.active{color:#c5a14a;text-shadow:0 0 1px #9b7929}.brand-star:disabled{opacity:.55;cursor:wait}.brand-star:focus-visible{outline:2px solid #c5a14a;outline-offset:2px;border-radius:5px}
+/* Produktunternehmen: gespeicherte Kunden direkt am Lagerprodukt zuordnen */
+.inventory-owner-cell{min-width:190px}
+.inventory-owner-select{width:100%;min-width:175px;max-width:250px;padding:8px 10px;border:1px solid var(--line,#d9d1c3);border-radius:8px;background:#fffdf9;color:#252525;font-size:12px}
+.inventory-owner-select:disabled{opacity:.6;cursor:wait}
+.inventory-owner-select:focus-visible{outline:2px solid #c5a14a;outline-offset:2px}
