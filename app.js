@@ -291,9 +291,11 @@ async function updateOrderStatus(id,status){
  const button=document.querySelector('[data-order-status="'+id+'|'+status+'"]');
  if(button)button.disabled=true;
  try{
+  const {data:order}=await supabaseClient.from("vineyard_orders").select("order_number,customer_name,total,delivery_date").eq("id",id).maybeSingle();
+  const {data:orderItems=[]}=await supabaseClient.from("vineyard_order_items").select("item_name,quantity,unit").eq("order_id",id);
   const {error}=await supabaseClient.rpc("vineyard_update_order_status",{p_order_id:id,p_status:status});
   if(error)throw error;
-  await auditLog(status==="In Bearbeitung"?"Bestellung angenommen":status==="Abhol-/Versandbereit"?"Bestellung abhol-/versandbereit":"Bestellung abgeschlossen","order",id,{status});
+  await auditLog(status==="In Bearbeitung"?"Bestellung angenommen":status==="Abhol-/Versandbereit"?"Bestellung abhol-/versandbereit":"Bestellung abgeschlossen","order",id,{status,order_number:order?.order_number||"",customer_name:order?.customer_name||"",total:Number(order?.total||0),delivery_date:order?.delivery_date||"",items:(orderItems||[]).map(x=>({item_name:x.item_name,quantity:Number(x.quantity||0),unit:x.unit||""}))});
   if(status==="Abhol-/Versandbereit")alert("Die Bestellung ist jetzt als abhol-/versandbereit markiert. Lagerbestand und Kasse bleiben bis zum endgültigen Abschluss unverändert.");
   if(status==="Bestellung abgeschlossen")alert("Bestellung abgeschlossen. Lagerbestand und Kasse wurden automatisch angepasst.");
   await render();
