@@ -319,10 +319,12 @@ async function updateOrderStatus(id,status){
  }catch(err){alert(err.message||String(err))}finally{if(button)button.disabled=false}
 }
 async function deleteOrder(id){
+ const {data:order}=await supabaseClient.from("vineyard_orders").select("order_number,customer_name,status,total").eq("id",id).maybeSingle();
+ const {data:items=[]}=await supabaseClient.from("vineyard_order_items").select("item_name,quantity,unit,unit_price,line_total").eq("order_id",id);
  if(!confirm("Diese Bestellung wirklich löschen?"))return;
  const {error}=await supabaseClient.rpc("vineyard_delete_order",{p_order_id:id});
  if(error)throw error;
- await auditLog("Bestellung gelöscht","order",id,{});
+ await auditLog("Bestellung gelöscht","order",id,{order_number:order?.order_number||"",customer_name:order?.customer_name||"",status:order?.status||"",total:Number(order?.total||0),items:(items||[]).map(x=>({item_name:x.item_name,quantity:x.quantity,unit:x.unit,unit_price:x.unit_price,line_total:x.line_total}))});
  await render();
 }
 async function admin(){
@@ -849,7 +851,7 @@ async function itemModal(id){
     if(!id&&!ingredient)patch.is_available=true;
     const r=id?await supabaseClient.from("vineyard_inventory").update(patch).eq("id",id):await supabaseClient.from("vineyard_inventory").insert(patch);
     if(r.error)throw r.error;
-    await auditLog(id?"Lagerartikel geändert":"Lagerartikel angelegt","inventory",id||v.item_name,patch);
+    const changed={};if(item){for(const key of ["item_name","category","unit","quantity","min_stock","purchase_price","sale_price","owner_customer_id","is_available","is_branded"]){const before=item[key]??null;const after=patch[key]??null;if(String(before??"")!==String(after??""))changed[key]={before,after};}}\n    await auditLog(id?"Lagerartikel geändert":"Lagerartikel angelegt","inventory",id||v.item_name,{item_name:patch.item_name,category:patch.category,unit:patch.unit,changes:changed,old_quantity:item?.quantity??null,new_quantity:patch.quantity,old_owner_customer_id:item?.owner_customer_id??null,new_owner_customer_id:patch.owner_customer_id,old_available:item?.is_available??null,new_available:item?.is_available??patch.is_available});
     close();await render();
    }catch(err){alert(err.message||String(err))}finally{b.disabled=false}
  };
@@ -1050,8 +1052,9 @@ async function invoiceModal(id){
 }
 async function deleteItem(id){
   if(!canManageCatalog())throw Error("Du darfst keine Lagerartikel löschen.");
+ const {data:item,error:readError}=await supabaseClient.from("vineyard_inventory").select("id,item_name,category,quantity,unit,owner_customer_id,is_available").eq("id",id).maybeSingle();if(readError)throw readError;
  if(!confirm("Diesen Lagerartikel wirklich löschen? Zugehörige Rezepte werden dabei entfernt; historische Rechnungspositionen bleiben erhalten."))return;
- const {error}=await supabaseClient.rpc("vineyard_delete_inventory",{p_inventory_id:id});if(error)throw error;await auditLog("Lagerartikel gelöscht","inventory",id,{});await render();
+ const {error}=await supabaseClient.rpc("vineyard_delete_inventory",{p_inventory_id:id});if(error)throw error;await auditLog("Lagerartikel gelöscht","inventory",id,{item_name:item?.item_name||"Unbekannt",category:item?.category||"",quantity:item?.quantity??null,unit:item?.unit||"",owner_customer_id:item?.owner_customer_id||null,is_available:item?.is_available??null});await render();
 }
 async function deleteTrade(id){
  if(!confirm("Diesen Ein-/Verkauf wirklich löschen? Lagerbestand und Kassenbuchung werden dabei automatisch zurückgebucht."))return;
@@ -1312,7 +1315,7 @@ async function employeeModal(id){
     p_password:password||null
    });
    if(result.error)throw result.error;
-   await auditLog(id?"Mitarbeiter geändert":"Mitarbeiter angelegt","employee",result.data?.user_id||id,{role_key:v.role_key,display_name:v.display_name.trim(),password_changed:!!password});
+   await auditLog(id?"Mitarbeiter geändert":"Mitarbeiter angelegt","employee",result.data?.user_id||id,{role_key:v.role_key,old_role_key:employee?.role_key||null,display_name:v.display_name.trim(),old_display_name:employee?.display_name||null,password_changed:!!password,changes:{...(employee&&employee.display_name!==v.display_name.trim()?{name:{before:employee.display_name,after:v.display_name.trim()}}:{}),...(employee&&employee.role_key!==v.role_key?{role:{before:employee.role_key,after:v.role_key}}:{}),...(password?{password:"Passwort geändert (Wert nicht protokolliert)"}:{})}});
   });
 }
 async function deleteEmployee(id){
