@@ -851,7 +851,8 @@ async function itemModal(id){
     if(!id&&!ingredient)patch.is_available=true;
     const r=id?await supabaseClient.from("vineyard_inventory").update(patch).eq("id",id):await supabaseClient.from("vineyard_inventory").insert(patch);
     if(r.error)throw r.error;
-    const changed={};if(item){for(const key of ["item_name","category","unit","quantity","min_stock","purchase_price","sale_price","owner_customer_id","is_available","is_branded"]){const before=item[key]??null;const after=patch[key]??null;if(String(before??"")!==String(after??""))changed[key]={before,after};}}\n    await auditLog(id?"Lagerartikel geändert":"Lagerartikel angelegt","inventory",id||v.item_name,{item_name:patch.item_name,category:patch.category,unit:patch.unit,changes:changed,old_quantity:item?.quantity??null,new_quantity:patch.quantity,old_owner_customer_id:item?.owner_customer_id??null,new_owner_customer_id:patch.owner_customer_id,old_available:item?.is_available??null,new_available:item?.is_available??patch.is_available});
+    const changed={};if(item){for(const key of ["item_name","category","unit","quantity","min_stock","purchase_price","sale_price","owner_customer_id","is_available","is_branded"]){const before=item[key]??null;const after=patch[key]??null;if(String(before??"")!==String(after??""))changed[key]={before,after};}}
+    await auditLog(id?"Lagerartikel geändert":"Lagerartikel angelegt","inventory",id||v.item_name,{item_name:patch.item_name,category:patch.category,unit:patch.unit,changes:changed,old_quantity:item?.quantity??null,new_quantity:patch.quantity,old_owner_customer_id:item?.owner_customer_id??null,new_owner_customer_id:patch.owner_customer_id,old_available:item?.is_available??null,new_available:item?.is_available??patch.is_available});
     close();await render();
    }catch(err){alert(err.message||String(err))}finally{b.disabled=false}
  };
