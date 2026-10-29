@@ -905,7 +905,7 @@ async function recipeModal(id){
    if(new Set(payload.map(x=>x.inventory_id)).size!==payload.length)throw Error("Eine Zutat darf pro Rezept nur einmal vorkommen.");
 
    const ownerId=e.target.output_owner_customer_id.value||null;
-   const ownerUpdate=await supabaseClient.from("vineyard_inventory").update({owner_customer_id:ownerId,updated_at:new Date().toISOString(),updated_by:profile?.user_id||null}).eq("id",output_inventory_id).eq("category","Produkte").select("id,owner_customer_id").single();
+   const ownerUpdate=await supabaseClient.from("vineyard_inventory").update({owner_customer_id:ownerId,updated_at:new Date().toISOString(),updated_by:profile?.user_id||null}).eq("id",output_inventory_id).select("id,owner_customer_id").single();
    if(ownerUpdate.error)throw ownerUpdate.error;
    if(!ownerUpdate.data||String(ownerUpdate.data.owner_customer_id||"")!==String(ownerId||""))throw Error("Unternehmen/Kunde konnte nicht am Produkt gespeichert werden.");
 
