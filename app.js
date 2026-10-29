@@ -851,7 +851,7 @@ async function itemModal(id){
     const r=id?await supabaseClient.from("vineyard_inventory").update(patch).eq("id",id):await supabaseClient.from("vineyard_inventory").insert(patch);
     if(r.error)throw r.error;
     const changed={};if(item){for(const key of ["item_name","category","unit","quantity","min_stock","purchase_price","sale_price","owner_customer_id","is_available","is_branded"]){const before=item[key]??null;const after=patch[key]??null;if(String(before??"")!==String(after??""))changed[key]={before,after};}}
-    await auditLog(id?"Lagerartikel geändert":"Lagerartikel angelegt","inventory",id||v.item_name,{item_name:patch.item_name,category:patch.category,unit:patch.unit,changes:changed,old_quantity:item?.quantity??null,new_quantity:patch.quantity,old_owner_customer_id:item?.owner_customer_id??null,new_owner_customer_id:patch.owner_customer_id,old_available:item?.is_available??null,new_available:item?.is_available??patch.is_available});
+    await auditLog(id?"Lagerartikel geändert":"Lagerartikel angelegt","inventory",id||v.item_name,{item_name:patch.item_name,category:patch.category,unit:patch.unit,changes:changed,old_quantity:item?.quantity??null,new_quantity:patch.quantity,old_owner_customer_id:item?.owner_customer_id??null,old_owner_name:customers.find(x=>String(x.id)===String(item?.owner_customer_id||""))?.name||"Kein Unternehmen",new_owner_customer_id:patch.owner_customer_id,new_owner_name:customers.find(x=>String(x.id)===String(patch.owner_customer_id||""))?.name||"Kein Unternehmen",old_available:item?.is_available??null,new_available:item?.is_available??patch.is_available});
     close();await render();
    }catch(err){alert(err.message||String(err))}finally{b.disabled=false}
  };
@@ -1057,19 +1057,24 @@ async function deleteItem(id){
  const {error}=await supabaseClient.rpc("vineyard_delete_inventory",{p_inventory_id:id});if(error)throw error;await auditLog("Lagerartikel gelöscht","inventory",id,{item_name:item?.item_name||"Unbekannt",category:item?.category||"",quantity:item?.quantity??null,unit:item?.unit||"",owner_customer_id:item?.owner_customer_id||null,is_available:item?.is_available??null});await render();
 }
 async function deleteTrade(id){
+ const {data:trade}=await supabaseClient.from("vineyard_trades").select("*").eq("id",id).maybeSingle();
  if(!confirm("Diesen Ein-/Verkauf wirklich löschen? Lagerbestand und Kassenbuchung werden dabei automatisch zurückgebucht."))return;
  const {error}=await supabaseClient.rpc("vineyard_delete_trade",{p_trade_id:id});
  if(error)throw error;
- await auditLog("Ein-/Verkauf gelöscht","trade",id,{});
+ await auditLog("Ein-/Verkauf gelöscht","trade",id,{trade_type:trade?.trade_type||trade?.kind||"",inventory_id:trade?.inventory_id||null,quantity:trade?.quantity??null,total:trade?.total??trade?.amount??null,employee_id:trade?.employee_id||null,customer_id:trade?.customer_id||null});
  await render();
 }
 async function deleteCash(id){
+ const {data:cash}=await supabaseClient.from("vineyard_cashbook").select("kind,category,amount,description,created_by").eq("id",id).maybeSingle();
  if(!confirm("Diese Kassenbuchung wirklich löschen?"))return;
- const {error}=await supabaseClient.from("vineyard_cashbook").delete().eq("id",id);if(error)throw error;await auditLog("Kassenbuchung gelöscht","cashbook",id,{});await render();
+ const {error}=await supabaseClient.from("vineyard_cashbook").delete().eq("id",id);if(error)throw error;
+ await auditLog("Kassenbuchung gelöscht","cashbook",id,{kind:cash?.kind||"",category:cash?.category||"",amount:cash?.amount??null,description:cash?.description||"",created_by:cash?.created_by||null});await render();
 }
 async function deleteInvoice(id){
+ const {data:invoice}=await supabaseClient.from("vineyard_invoices").select("invoice_number,invoice_type,partner_name,status,total,employee_id").eq("id",id).maybeSingle();
  if(!confirm("Diese Rechnung wirklich löschen? Der öffentliche Rechnungslink funktioniert danach nicht mehr."))return;
- const {error}=await supabaseClient.rpc("vineyard_delete_invoice",{p_invoice_id:id});if(error)throw error;await auditLog("Rechnung gelöscht","invoice",id,{});await render();
+ const {error}=await supabaseClient.rpc("vineyard_delete_invoice",{p_invoice_id:id});if(error)throw error;
+ await auditLog("Rechnung gelöscht","invoice",id,{invoice_number:invoice?.invoice_number||"",invoice_type:invoice?.invoice_type||"",partner_name:invoice?.partner_name||"",status:invoice?.status||"",total:invoice?.total??null,employee_id:invoice?.employee_id||null});await render();
 }
 async function shareInvoice(id){
  const {data,error}=await supabaseClient.from("vineyard_invoices").select("invoice_number,share_token").eq("id",id).single();
