@@ -26,7 +26,7 @@ const parseDate=value=>{const m=String(value||"").trim().match(/^(\d{1,2})\.(\d{
  const formatMoney=n=>money(n);
  function addRow(id="",qty="1"){
   const row=document.createElement("div");row.className="productrow";
-  row.innerHTML='<div class="productfields"><label>Produkt<select class="itemproduct" required><option value="">Produkt auswählen…</option>'+list.map(p=>'<option value="'+esc(p.id)+'">'+(p.is_branded?'★ ':'')+esc(p.item_name)+' · '+formatMoney(p.sale_price)+' / '+esc(p.unit||"Stück")+'</option>').join("")+'</select></label><label>Menge<input class="itemquantity" type="number" min="0.01" step="0.01" value="'+esc(qty)+'" required></label></div><div class="rowtotal"><span>Zwischensumme</span><b class="itemtotal">$0.00</b><button type="button" class="remove" aria-label="Produkt entfernen" title="Produkt entfernen">×</button></div>';
+  row.innerHTML='<div class="productfields"><label>Produkt<select class="itemproduct" required><option value="">Produkt auswählen…</option>'+list.map(p=>'<option value="'+esc(p.id)+'">'+(p.owner_customer_id?'★ ':'')+esc(p.item_name)+' · '+formatMoney(p.sale_price)+' / '+esc(p.unit||"Stück")+'</option>').join("")+'</select></label><label>Menge<input class="itemquantity" type="number" min="0.01" step="0.01" value="'+esc(qty)+'" required></label></div><div class="rowtotal"><span>Zwischensumme</span><b class="itemtotal">$0.00</b><button type="button" class="remove" aria-label="Produkt entfernen" title="Produkt entfernen">×</button></div>';
   itemsRoot.appendChild(row);
   const product=row.querySelector(".itemproduct"),quantity=row.querySelector(".itemquantity");
   product.value=id;
