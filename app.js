@@ -1216,7 +1216,7 @@ async function customers(){
  return intro("STAMMKUNDEN","Kunden","Kunden verwalten und feste Rabatte für Lieferungen hinterlegen.",can("orders_manage")?"newcustomer":null,can("orders_manage")?"+ Kunde hinzufügen":null)+
  '<div class="stats">'+stat("♙","KUNDEN",rows.length)+stat("✓","AKTIV",active)+stat("%","RABATTE",rows.filter(x=>x.active&&Number(x.discount_percent)>0).length)+'</div>'+
  '<div class="panel"><div class="tablewrap"><table><thead><tr><th>Kunde</th><th>Rabatt</th><th>Status</th><th>Notiz</th><th>Aktionen</th></tr></thead><tbody>'+
- (rows.map(x=>'<tr><td><b>'+esc(x.name)+'</b></td><td>'+Number(x.discount_percent).toLocaleString("de-DE")+' %</td><td>'+badge(x.active?"Aktiv":"Inaktiv")+'</td><td>'+esc(x.notes||"—")+'</td><td><button class="mini" data-action="edit-customer" data-customer-id="'+x.id+'">Bearbeiten</button> <button class="mini" data-action="toggle-customer" data-customer-id="'+x.id+'" data-active="'+x.active+'">'+(x.active?"Deaktivieren":"Aktivieren")+'</button>'+(can("orders_manage")?'<button class="mini danger" data-action="delete-customer" data-customer-id="'+x.id+'">Löschen</button>':"")+'</td></tr>').join("")||'<tr><td colspan="5">Noch keine Kunden angelegt.</td></tr>')+
+ (rows.map(x=>'<tr><td><b>'+esc(x.name)+'</b></td><td>'+Number(x.discount_percent).toLocaleString("de-DE")+' %</td><td>'+badge(x.active?"Aktiv":"Inaktiv")+'</td><td>'+esc(x.notes||"—")+'</td><td><button class="mini" data-action="edit-customer" data-customer-id="'+x.id+'">Bearbeiten</button> <button class="mini" data-action="toggle-customer" data-customer-id="'+x.id+'" data-active="'+x.active+'">'+(x.active?"Deaktivieren":"Aktivieren")+'</button>+'<button class="mini danger" data-action="delete-customer" data-customer-id="'+x.id+'">Löschen</button></td></tr>').join("")||'<tr><td colspan="5">Noch keine Kunden angelegt.</td></tr>')+
  '</tbody></table></div></div>';
 }
 async function customerModal(id){
@@ -1236,7 +1236,6 @@ async function toggleCustomer(id,active){
 }
 
 async function deleteCustomer(id){
- if(!can("orders_manage"))throw Error("Du hast keine Berechtigung, Kunden zu löschen.");
  if(!id)throw Error("Kunde konnte nicht ermittelt werden.");
  const {data:customer,error:readError}=await supabaseClient.from("vineyard_customers").select("id,name").eq("id",id).single();
  if(readError)throw readError;
@@ -1247,6 +1246,9 @@ async function deleteCustomer(id){
   const message=String(error.message||"");
   if(/foreign key|violates.*constraint|referenced/i.test(message)){
    throw Error("Dieser Kunde ist bereits mit Geschäftsvorgängen verknüpft und kann deshalb nicht endgültig gelöscht werden. Du kannst ihn stattdessen über „Deaktivieren“ aus der aktiven Kundenliste nehmen.");
+  }
+  if(/row-level security|permission denied|not authorized/i.test(message)){
+   throw Error("Du hast keine Berechtigung, Kunden zu löschen. Bitte wende dich an das Familienoberhaupt oder die Verwaltung.");
   }
   throw error;
  }
