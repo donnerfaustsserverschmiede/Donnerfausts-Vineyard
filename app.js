@@ -485,7 +485,7 @@ async function appointments(){
 async function commissions(){
  const [{data:employees=[],error:ee},{data:orders=[],error:oe},{data:invoices=[],error:ie},{data:trades=[],error:te},{data:payouts=[],error:pe}]=await Promise.all([
   supabaseClient.from("vineyard_profiles").select("user_id,display_name,role_key,active").eq("active",true),
-  supabaseClient.from("vineyard_orders").select("completed_by,commission_amount").in("status",["Bestellung abgeschlossen","Lieferung abgeschlossen"]),
+  supabaseClient.from("vineyard_orders").select("completed_by,employee_id,commission_amount").in("status",["Bestellung abgeschlossen","Lieferung abgeschlossen"]),
   supabaseClient.from("vineyard_invoices").select("employee_id,commission_amount").gt("commission_amount",0).neq("status","Storniert"),
   supabaseClient.from("vineyard_trades").select("employee_id,commission_amount").eq("trade_type","Verkauf").gt("commission_amount",0),
   supabaseClient.from("vineyard_commission_payouts").select("employee_id,amount,paid_at")
@@ -494,7 +494,7 @@ async function commissions(){
  const rankMap={master:12,familienvogt:11,familienrat:10,geschaeftsfuehrer:9,vertrauensmitglied:8,verwaltung:7,lager:6,winzer:5,winzerlehrling:4,kasse:3,kellerhelfer:2,mitarbeiter:1};
  const labelMap={master:"FAMILIENOBERHAUPT",familienvogt:"FAMILIENVOGT",familienrat:"FAMILIENRAT",geschaeftsfuehrer:"GESCHÄFTSFÜHRER",vertrauensmitglied:"VERTRAUENSMITGLIED",verwaltung:"BETRIEBSLEITER",lager:"KELLERMEISTER",winzer:"WINZER/BRAUER",winzerlehrling:"LEHRLING",kasse:"STUBENBEDIENSTETE",kellerhelfer:"KELLERHELFER",mitarbeiter:"ERNTEHELFER"};
  const accrued={}; const paid={};
- asArray(orders).forEach(x=>{const recipient=x.completed_by;if(recipient)accrued[recipient]=(accrued[recipient]||0)+Number(x.commission_amount||0)});
+ asArray(orders).forEach(x=>{const recipient=x.completed_by||x.employee_id;if(recipient)accrued[recipient]=(accrued[recipient]||0)+Number(x.commission_amount||0)});
  asArray(invoices).forEach(x=>accrued[x.employee_id]=(accrued[x.employee_id]||0)+Number(x.commission_amount||0));
  asArray(trades).forEach(x=>accrued[x.employee_id]=(accrued[x.employee_id]||0)+Number(x.commission_amount||0));
  asArray(payouts).forEach(x=>paid[x.employee_id]=(paid[x.employee_id]||0)+Number(x.amount||0));
