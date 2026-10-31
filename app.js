@@ -785,6 +785,7 @@ async function action(a,actionButton){
  if(a==="newinvoice"){await invoiceModal();return}
  if(a==="edit-customer"){const id=actionButton?.dataset.customerId;if(!id)throw Error("Kunde konnte nicht ermittelt werden.");await customerModal(id);return}
  if(a==="toggle-customer"){const id=actionButton?.dataset.customerId;if(!id)throw Error("Kunde konnte nicht ermittelt werden.");await toggleCustomer(id,actionButton.dataset.active==="true");return}
+ if(a==="delete-customer"){const id=actionButton?.dataset.customerId;if(!id)throw Error("Kunde konnte nicht ermittelt werden.");await deleteCustomer(id);return}
  if(a==="newcustomer"){await customerModal();return}
  if(a==="copy-order-link"){const link=new URL("./bestellung.html",location.href).href;try{await navigator.clipboard.writeText(link);alert("Kunden-Bestelllink kopiert.")}catch(_){prompt("Kunden-Bestelllink",link)}return}
  if(a==="open-order-form"){window.open(new URL("./bestellung.html",location.href).href,"_blank");return}
@@ -1215,7 +1216,7 @@ async function customers(){
  return intro("STAMMKUNDEN","Kunden","Kunden verwalten und feste Rabatte für Lieferungen hinterlegen.",can("orders_manage")?"newcustomer":null,can("orders_manage")?"+ Kunde hinzufügen":null)+
  '<div class="stats">'+stat("♙","KUNDEN",rows.length)+stat("✓","AKTIV",active)+stat("%","RABATTE",rows.filter(x=>x.active&&Number(x.discount_percent)>0).length)+'</div>'+
  '<div class="panel"><div class="tablewrap"><table><thead><tr><th>Kunde</th><th>Rabatt</th><th>Status</th><th>Notiz</th><th>Aktionen</th></tr></thead><tbody>'+
- (rows.map(x=>'<tr><td><b>'+esc(x.name)+'</b></td><td>'+Number(x.discount_percent).toLocaleString("de-DE")+' %</td><td>'+badge(x.active?"Aktiv":"Inaktiv")+'</td><td>'+esc(x.notes||"—")+'</td><td><button class="mini" data-action="edit-customer" data-customer-id="'+x.id+'">Bearbeiten</button> <button class="mini" data-action="toggle-customer" data-customer-id="'+x.id+'" data-active="'+x.active+'">'+(x.active?"Deaktivieren":"Aktivieren")+'</button></td></tr>').join("")||'<tr><td colspan="5">Noch keine Kunden angelegt.</td></tr>')+
+ (rows.map(x=>'<tr><td><b>'+esc(x.name)+'</b></td><td>'+Number(x.discount_percent).toLocaleString("de-DE")+' %</td><td>'+badge(x.active?"Aktiv":"Inaktiv")+'</td><td>'+esc(x.notes||"—")+'</td><td><button class="mini" data-action="edit-customer" data-customer-id="'+x.id+'">Bearbeiten</button> <button class="mini" data-action="toggle-customer" data-customer-id="'+x.id+'" data-active="'+x.active+'">'+(x.active?"Deaktivieren":"Aktivieren")+'</button> <button class="mini danger" data-action="delete-customer" data-customer-id="'+x.id+'">Löschen</button></td></tr>').join("")||'<tr><td colspan="5">Noch keine Kunden angelegt.</td></tr>')+
  '</tbody></table></div></div>';
 }
 async function customerModal(id){
@@ -1231,6 +1232,25 @@ async function toggleCustomer(id,active){
  const r=await supabaseClient.from("vineyard_customers").update({active:!active,updated_at:new Date().toISOString()}).eq("id",id);
  if(r.error)throw r.error;
  await auditLog(!active?"Kunde aktiviert":"Kunde deaktiviert","customer",id,{active:!active});
+ await render();
+}
+
+async function deleteCustomer(id){
+ if(!can("orders_manage"))throw Error("Du hast keine Berechtigung, Kunden zu löschen.");
+ if(!id)throw Error("Kunde konnte nicht ermittelt werden.");
+ const {data:customer,error:readError}=await supabaseClient.from("vineyard_customers").select("id,name").eq("id",id).single();
+ if(readError)throw readError;
+ const confirmed=window.confirm("Möchtest du den Kunden „"+customer.name+"“ wirklich endgültig löschen? Diese Aktion kann nicht rückgängig gemacht werden. Kunden, die bereits in Bestellungen oder Handelsvorgängen verwendet wurden, bleiben zum Schutz der Geschäftshistorie erhalten.");
+ if(!confirmed)return;
+ const {error}=await supabaseClient.from("vineyard_customers").delete().eq("id",id);
+ if(error){
+  const message=String(error.message||"");
+  if(/foreign key|violates.*constraint|referenced/i.test(message)){
+   throw Error("Dieser Kunde ist bereits mit Geschäftsvorgängen verknüpft und kann deshalb nicht endgültig gelöscht werden. Du kannst ihn stattdessen über „Deaktivieren“ aus der aktiven Kundenliste nehmen.");
+  }
+  throw error;
+ }
+ await auditLog("Kunde endgültig gelöscht","customer",id,{name:customer.name});
  await render();
 }
 async function deliveryModal(){
