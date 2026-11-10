@@ -120,6 +120,7 @@ const NAV=[
 ["sales","↗","Verkauf","trade_edit"],
 ["invoices","▤","Rechnungen","invoice_view"],
 ["cash","$","Kasse","cash_view"],
+["family","♛","Familie","family_access"],
 ["employees","♟","Mitarbeiter","employees_view"],
 ["appointments","◷","Termine","dashboard"],
 ["commission","%","Provision","invoice_view"],
@@ -205,7 +206,7 @@ function shell(content){
  const switchEmployee=$("#switchEmployee");
  if(switchEmployee) switchEmployee.addEventListener("click",async e=>{e.preventDefault();const oldProfile=profile;if(oldProfile?.user_id)await auditLog("Mitarbeiter abgemeldet","session",oldProfile.user_id,{display_name:oldProfile.display_name,reason:"Mitarbeiterwechsel"});if(presenceChannel){try{await supabaseClient.removeChannel(presenceChannel)}catch(_){}presenceChannel=null;}stopOrderRealtime();const token=sessionStorage.getItem("vineyard_employee_session")||"";if(token){try{await supabaseClient.rpc("vineyard_revoke_employee_session",{p_token:token})}catch(_){}}sessionStorage.removeItem("vineyard_employee_session");sessionStorage.removeItem("vineyard_employee_id");currentEmployeeId="";profile=null;role=null;await selectEmployee(true)});
 }
-function pageTitle(){return ({dashboard:"Übersicht",customers:"Kunden",invoices:"Rechnungen",orders:"Bestellungen",inventory:"Lagerübersicht",purchase:"Einkauf",sales:"Verkauf",cash:"Kasse",employees:"Mitarbeiter",appointments:"Termine",commission:"Provision",manual:"Betriebsanleitung"})[page]||"Übersicht"}
+function pageTitle(){return ({family:"Familie",dashboard:"Übersicht",customers:"Kunden",invoices:"Rechnungen",orders:"Bestellungen",inventory:"Lagerübersicht",purchase:"Einkauf",sales:"Verkauf",cash:"Kasse",employees:"Mitarbeiter",appointments:"Termine",commission:"Provision",manual:"Betriebsanleitung"})[page]||"Übersicht"}
 function initials(n){return String(n||"DF").split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase()}
 function stat(icon,label,value){return '<div class="stat"><span class="icon">'+icon+'</span><div><small>'+label+"</small><b>"+value+"</b></div></div>"}
 function intro(k,h,p,action,label){return '<div class="intro"><div><div class="eyebrow">'+k+"</div><h1>"+h+"</h1><p>"+p+"</p></div>"+(action?'<button type="button" class="btn gold" data-action="'+action+'">'+label+"</button>":"")+"</div>"}
@@ -507,6 +508,33 @@ async function commissions(){
  (rows.map(x=>'<tr><td><b>#'+x.rank+'</b><br><small>'+esc(x.roleLabel)+'</small></td><td><b>'+esc(x.display_name)+'</b></td><td>'+money(x.accrued)+'</td><td><strong>'+money(x.due)+'</strong></td><td>'+(canPay&&x.due>0?'<button class="mini gold" data-pay-commission="'+x.user_id+'">✓ Ausgezahlt</button>':x.due<=0?'<span class="badge good">Ausgeglichen</span>':'<span class="muted">Keine Berechtigung</span>')+'</td></tr>').join("")||'<tr><td colspan="5">Keine aktiven Mitarbeiter vorhanden.</td></tr>')+
  '</tbody></table></div></div>';
 }
+
+async function family(){
+ const {data,error}=await supabaseClient.rpc("vineyard_family_overview");
+ if(error)return errorBox(error.message);
+ const state=data||{},settings=asArray(state.settings),entries=asArray(state.entries);
+ const saloon=settings.find(x=>x.company_key==="saloon")||{},kebab=settings.find(x=>x.company_key==="kebab")||{};
+ const canManage=!!state.can_manage,canWithdraw=!!state.can_withdraw;
+ const accountBalance=name=>Number(state.balances?.[name]||0);
+ const companyCard=(item,key,title,manual)=>{
+  const pct=Number(item.contribution_percent||0),balance=Number(item.current_balance||0),due=Number(item.due_amount||0),paid=!!item.paid_this_week;
+  return '<div class="panel family-company"><div class="family-company-head"><div><div class="eyebrow">FAMILIENBEITRAG</div><h2>'+title+'</h2></div>'+(paid?'<span class="badge good">Diese Woche eingezahlt</span>':'<span class="badge warn">Noch offen</span>')+'</div>'+
+   (canManage?'<label>Beitragssatz (%)<div class="family-inline"><input type="number" min="0" max="100" step="0.001" value="'+pct+'" data-family-percent="'+key+'"><button type="button" class="btn outline" data-family-percent-save="'+key+'">Satz speichern</button></div></label>':'<div class="family-line"><span>Festgelegter Beitragssatz</span><b>'+pct.toLocaleString("de-DE")+' %</b></div>')+
+   (manual?'<label>Aktueller Kontostand Donnerfaust Kebab ($)<div class="family-inline"><input type="number" min="0" step="0.01" value="'+Number(item.reported_balance||0)+'" id="familyKebabBalance" placeholder="Kontostand eintragen"><button type="button" class="btn outline" data-family-report>Kontostand speichern</button></div><small class="muted">Einmal pro Woche den aktuellen Stand des extern geführten Unternehmenskontos eintragen.</small></label>':'<div class="family-line"><span>Aktueller Kassenstand (automatisch)</span><b>'+money(balance)+'</b></div>')+
+   '<div class="family-due"><small>FÄLLIGER FAMILIENBEITRAG</small><strong>'+money(due)+'</strong><span>'+money(balance)+' × '+pct.toLocaleString("de-DE")+' %</span></div>'+
+   (!paid&&due>0?'<div class="family-payrow"><label>Zielkonto<select data-family-destination="'+key+'"><option value="Familienkonto">Familienkonto</option><option value="Unternehmenskonto">Unternehmenskonto</option></select></label><button type="button" class="btn gold" data-family-deposit="'+key+'">✓ Eingezahlt</button></div>':paid?'<p class="family-paid-note">Der Beitrag für diese Woche ist verbucht. Die nächste Abrechnung beginnt am kommenden Montag.</p>':'<p class="muted">Noch kein fälliger Beitrag. '+(manual?'Bitte aktuellen Kontostand eintragen und Beitragssatz prüfen.':'Beitragssatz oder Kassenbestand prüfen.')+'</p>')+
+  '</div>';
+ };
+ const balanceCards=["Familienkonto","Unternehmenskonto"].map(name=>'<div class="stat"><span class="icon">▣</span><div><small>'+name.toUpperCase()+'</small><b>'+money(accountBalance(name))+'</b></div></div>').join("");
+ const history=entries.map(x=>'<tr><td>'+esc(new Date(x.created_at).toLocaleString("de-DE"))+'</td><td>'+esc(x.company_key==="saloon"?"Donnerfaust Saloon":"Donnerfaust Kebab")+'</td><td>'+(x.entry_type==="deposit"?'<span class="badge good">Einzahlung</span>':'<span class="badge bad">Auszahlung</span>')+'</td><td><b>'+money(x.amount)+'</b></td><td>'+esc(x.destination_account)+'</td><td>'+esc(x.employee_name||"—")+'</td><td>'+esc(x.note||"")+'</td></tr>').join("")||'<tr><td colspan="7" class="muted">Noch keine Familienbuchungen vorhanden.</td></tr>';
+ const weekLabel=state.week_start?new Date(String(state.week_start).slice(0,10)+"T12:00:00").toLocaleDateString("de-DE"):"—";
+ return '<div class="intro"><div><div class="eyebrow">FAMILIENVERWALTUNG</div><h1>Familie</h1><p>Familienkasse, Unternehmensbeiträge und wöchentliche Abrechnungen an einem Ort.</p></div>'+(canWithdraw?'<button type="button" class="btn gold" data-family-withdraw>− Auszahlung</button>':'')+'</div>'+
+ '<div class="stats">'+balanceCards+'</div>'+
+ '<div class="family-grid">'+companyCard(saloon,"saloon","Donnerfaust Saloon · Destillerie",false)+companyCard(kebab,"kebab","Donnerfaust Kebab",true)+'</div>'+
+ '<div class="panel"><div class="panelhead"><b>Familienkasse – Buchungshistorie</b><span class="badge good">'+entries.length+' Einträge</span></div><div class="tablewrap"><table><thead><tr><th>DATUM</th><th>UNTERNEHMEN</th><th>BUCHUNG</th><th>BETRAG</th><th>KONTO</th><th>PERSON</th><th>NOTIZ</th></tr></thead><tbody>'+history+'</tbody></table></div></div>'+
+ '<div class="family-footnote">Abrechnungswoche ab Montag, '+esc(weekLabel)+'. Familienrat darf Einzahlungen erfassen, aber keine Beitragssätze ändern oder Auszahlungen vornehmen.</div>';
+}
+
 async function cash(){
  const {data:rows=[],error}=await supabaseClient.from("vineyard_cashbook").select("*").order("created_at",{ascending:false});
  if(error)return errorBox(error.message);
@@ -595,7 +623,7 @@ function errorBox(t){return '<div class="panel"><b>Fehler</b><p class="muted">'+
 
 async function render(){
  if(page==="recipes"||page==="production")page="dashboard";
- let content=page==="dashboard"?await dashboard():page==="invoices"?await invoices():page==="orders"?await orders():page==="customers"?await customers():page==="inventory"?await inventory():page==="recipes"?await recipes():page==="production"?await production():page==="purchase"?await trades("Einkauf"):page==="sales"?await trades("Verkauf"):page==="trades"?await trades("all"):page==="cash"?await cash():page==="employees"?await employees():page==="appointments"?await appointments():page==="commission"?await commissions():page==="manual"?manualGuide():await dashboard();
+ let content=page==="dashboard"?await dashboard():page==="invoices"?await invoices():page==="orders"?await orders():page==="customers"?await customers():page==="inventory"?await inventory():page==="recipes"?await recipes():page==="production"?await production():page==="purchase"?await trades("Einkauf"):page==="sales"?await trades("Verkauf"):page==="trades"?await trades("all"):page==="cash"?await cash():page==="family"?await family():page==="employees"?await employees():page==="appointments"?await appointments():page==="commission"?await commissions():page==="manual"?manualGuide():await dashboard();
  shell(content);bind();
  startInventoryRealtime();
  if(page==="orders")startOrderRealtime();else stopOrderRealtime();
@@ -759,7 +787,31 @@ function bind(){
  $$("[data-edit-trade]").forEach(b=>b.onclick=()=>tradeModal(b.dataset.editTrade));
  $$("[data-delete-trade]").forEach(b=>b.onclick=()=>deleteTrade(b.dataset.deleteTrade));
  $$("[data-edit-cash]").forEach(b=>b.onclick=()=>cashModal(b.dataset.editCash));
- $$("[data-delete-cash]").forEach(b=>b.onclick=()=>deleteCash(b.dataset.deleteCash));
+ $("[data-delete-cash]").forEach(b=>b.onclick=()=>deleteCash(b.dataset.deleteCash));
+
+ $("[data-family-percent-save]").forEach(b=>b.onclick=async()=>{
+  const key=b.dataset.familyPercentSave,input=document.querySelector('[data-family-percent="'+key+'"]'),percent=Number(input?.value);
+  if(!Number.isFinite(percent)||percent<0||percent>100){alert("Der Prozentsatz muss zwischen 0 und 100 liegen.");return;}
+  b.disabled=true;try{const r=await supabaseClient.rpc("vineyard_family_set_percent",{p_company_key:key,p_percent:percent});if(r.error)throw r.error;await auditLog("Familienbeitragssatz geändert","family",key,{percent});await render();}catch(err){alert(err.message||String(err));b.disabled=false;}
+ });
+ $("[data-family-report]").forEach(b=>b.onclick=async()=>{
+  const input=$("#familyKebabBalance"),balance=Number(input?.value);
+  if(!Number.isFinite(balance)||balance<0){alert("Bitte einen gültigen Kontostand ab 0 eintragen.");return;}
+  b.disabled=true;try{const r=await supabaseClient.rpc("vineyard_family_save_report",{p_balance:balance});if(r.error)throw r.error;await auditLog("Unternehmenskontostand gemeldet","family","kebab",{balance});await render();}catch(err){alert(err.message||String(err));b.disabled=false;}
+ });
+ $("[data-family-deposit]").forEach(b=>b.onclick=async()=>{
+  const key=b.dataset.familyDeposit,select=document.querySelector('[data-family-destination="'+key+'"]'),account=select?.value||"Familienkonto";
+  if(!confirm("Den berechneten Familienbeitrag für "+(key==="saloon"?"Donnerfaust Saloon":"Donnerfaust Kebab")+" auf das "+account+" buchen?"))return;
+  b.disabled=true;try{const r=await supabaseClient.rpc("vineyard_family_deposit",{p_company_key:key,p_destination_account:account});if(r.error)throw r.error;await auditLog("Familienbeitrag eingezahlt","family",r.data?.id||null,{company_key:key,amount:r.data?.amount,destination_account:account,balance_snapshot:r.data?.balance_snapshot,percent:r.data?.percent});alert("Familienbeitrag von "+money(r.data?.amount)+" wurde eingetragen.");await render();}catch(err){alert(err.message||String(err));b.disabled=false;}
+ });
+ $("[data-family-withdraw]").forEach(b=>b.onclick=()=>{
+  modal("Auszahlung aus der Familienkasse",selectField("Konto","account",[{value:"Familienkonto",label:"Familienkonto"},{value:"Unternehmenskonto",label:"Unternehmenskonto"}],"Familienkonto")+field("Betrag ($)","amount","number","",true)+field("Verwendungszweck","note","text","",true),async v=>{
+   const amount=Number(v.amount);if(!Number.isFinite(amount)||amount<=0)throw Error("Der Betrag muss größer als 0 sein.");
+   const r=await supabaseClient.rpc("vineyard_family_withdraw",{p_amount:amount,p_account:v.account,p_note:v.note||""});if(r.error)throw r.error;
+   await auditLog("Familienkassen-Auszahlung","family",r.data,{amount,account:v.account,note:v.note||""});
+  });
+ });
+
  $$("[data-edit-employee]").forEach(b=>b.onclick=()=>employeeModal(b.dataset.editEmployee));
  $$("[data-share-invoice]").forEach(b=>b.onclick=()=>shareInvoice(b.dataset.shareInvoice));
  $$("[data-edit-invoice]").forEach(b=>b.onclick=()=>invoiceModal(b.dataset.editInvoice));
