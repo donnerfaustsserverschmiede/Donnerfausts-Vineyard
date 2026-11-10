@@ -174,3 +174,24 @@ nav{padding:12px;overflow:auto}.nav{width:100%;padding:11px 12px;margin:2px 0;bo
 .inventory-owner-select{width:100%;min-width:175px;max-width:250px;padding:8px 10px;border:1px solid var(--line,#d9d1c3);border-radius:8px;background:#fffdf9;color:#252525;font-size:12px}
 .inventory-owner-select:disabled{opacity:.6;cursor:wait}
 .inventory-owner-select:focus-visible{outline:2px solid #c5a14a;outline-offset:2px}
+
+
+/* Eigenständiger Familienbereich */
+.family-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.family-company{margin:0}
+.family-company-head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:16px}
+.family-company h2{font:700 21px Georgia,serif;margin:5px 0}
+.family-company label{display:block;font-size:11px;font-weight:800;margin:14px 0}
+.family-inline{display:flex;gap:8px;margin-top:6px}
+.family-inline input,.family-payrow select{min-width:0;width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;background:#fffdf9}
+.family-inline .btn{white-space:nowrap}
+.family-line{display:flex;justify-content:space-between;gap:10px;padding:12px 0;border-top:1px solid var(--line);font-size:12px}
+.family-due{background:#f8efd9;border:1px solid #ead9ad;border-radius:11px;padding:16px;margin-top:16px}
+.family-due small,.family-due span{display:block;color:#765714;font-size:10px;font-weight:800;letter-spacing:.06em}
+.family-due strong{display:block;font-size:29px;color:#3b321f;margin:5px 0}
+.family-payrow{display:flex;gap:10px;align-items:end;margin-top:14px}
+.family-payrow label{flex:1;margin:0}
+.family-payrow .btn{flex:none}
+.family-paid-note,.family-footnote{font-size:11px;color:var(--muted);margin-top:13px;line-height:1.5}
+@media(max-width:850px){.family-grid{grid-template-columns:1fr}}
+@media(max-width:520px){.family-inline,.family-payrow{flex-direction:column;align-items:stretch}.family-inline .btn,.family-payrow .btn{width:100%}.family-company-head{align-items:flex-start;flex-direction:column}}
